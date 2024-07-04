@@ -2014,6 +2014,7 @@ where
             ])
         });
 
+        //Generate random points to aggregate the sum-check across the 4 memory bytes
         let r_combiner: Vec<F> = transcript.challenge_vector(b"sumcheck_combiners", WORD_BYTES);
 
         // eq * io_witness_range * (v_final - v_io)
@@ -2063,7 +2064,7 @@ where
         }
     }
 
-    fn verify_sumcheck(
+    fn verify(
         proof: &Self,
         preprocessing: &ReadWriteMemoryPreprocessing,
         generators: &C::Setup,
@@ -2144,6 +2145,7 @@ where
         let quotient = panic_address / WORD_BYTES;
         v_io[remainder][quotient] = preprocessing.program_io.as_ref().unwrap().panic as u64;
 
+        //Generate random points to aggregate the sum-check across the 4 memory bytes
         let r_combiner: Vec<F> = transcript.challenge_vector(b"sumcheck_combiners", WORD_BYTES);
 
         let (sumcheck_claim, r_sumcheck) =
@@ -2281,7 +2283,7 @@ where
             transcript,
         )?;
 
-        OutputSumcheckProof::verify_sumcheck(
+        OutputSumcheckProof::verify(
             &self.output_proof,
             preprocessing,
             generators,
