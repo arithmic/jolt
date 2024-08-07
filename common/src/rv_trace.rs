@@ -43,7 +43,7 @@ fn sum_u64_i32(a: u64, b: i32) -> u64 {
     }
 }
 
-impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
+impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], (u64, u64)) {
     fn from(val: &RVTraceRow) -> Self {
         let instruction_type = val.instruction.opcode.instruction_type();
 
@@ -96,7 +96,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                     MemoryOp::noop_read(),
                     MemoryOp::noop_read(),
                 ],
-                0,
+                (0, 0),
             ),
             RV32InstructionFormat::U => (
                 [
@@ -108,7 +108,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                     MemoryOp::noop_read(),
                     MemoryOp::noop_read(),
                 ],
-                0,
+                (0, 0),
             ),
             RV32InstructionFormat::I => match val.instruction.opcode {
                 RV32IM::ADDI
@@ -131,7 +131,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                         MemoryOp::noop_read(),
                         MemoryOp::noop_read(),
                     ],
-                    0,
+                    (0, 0),
                 ),
                 RV32IM::LB | RV32IM::LBU => match rs1_offset() % (BYTES_PER_INSTRUCTION as u64) {
                     0 => (
@@ -144,7 +144,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Read(rs1_offset() + 2),
                             MemoryOp::Read(rs1_offset() + 3),
                         ],
-                        0,
+                        (0, 0),
                     ),
                     1 => (
                         [
@@ -156,7 +156,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Read(rs1_offset() + 1),
                             MemoryOp::Read(rs1_offset() + 2),
                         ],
-                        1,
+                        (1, 0),
                     ),
                     2 => (
                         [
@@ -168,7 +168,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Read(rs1_offset()),
                             MemoryOp::Read(rs1_offset() + 1),
                         ],
-                        2,
+                        (0, 1),
                     ),
                     3 => (
                         [
@@ -180,7 +180,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Read(rs1_offset() - 1),
                             MemoryOp::Read(rs1_offset()),
                         ],
-                        3,
+                        (1, 1),
                     ),
                     _ => {
                         panic!("Invalid Remainder!");
@@ -197,7 +197,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Read(rs1_offset() + 2),
                             MemoryOp::Read(rs1_offset() + 3),
                         ],
-                        0,
+                        (0, 0),
                     ),
                     2 => (
                         [
@@ -209,7 +209,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Read(rs1_offset()),
                             MemoryOp::Read(rs1_offset() + 1),
                         ],
-                        2,
+                        (0, 1),
                     ),
                     _ => {
                         panic!("Invalid Remainder!");
@@ -225,7 +225,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                         MemoryOp::Read(rs1_offset() + 2),
                         MemoryOp::Read(rs1_offset() + 3),
                     ],
-                    0,
+                    (0, 0),
                 ),
                 RV32IM::FENCE => (
                     [
@@ -237,7 +237,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                         MemoryOp::noop_read(),
                         MemoryOp::noop_read(),
                     ],
-                    0,
+                    (0, 0),
                 ),
                 _ => unreachable!("{val:?}"),
             },
@@ -253,7 +253,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Read(rs1_offset() + 2),
                             MemoryOp::Read(rs1_offset() + 3),
                         ],
-                        0,
+                        (0, 0),
                     ),
                     1 => (
                         [
@@ -265,7 +265,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Read(rs1_offset() + 1),
                             MemoryOp::Read(rs1_offset() + 2),
                         ],
-                        1,
+                        (1, 0),
                     ),
                     2 => (
                         [
@@ -277,7 +277,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Write(rs1_offset(), ram_byte_written(0) as u64),
                             MemoryOp::Read(rs1_offset() + 1),
                         ],
-                        2,
+                        (0, 1),
                     ),
                     3 => (
                         [
@@ -289,7 +289,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Read(rs1_offset() - 1),
                             MemoryOp::Write(rs1_offset(), ram_byte_written(0) as u64),
                         ],
-                        3,
+                        (1, 1),
                     ),
                     _ => {
                         panic!("Invalid Remainder!");
@@ -306,7 +306,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Read(rs1_offset() + 2),
                             MemoryOp::Read(rs1_offset() + 3),
                         ],
-                        0,
+                        (0, 0),
                     ),
                     2 => (
                         [
@@ -318,7 +318,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                             MemoryOp::Write(rs1_offset(), ram_byte_written(0) as u64),
                             MemoryOp::Write(rs1_offset() + 1, ram_byte_written(1) as u64),
                         ],
-                        2,
+                        (0, 1),
                     ),
                     _ => {
                         panic!("Invalid Remainder!");
@@ -334,7 +334,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                         MemoryOp::Write(rs1_offset() + 2, ram_byte_written(2) as u64),
                         MemoryOp::Write(rs1_offset() + 3, ram_byte_written(3) as u64),
                     ],
-                    0,
+                    (0, 0),
                 ),
                 _ => unreachable!(),
             },
@@ -348,7 +348,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                     MemoryOp::noop_read(),
                     MemoryOp::noop_read(),
                 ],
-                0,
+                (0, 0),
             ),
             RV32InstructionFormat::SB => (
                 [
@@ -360,7 +360,7 @@ impl From<&RVTraceRow> for ([MemoryOp; MEMORY_OPS_PER_INSTRUCTION], u64) {
                     MemoryOp::noop_read(),
                     MemoryOp::noop_read(),
                 ],
-                0,
+                (0, 0),
             ),
         }
     }

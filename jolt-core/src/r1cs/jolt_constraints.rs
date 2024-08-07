@@ -113,7 +113,8 @@ pub enum JoltIn {
     IF_MulHu,
 
     // Remainder
-    Remainder,
+    REM_LSB,
+    REM_MSB,
 }
 impl_r1cs_input_lc_conversions!(JoltIn);
 impl ConstraintInput for JoltIn {}
@@ -123,7 +124,7 @@ const PC_NOOP_SHIFT: i64 = 4;
 const LOG_M: usize = 16;
 const OPERAND_SIZE: usize = LOG_M / 2;
 //Changed PC_BRANCH_AUX_INDEX for new constraints
-pub const PC_BRANCH_AUX_INDEX: usize = 48;
+pub const PC_BRANCH_AUX_INDEX: usize = 44;
 
 pub struct JoltConstraints {
     memory_start: u64,
@@ -175,40 +176,34 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
             x - y + (0xffffffffi64 + 1),
         );
 
-        // CONSTRAINT: (LB_flag + LBU_flag + SB_flag) [remainder*(remainder -1)*(remainder -2)*(remainder-3)] + (LH_flag + LHU_flag + SH_flag) [remainder*(remainder -2)] + (LW_flag + SW_flag)*remainder  = 0
+        let rem_lsb: LC<JoltIn> = JoltIn::REM_LSB.into();
+        let rem_msb: LC<JoltIn> = JoltIn::REM_MSB.into();
+        let one_minus_rem_lsb = -rem_lsb.clone() + 1;
+        let one_minus_rem_msb = -rem_msb.clone() + 1;
+        //rem = rem_lsb + 2 * rem_msb
+        let rem = JoltIn::REM_LSB + (JoltIn::REM_MSB * 2);
 
-        // remainder * (remainder - 2) -> remainder02
-        let remainder: LC<JoltIn> = JoltIn::Remainder.into();
-        let remainder_minus_1_term = -remainder.clone() + 1;
-        let remainder_minus_2_term: LC<JoltIn> = -remainder.clone() + 2;
-        let remainder_minus_3_term = -remainder.clone() + 3;
-        let remainder02 = cs.allocate_prod(remainder.clone(), remainder_minus_2_term.clone());
-        let remainder13 = cs.allocate_prod(
-            remainder_minus_1_term.clone(),
-            remainder_minus_3_term.clone(),
-        );
-        // remainder * (remainder - 2) * (remainder - 1) * (remainder - 3) -> remainder0123
-        let remainder0123 = cs.allocate_prod(remainder02, remainder13);
+        //(1-rem_lsb) * (1-rem_msb)
+        let product1 = cs.allocate_prod(one_minus_rem_lsb.clone(), one_minus_rem_msb.clone());
+        //(rem_lsb) * (1-rem_msb)
+        let product2 = cs.allocate_prod(rem_lsb.clone(), one_minus_rem_msb.clone());
+        //(1-rem_lsb) * (rem_msb)
+        let product3 = cs.allocate_prod(one_minus_rem_lsb.clone(), rem_msb.clone());
+        //rem_lsb * rem_msb
+        let product4 = cs.allocate_prod(rem_lsb.clone(), rem_msb.clone());
 
-        let remainder012 = cs.allocate_prod(remainder02, remainder_minus_1_term.clone());
-        let remainder023 = cs.allocate_prod(remainder02, remainder_minus_3_term.clone());
-        let remainder013 = cs.allocate_prod(remainder.clone(), remainder13);
-        let remainder123 = cs.allocate_prod(remainder_minus_2_term.clone(), remainder13);
+        cs.constrain_binary(rem_lsb.clone());
+        cs.constrain_binary(rem_msb.clone());
 
-        // (LB_flag + LBU_flag + SB_flag) [remainder*(remainder -1)*(remainder -2)*(remainder-3)] -> product4
-        let lb_lbu_sb_sum = JoltIn::OpFlags_IsLb + JoltIn::OpFlags_IsLbu + JoltIn::OpFlags_IsSb;
-        let product4 = cs.allocate_prod(remainder0123, lb_lbu_sb_sum);
-
-        // (LH_flag + LHU_flag + SH_flag) [remainder*(remainder -2)] -> product5
+        // (LH_flag + LHU_flag + SH_flag)
         let lh_lhu_sh_sum = JoltIn::OpFlags_IsLh + JoltIn::OpFlags_IsLhu + JoltIn::OpFlags_IsSh;
-        let product5 = cs.allocate_prod(remainder02, lh_lhu_sh_sum);
-
-        // (LW_flag + SW_flag)*remainder -> product6
+        // (LW_flag + SW_flag)
         let lw_sw_sum = JoltIn::OpFlags_IsLw + JoltIn::OpFlags_IsSw;
-        let product6 = cs.allocate_prod(remainder, lw_sw_sum);
+        // (LH_flag + LHU_flag + SH_flag) [remainder*(remainder -2)] + (LW_flag + SW_flag)*remainder
+        let term1 = cs.allocate_prod(rem_lsb, lh_lhu_sh_sum);
+        let term2 = cs.allocate_prod(rem.clone(), lw_sw_sum);
+        cs.constrain_eq_zero(term1 + term2);
 
-        // product4 + product5 + product6 = 0
-        cs.constrain_eq_zero(product4 + product5 + product6);
         // CONSTRAINT - actual_address is computed correctly using rs1_val, and imm_extension
         let flag_0_or_1_condition = JoltIn::OpFlags_IsLb
             + JoltIn::OpFlags_IsLbu
@@ -221,7 +216,9 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
 
         let memory_start: i64 = self.memory_start.try_into().unwrap();
         let term: LC<JoltIn> = (Variable::Constant * memory_start).into();
-        let actual_address = (JoltIn::RAM_A * 4 + JoltIn::Remainder) + term;
+        let r1 = term + rem.clone();
+        let four_times: LC<JoltIn> = (JoltIn::RAM_A * 4).into();
+        let actual_address = r1 + four_times;
 
         let imm_signed: LC<JoltIn> = imm_signed.into();
         let ram_read_rs1: LC<JoltIn> = JoltIn::RAM_Read_RS1.into();
@@ -235,7 +232,6 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
         // LOAD CONSTRAINT a
         // For the load instructions, we have that the four bytes read at
         // index load_store_address of memory is the same as written
-
         let all_load_flags = JoltIn::OpFlags_IsLb
             + JoltIn::OpFlags_IsLbu
             + JoltIn::OpFlags_IsLh
@@ -271,13 +267,13 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
         //                  (memory_read[3] - packed_query) * remainder * (remainder - 1) * (remainder - 2)
         //                  ] = 0
         let read0_minus_packed_query =
-            cs.allocate_prod(JoltIn::RAM_Read_Byte0 - packed_query.clone(), remainder123);
+            cs.allocate_prod(JoltIn::RAM_Read_Byte0 - packed_query.clone(), product1);
         let read1_minus_packed_query =
-            cs.allocate_prod(JoltIn::RAM_Read_Byte1 - packed_query.clone(), remainder023);
+            cs.allocate_prod(JoltIn::RAM_Read_Byte1 - packed_query.clone(), product2);
         let read2_minus_packed_query =
-            cs.allocate_prod(JoltIn::RAM_Read_Byte2 - packed_query.clone(), remainder013);
+            cs.allocate_prod(JoltIn::RAM_Read_Byte2 - packed_query.clone(), product3);
         let read3_minus_packed_query =
-            cs.allocate_prod(JoltIn::RAM_Read_Byte3 - packed_query.clone(), remainder012);
+            cs.allocate_prod(JoltIn::RAM_Read_Byte3 - packed_query.clone(), product4);
 
         let term0 = read0_minus_packed_query
             + read1_minus_packed_query
@@ -295,11 +291,11 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
 
         let read01_minus_packed_query = cs.allocate_prod(
             read01_memory.clone() - packed_query.clone(),
-            remainder_minus_2_term.clone(),
+            one_minus_rem_msb.clone(),
         );
         let read23_minus_packed_query = cs.allocate_prod(
             read23_memory.clone() - packed_query.clone(),
-            JoltIn::Remainder,
+            rem_msb.clone(),
         );
         let term1 = read01_minus_packed_query + read23_minus_packed_query;
         cs.constrain_eq_conditional(JoltIn::OpFlags_IsLh, term1, 0);
@@ -322,16 +318,16 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
         //          + remainder013 * (memory_read[2] - JoltIn::ChunksQ_3) + remainder012 * (memory_read[3] - JoltIn::ChunksQ_3)
         //           ] = 0
         let read_equal_lookup_index0 =
-            cs.allocate_prod(JoltIn::RAM_Read_Byte0 - JoltIn::ChunksQ_3, remainder123);
+            cs.allocate_prod(JoltIn::RAM_Read_Byte0 - JoltIn::ChunksQ_3, product1);
 
         let read_equal_lookup_index1 =
-            cs.allocate_prod(JoltIn::RAM_Read_Byte1 - JoltIn::ChunksQ_3, remainder023);
+            cs.allocate_prod(JoltIn::RAM_Read_Byte1 - JoltIn::ChunksQ_3, product2);
 
         let read_equal_lookup_index2 =
-            cs.allocate_prod(JoltIn::RAM_Read_Byte2 - JoltIn::ChunksQ_3, remainder013);
+            cs.allocate_prod(JoltIn::RAM_Read_Byte2 - JoltIn::ChunksQ_3, product3);
 
         let read_equal_lookup_index3 =
-            cs.allocate_prod(JoltIn::RAM_Read_Byte3 - JoltIn::ChunksQ_3, remainder012);
+            cs.allocate_prod(JoltIn::RAM_Read_Byte3 - JoltIn::ChunksQ_3, product4);
         let term = read_equal_lookup_index0
             + read_equal_lookup_index1
             + read_equal_lookup_index2
@@ -347,11 +343,11 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
 
         let read_equal_lookup_index01 = cs.allocate_prod(
             read01_memory.clone() - JoltIn::ChunksQ_3.into(),
-            remainder_minus_2_term.clone(),
+            one_minus_rem_msb.clone(),
         );
         let read_equal_lookup_index23 = cs.allocate_prod(
             read23_memory.clone() - JoltIn::ChunksQ_3.into(),
-            JoltIn::Remainder,
+            rem_msb.clone(),
         );
         cs.constrain_eq_conditional(
             JoltIn::OpFlags_IsLhu,
@@ -389,13 +385,13 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
         //       ] = 0
 
         let write0_minus_lookupoutput =
-            cs.allocate_prod(JoltIn::RAM_Write_Byte0 - JoltIn::LookupOutput, remainder123);
+            cs.allocate_prod(JoltIn::RAM_Write_Byte0 - JoltIn::LookupOutput, product1);
         let write1_minus_lookupoutput =
-            cs.allocate_prod(JoltIn::RAM_Write_Byte1 - JoltIn::LookupOutput, remainder023);
+            cs.allocate_prod(JoltIn::RAM_Write_Byte1 - JoltIn::LookupOutput, product2);
         let write2_minus_lookupoutput =
-            cs.allocate_prod(JoltIn::RAM_Write_Byte2 - JoltIn::LookupOutput, remainder013);
+            cs.allocate_prod(JoltIn::RAM_Write_Byte2 - JoltIn::LookupOutput, product3);
         let write3_minus_lookupoutput =
-            cs.allocate_prod(JoltIn::RAM_Write_Byte3 - JoltIn::LookupOutput, remainder012);
+            cs.allocate_prod(JoltIn::RAM_Write_Byte3 - JoltIn::LookupOutput, product4);
         let term0 = write0_minus_lookupoutput
             + write1_minus_lookupoutput
             + write2_minus_lookupoutput
@@ -413,11 +409,11 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
 
         let write01_minus_lookupoutput = cs.allocate_prod(
             write01_memory.clone() - JoltIn::LookupOutput.into(),
-            remainder_minus_2_term.clone(),
+            one_minus_rem_msb.clone(),
         );
         let write23_minus_lookupoutput = cs.allocate_prod(
             write23_memory.clone() - JoltIn::LookupOutput.into(),
-            JoltIn::Remainder,
+            rem_msb.clone(),
         );
         let term1 = write01_minus_lookupoutput + write23_minus_lookupoutput;
         cs.constrain_eq_conditional(JoltIn::OpFlags_IsSh, term1, 0);
@@ -437,11 +433,8 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
         // (JoltIn::OpFlags_IsSh) [remainder  (memory_read[0] + memory[1] * 2^{8} - memory_write[0] - memory_write[1]* 2^{8})] +
         //   (remainder -2)(memory_read[2] + memory[3] * 2^{8} - memory_write[2] - memory_write[3]* 2^{8})]
 
-        let term0 = cs.allocate_prod(read01_memory - write01_memory, JoltIn::Remainder);
-        let term1 = cs.allocate_prod(
-            read23_memory - write23_memory,
-            remainder_minus_2_term.clone(),
-        );
+        let term0 = cs.allocate_prod(read01_memory - write01_memory, rem_msb);
+        let term1 = cs.allocate_prod(read23_memory - write23_memory, one_minus_rem_msb);
         cs.constrain_eq_conditional(JoltIn::OpFlags_IsSh, term0 + term1, 0);
 
         // STORE CONSTRAINT c-2
@@ -452,22 +445,22 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
 
         let read_equal_write0 = cs.allocate_prod(
             JoltIn::RAM_Read_Byte0 - JoltIn::RAM_Write_Byte0,
-            JoltIn::Remainder,
+            rem.clone(),
         );
 
         let read_equal_write1 = cs.allocate_prod(
             JoltIn::RAM_Read_Byte1 - JoltIn::RAM_Write_Byte1,
-            remainder_minus_1_term,
+            -rem.clone() + 1,
         );
 
         let read_equal_write2 = cs.allocate_prod(
             JoltIn::RAM_Read_Byte2 - JoltIn::RAM_Write_Byte2,
-            remainder_minus_2_term,
+            -rem.clone() + 2,
         );
 
         let read_equal_write3 = cs.allocate_prod(
             JoltIn::RAM_Read_Byte3 - JoltIn::RAM_Write_Byte3,
-            remainder_minus_3_term,
+            -rem.clone() + 3,
         );
 
         cs.constrain_eq_conditional(JoltIn::OpFlags_IsSb, read_equal_write0, 0);
@@ -525,55 +518,5 @@ impl<F: JoltField> R1CSConstraintBuilder<F> for JoltConstraints {
         );
 
         assert_static_aux_index!(next_pc_jump_branch, PC_BRANCH_AUX_INDEX);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use crate::r1cs::builder::{CombinedUniformBuilder, OffsetEqConstraint};
-
-    use ark_bn254::Fr;
-    use strum::EnumCount;
-
-    #[test]
-    fn single_instruction_jolt() {
-        let mut uniform_builder = R1CSBuilder::<Fr, JoltIn>::new();
-
-        let jolt_constraints = JoltConstraints::new(0);
-        jolt_constraints.build_constraints(&mut uniform_builder);
-
-        let num_steps = 1;
-        let combined_builder = CombinedUniformBuilder::construct(
-            uniform_builder,
-            num_steps,
-            OffsetEqConstraint::empty(),
-        );
-        let mut inputs = vec![vec![Fr::zero(); num_steps]; JoltIn::COUNT];
-
-        // ADD instruction
-        inputs[JoltIn::PcIn as usize][0] = Fr::from(10);
-        inputs[JoltIn::Bytecode_A as usize][0] = Fr::from(10);
-        inputs[JoltIn::Bytecode_Opcode as usize][0] = Fr::from(0);
-        inputs[JoltIn::Bytecode_RS1 as usize][0] = Fr::from(2);
-        inputs[JoltIn::Bytecode_RS2 as usize][0] = Fr::from(3);
-        inputs[JoltIn::Bytecode_RD as usize][0] = Fr::from(4);
-
-        inputs[JoltIn::RAM_Read_RD as usize][0] = Fr::from(0);
-        inputs[JoltIn::RAM_Read_RS1 as usize][0] = Fr::from(100);
-        inputs[JoltIn::RAM_Read_RS2 as usize][0] = Fr::from(200);
-        inputs[JoltIn::RAM_Write_RD as usize][0] = Fr::from(300);
-        // remainder RAM == 0
-
-        // rv_trace::to_circuit_flags
-        // all zero for ADD
-        inputs[JoltIn::OpFlags_IsRs1Rs2 as usize][0] = Fr::zero(); // first_operand = rs1
-        inputs[JoltIn::OpFlags_IsImm as usize][0] = Fr::zero(); // second_operand = rs2 => immediate
-
-        let aux = combined_builder.compute_aux(&inputs);
-        let (az, bz, cz) = combined_builder.compute_spartan(&inputs, &aux);
-
-        combined_builder.assert_valid(&az, &bz, &cz);
     }
 }

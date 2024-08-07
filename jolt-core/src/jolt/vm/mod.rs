@@ -65,7 +65,7 @@ pub struct JoltTraceStep<InstructionSet: JoltInstructionSet> {
     pub instruction_lookup: Option<InstructionSet>,
     pub bytecode_row: BytecodeRow,
     pub memory_ops: [MemoryOp; MEMORY_OPS_PER_INSTRUCTION],
-    pub remainder: u64,
+    pub remainder: (u64, u64),
 }
 
 impl<InstructionSet: JoltInstructionSet> JoltTraceStep<InstructionSet> {
@@ -82,7 +82,7 @@ impl<InstructionSet: JoltInstructionSet> JoltTraceStep<InstructionSet> {
                 MemoryOp::noop_read(),  // RAM byte 3
                 MemoryOp::noop_read(),  // RAM byte 4
             ],
-            remainder: 0,
+            remainder: (0, 0),
         }
     }
 
@@ -175,7 +175,8 @@ where
             .chain(self.read_write_memory.t_read_reg.iter())
             .chain([&self.read_write_memory.t_read_ram].into_iter())
             .chain([&self.read_write_memory.t_write_ram].into_iter())
-            .chain([&self.read_write_memory.remainder].into_iter())
+            .chain([&self.read_write_memory.remainder.0].into_iter())
+            .chain([&self.read_write_memory.remainder.1].into_iter())
             .collect();
         let num_memory_trace_polys = memory_trace_polys.len();
 
@@ -427,7 +428,6 @@ pub trait Jolt<F: JoltField, PCS: CommitmentScheme<Field = F>, const C: usize, c
             &mut transcript,
         );
 
-        
         let memory_proof = ReadWriteMemoryProof::prove(
             &preprocessing.generators,
             &preprocessing.read_write_memory,
@@ -435,7 +435,7 @@ pub trait Jolt<F: JoltField, PCS: CommitmentScheme<Field = F>, const C: usize, c
             &program_io,
             &mut transcript,
         );
-    
+
         drop_in_background_thread(jolt_polynomials);
 
         let spartan_proof = UniformSpartanProof::<F, PCS>::prove_precommitted(
@@ -450,7 +450,7 @@ pub trait Jolt<F: JoltField, PCS: CommitmentScheme<Field = F>, const C: usize, c
             key: spartan_key,
             proof: spartan_proof,
         };
-       
+
         let jolt_proof = JoltProof {
             trace_length,
             program_io,
@@ -492,7 +492,7 @@ pub trait Jolt<F: JoltField, PCS: CommitmentScheme<Field = F>, const C: usize, c
             &commitments.instruction_lookups,
             &mut transcript,
         )?;
-       
+
         Self::verify_memory(
             &mut preprocessing.read_write_memory,
             &preprocessing.generators,
@@ -501,7 +501,7 @@ pub trait Jolt<F: JoltField, PCS: CommitmentScheme<Field = F>, const C: usize, c
             proof.program_io,
             &mut transcript,
         )?;
-        
+
         Self::verify_r1cs(
             &preprocessing.generators,
             proof.r1cs,
@@ -728,7 +728,10 @@ pub trait Jolt<F: JoltField, PCS: CommitmentScheme<Field = F>, const C: usize, c
             polynomials.instruction_lookups.lookup_outputs.evals(),
             circuit_flags,
             instruction_flags,
-            polynomials.read_write_memory.remainder.evals(),
+            (
+                polynomials.read_write_memory.remainder.0.evals(),
+                polynomials.read_write_memory.remainder.1.evals(),
+            ),
         );
 
         inputs

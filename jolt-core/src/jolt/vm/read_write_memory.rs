@@ -280,7 +280,7 @@ where
     /// MLE of the final timestamps.
     pub t_final_reg: DensePolynomial<F>,
     pub t_final_ram: DensePolynomial<F>,
-    pub remainder: DensePolynomial<F>,
+    pub remainder: (DensePolynomial<F>, DensePolynomial<F>),
 }
 
 fn merge_vec_array(
@@ -408,7 +408,10 @@ impl<F: JoltField, C: CommitmentScheme<Field = F>> ReadWriteMemory<F, C> {
             })
             .unzip();
 
-        let remainder_vec: Vec<u64> = trace.into_par_iter().map(|step| step.remainder).collect();
+        let remainder_vec: (Vec<u64>, Vec<u64>) = trace
+            .into_par_iter()
+            .map(|step| (step.remainder.0, step.remainder.1))
+            .collect();
 
         let reg_count = REGISTER_COUNT as usize;
 
@@ -918,7 +921,7 @@ impl<F: JoltField, C: CommitmentScheme<Field = F>> ReadWriteMemory<F, C> {
             v_read_ram,
             v_write_ram,
             t_read_reg_polys,
-            [t_read_ram_polys, t_write_ram, remainder],
+            [t_read_ram_polys, t_write_ram, rem_lsb, rem_msb],
         ): (
             [DensePolynomial<F>; 6],
             [DensePolynomial<F>; BYTES_PER_WORD],
@@ -927,7 +930,7 @@ impl<F: JoltField, C: CommitmentScheme<Field = F>> ReadWriteMemory<F, C> {
             [DensePolynomial<F>; BYTES_PER_WORD],
             [DensePolynomial<F>; BYTES_PER_WORD],
             [DensePolynomial<F>; REG_OPS_PER_INSTRUCTION],
-            [DensePolynomial<F>; 3],
+            [DensePolynomial<F>; 4],
         ) = common::par_join_8!(
             || map_to_polys(&[
                 a_ram,
@@ -951,7 +954,12 @@ impl<F: JoltField, C: CommitmentScheme<Field = F>> ReadWriteMemory<F, C> {
                 t_read_reg[1].to_vec(),
                 t_read_reg[2].to_vec()
             ]),
-            || map_to_polys(&[t_read_ram.to_vec(), t_write_ram, remainder_vec])
+            || map_to_polys(&[
+                t_read_ram.to_vec(),
+                t_write_ram,
+                remainder_vec.0,
+                remainder_vec.1
+            ])
         );
 
         v_final_reg.padded_to_length(v_final_ram[0].len());
@@ -975,7 +983,7 @@ impl<F: JoltField, C: CommitmentScheme<Field = F>> ReadWriteMemory<F, C> {
                 t_write_ram,
                 t_final_reg,
                 t_final_ram,
-                remainder,
+                remainder: (rem_lsb, rem_msb),
             },
             t_read_reg,
             t_read_ram,
@@ -1191,7 +1199,7 @@ where
                 .iter()
                 .chain(
                     commitment.read_write_memory.trace_commitments
-                        [..commitment.read_write_memory.trace_commitments.len() - 1]
+                        [..commitment.read_write_memory.trace_commitments.len() - 2]
                         .iter(),
                 )
                 .collect::<Vec<_>>(),

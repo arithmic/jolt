@@ -775,7 +775,7 @@ mod tests {
             instruction_lookup: None,
             memory_ops: [MemoryOp::noop_read(); MEMORY_OPS_PER_INSTRUCTION],
             bytecode_row,
-            remainder: 0,
+            remainder: (0, 0),
         }
     }
 

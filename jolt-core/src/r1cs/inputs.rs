@@ -36,7 +36,7 @@ pub struct R1CSInputs<'a, F: JoltField> {
     lookup_outputs: Vec<F>,
     pub circuit_flags_bits: Vec<F>,
     instruction_flags_bits: Vec<F>,
-    remainder: Vec<F>,
+    remainder: (Vec<F>, Vec<F>),
 }
 
 impl<'a, F: JoltField> R1CSInputs<'a, F> {
@@ -55,7 +55,7 @@ impl<'a, F: JoltField> R1CSInputs<'a, F> {
         lookup_outputs: Vec<F>,
         circuit_flags_bits: Vec<F>,
         instruction_flags_bits: Vec<F>,
-        remainder: Vec<F>,
+        remainder: (Vec<F>, Vec<F>),
     ) -> Self {
         assert!(pc.len() % padded_trace_len == 0);
         assert!(bytecode_a.len() % padded_trace_len == 0);
@@ -69,7 +69,8 @@ impl<'a, F: JoltField> R1CSInputs<'a, F> {
         assert!(lookup_outputs.len() % padded_trace_len == 0);
         assert!(circuit_flags_bits.len() % padded_trace_len == 0);
         assert!(instruction_flags_bits.len() % padded_trace_len == 0);
-        assert!(remainder.len() % padded_trace_len == 0);
+        assert!(remainder.0.len() % padded_trace_len == 0);
+        assert!(remainder.1.len() % padded_trace_len == 0);
 
         Self {
             padded_trace_len,
@@ -167,6 +168,13 @@ impl<'a, F: JoltField> R1CSInputs<'a, F> {
 
         let remainder_chunks = self
             .remainder
+            .0
+            .par_chunks(self.padded_trace_len)
+            .map(|chunk| chunk.to_vec());
+        chunks.par_extend(remainder_chunks);
+        let remainder_chunks = self
+            .remainder
+            .1
             .par_chunks(self.padded_trace_len)
             .map(|chunk| chunk.to_vec());
         chunks.par_extend(remainder_chunks);
@@ -235,8 +243,10 @@ impl<F: JoltField, C: CommitmentScheme<Field = F>> R1CSProof<F, C> {
             [..1 + MEMORY_OPS_PER_INSTRUCTION + 5]; // a_read_write, v_read, v_write
         let memory_trace_commitments_len =
             jolt_commitments.read_write_memory.trace_commitments.len();
-        let remainder_commitment =
-            &jolt_commitments.read_write_memory.trace_commitments[memory_trace_commitments_len - 1];
+        let remainder_commitment = (
+            &jolt_commitments.read_write_memory.trace_commitments[memory_trace_commitments_len - 2],
+            &jolt_commitments.read_write_memory.trace_commitments[memory_trace_commitments_len - 1],
+        );
         let instruction_lookup_indices_commitments =
             &jolt_commitments.instruction_lookups.trace_commitment[..C];
         let instruction_flag_commitments = &jolt_commitments.instruction_lookups.trace_commitment
@@ -271,7 +281,8 @@ impl<F: JoltField, C: CommitmentScheme<Field = F>> R1CSProof<F, C> {
         combined_commitments.extend(r1cs_commitments.as_ref().unwrap().circuit_flags.iter());
 
         combined_commitments.extend(instruction_flag_commitments.iter());
-        combined_commitments.push(remainder_commitment);
+        combined_commitments.push(remainder_commitment.0);
+        combined_commitments.push(remainder_commitment.1);
 
         combined_commitments.extend(r1cs_commitments.as_ref().unwrap().aux.iter());
 
