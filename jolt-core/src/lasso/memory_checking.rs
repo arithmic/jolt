@@ -114,8 +114,9 @@ where
             r_read_write,
             r_init_final,
         ) = Self::prove_grand_products(preprocessing, polynomials, transcript);
-
+        println!("Working 1.1");
         let read_write_openings = Self::ReadWriteOpenings::open(polynomials, &r_read_write);
+        println!("Working 1.2");
 
         let read_write_opening_proof = Self::ReadWriteOpenings::prove_openings(
             generators,
@@ -124,9 +125,60 @@ where
             &read_write_openings,
             transcript,
         );
+        println!("Working 1.3");
 
         let init_final_openings = Self::InitFinalOpenings::open(polynomials, &r_init_final);
+        println!("Working 1.4");
         let init_final_opening_proof = Self::InitFinalOpenings::prove_openings(
+            generators,
+            polynomials,
+            &r_init_final,
+            &init_final_openings,
+            transcript,
+        );
+        println!("Working 1.5");
+
+        MemoryCheckingProof {
+            _polys: PhantomData,
+            multiset_hashes,
+            read_write_grand_product,
+            init_final_grand_product,
+            read_write_openings,
+            read_write_opening_proof,
+            init_final_openings,
+            init_final_opening_proof,
+        }
+    }
+
+    #[tracing::instrument(skip_all, name = "MemoryCheckingProver::prove_memory_checking_ram")]
+    /// Generates a memory checking proof for the given committed polynomials.
+    fn prove_memory_checking_ram(
+        generators: &C::Setup,
+        preprocessing: &Self::Preprocessing,
+        polynomials: &Polynomials,
+        transcript: &mut ProofTranscript,
+    ) -> MemoryCheckingProof<F, C, Polynomials, Self::ReadWriteOpenings, Self::InitFinalOpenings>
+    {
+        let (
+            read_write_grand_product,
+            init_final_grand_product,
+            multiset_hashes,
+            r_read_write,
+            r_init_final,
+        ) = Self::prove_grand_products_ram(preprocessing, polynomials, transcript);
+
+        let read_write_openings = Self::ReadWriteOpenings::ram_open(polynomials, &r_read_write);
+
+        let read_write_opening_proof = Self::ReadWriteOpenings::ram_prove_openings(
+            generators,
+            polynomials,
+            &r_read_write,
+            &read_write_openings,
+            transcript,
+        );
+
+        let init_final_openings = Self::InitFinalOpenings::ram_open(polynomials, &r_init_final);
+        let init_final_opening_proof = Self::InitFinalOpenings::ram_prove_openings(
             generators,
             polynomials,
             &r_init_final,
@@ -174,7 +226,58 @@ where
             Self::init_final_grand_product(preprocessing, polynomials, init_final_leaves);
 
         let multiset_hashes =
-            Self::uninterleave_hashes(preprocessing, read_write_hashes, init_final_hashes);
+            Self::uninterleave_hashes(preprocessing, read_write_hashes.clone(), init_final_hashes);
+
+        Self::check_multiset_equality(preprocessing, &multiset_hashes);
+        multiset_hashes.append_to_transcript(transcript);
+
+        let (read_write_grand_product, r_read_write) =
+            read_write_circuit.prove_grand_product(transcript);
+        let (init_final_grand_product, r_init_final) =
+            init_final_circuit.prove_grand_product(transcript);
+
+        drop_in_background_thread(read_write_circuit);
+        drop_in_background_thread(init_final_circuit);
+
+        (
+            read_write_grand_product,
+            init_final_grand_product,
+            multiset_hashes,
+            r_read_write,
+            r_init_final,
+        )
+    }
+    #[tracing::instrument(skip_all, name = "MemoryCheckingProver::prove_grand_products_ram")]
+    /// Proves the grand products for the memory checking multisets (init, read, write, final).
+    fn prove_grand_products_ram(
+        preprocessing: &Self::Preprocessing,
+        polynomials: &Polynomials,
+        transcript: &mut ProofTranscript,
+    ) -> (
+        BatchedGrandProductProof<F>,
+        BatchedGrandProductProof<F>,
+        MultisetHashes<F>,
+        Vec<F>,
+        Vec<F>,
+    ) {
+        // Fiat-Shamir randomness for multiset hashes
+        let gamma: F = transcript.challenge_scalar(b"Memory checking gamma");
+        let tau: F = transcript.challenge_scalar(b"Memory checking tau");
+
+        transcript.append_protocol_name(Self::protocol_name());
+
+        let (read_write_leaves, init_final_leaves) =
+            Self::compute_leaves_ram(preprocessing, polynomials, &gamma, &tau);
+
+        let (mut read_write_circuit, read_write_hashes) =
+            Self::read_write_grand_product(preprocessing, polynomials, read_write_leaves);
+
+        let (mut init_final_circuit, init_final_hashes) =
+            Self::init_final_grand_product(preprocessing, polynomials, init_final_leaves);
+
+        let multiset_hashes =
+            Self::uninterleave_hashes(preprocessing, read_write_hashes.clone(), init_final_hashes);
+
         Self::check_multiset_equality(preprocessing, &multiset_hashes);
         multiset_hashes.append_to_transcript(transcript);
 
@@ -303,7 +406,15 @@ where
         <Self::ReadWriteGrandProduct as BatchedGrandProduct<F>>::Leaves,
         <Self::InitFinalGrandProduct as BatchedGrandProduct<F>>::Leaves,
     );
-
+    fn compute_leaves_ram(
+        preprocessing: &Self::Preprocessing,
+        polynomials: &Polynomials,
+        gamma: &F,
+        tau: &F,
+    ) -> (
+        <Self::ReadWriteGrandProduct as BatchedGrandProduct<F>>::Leaves,
+        <Self::InitFinalGrandProduct as BatchedGrandProduct<F>>::Leaves,
+    );
     /// Computes the Reed-Solomon fingerprint (parametrized by `gamma` and `tau`) of the given memory `tuple`.
     /// Each individual "leaf" of a grand product circuit (as computed by `read_leaves`, etc.) should be
     /// one such fingerprint.
@@ -355,7 +466,7 @@ where
             &init_final_hashes,
             transcript,
         );
-
+        println!("Verify 3");
         proof.read_write_openings.verify_openings(
             generators,
             &proof.read_write_opening_proof,
@@ -364,6 +475,7 @@ where
             transcript,
         )?;
 
+        println!("Verify 4");
         proof.init_final_openings.verify_openings(
             generators,
             &proof.init_final_opening_proof,
@@ -371,6 +483,7 @@ where
             &r_init_final,
             transcript,
         )?;
+        println!("Verify 5");
 
         proof
             .read_write_openings
@@ -378,6 +491,80 @@ where
         proof
             .init_final_openings
             .compute_verifier_openings(preprocessing, &r_init_final);
+
+        println!("Verify 6");
+        Self::check_fingerprints(
+            preprocessing,
+            claims_read_write,
+            claims_init_final,
+            &proof.read_write_openings,
+            &proof.init_final_openings,
+            &gamma,
+            &tau,
+        );
+
+        Ok(())
+    }
+    fn ram_verify_memory_checking(
+        preprocessing: &Self::Preprocessing,
+        generators: &C::Setup,
+        mut proof: MemoryCheckingProof<
+            F,
+            C,
+            Polynomials,
+            Self::ReadWriteOpenings,
+            Self::InitFinalOpenings,
+        >,
+        commitments: &Polynomials::Commitment,
+        transcript: &mut ProofTranscript,
+    ) -> Result<(), ProofVerifyError> {
+        // Fiat-Shamir randomness for multiset hashes
+        let gamma: F = transcript.challenge_scalar(b"Memory checking gamma");
+        let tau: F = transcript.challenge_scalar(b"Memory checking tau");
+
+        transcript.append_protocol_name(Self::protocol_name());
+
+        Self::check_multiset_equality(preprocessing, &proof.multiset_hashes);
+        proof.multiset_hashes.append_to_transcript(transcript);
+
+        let (read_write_hashes, init_final_hashes) =
+            Self::interleave_hashes(preprocessing, &proof.multiset_hashes);
+
+        let (claims_read_write, r_read_write) = Self::ReadWriteGrandProduct::verify_grand_product(
+            &proof.read_write_grand_product,
+            &read_write_hashes,
+            transcript,
+        );
+        let (claims_init_final, r_init_final) = Self::InitFinalGrandProduct::verify_grand_product(
+            &proof.init_final_grand_product,
+            &init_final_hashes,
+            transcript,
+        );
+        println!("Verify 3");
+        proof.read_write_openings.ram_verify_openings(
+            generators,
+            &proof.read_write_opening_proof,
+            commitments,
+            &r_read_write,
+            transcript,
+        )?;
+
+        println!("Verify 4");
+        proof.init_final_openings.ram_verify_openings(
+            generators,
+            &proof.init_final_opening_proof,
+            commitments,
+            &r_init_final,
+            transcript,
+        )?;
+        println!("Verify 5");
+
+        proof
+            .read_write_openings
+            .ram_compute_verifier_openings(&NoPreprocessing, &r_read_write);
+        proof
+            .init_final_openings
+            .ram_compute_verifier_openings(preprocessing, &r_init_final);
 
         Self::check_fingerprints(
             preprocessing,
@@ -391,7 +578,6 @@ where
 
         Ok(())
     }
-
     /// Computes "read" memory tuples (one per memory) from the given `openings`.
     fn read_tuples(
         preprocessing: &Self::Preprocessing,

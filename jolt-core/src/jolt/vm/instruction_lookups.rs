@@ -203,6 +203,40 @@ where
             transcript,
         )
     }
+
+    type Preprocessing = crate::lasso::memory_checking::NoPreprocessing;
+
+    fn ram_open(polynomials: &InstructionPolynomials<F, C>, opening_point: &[F]) -> Self {
+        todo!()
+    }
+
+    fn ram_prove_openings(
+        _generators: &<C as CommitmentScheme>::Setup,
+        _polynomials: &InstructionPolynomials<F, C>,
+        _opening_point: &[F],
+        _openings: &Self,
+        _transcript: &mut ProofTranscript,
+    ) -> Self::Proof {
+        todo!()
+    }
+
+    fn ram_verify_openings(
+        &self,
+        _generators: &<C as CommitmentScheme>::Setup,
+        _opening_proof: &Self::Proof,
+        _commitment: &InstructionCommitment<C>,
+        _opening_point: &[F],
+        _transcript: &mut ProofTranscript,
+    ) -> Result<(), ProofVerifyError> {
+        todo!()
+    }
+
+    fn compute_verifier_openings(
+        &mut self,
+        _preprocessing: &Self::Preprocessing,
+        _opening_point: &[F],
+    ) {
+    }
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize)]
@@ -322,6 +356,33 @@ where
             transcript,
         )
     }
+
+    type Preprocessing = crate::lasso::memory_checking::NoPreprocessing;
+
+    fn ram_open(_polynomials: &InstructionPolynomials<F, C>, _opening_point: &[F]) -> Self {
+        todo!()
+    }
+
+    fn ram_prove_openings(
+        _generators: &<C as CommitmentScheme>::Setup,
+        _polynomials: &InstructionPolynomials<F, C>,
+        _opening_point: &[F],
+        _openings: &Self,
+        _transcript: &mut ProofTranscript,
+    ) -> Self::Proof {
+        todo!()
+    }
+
+    fn ram_verify_openings(
+        &self,
+        _generators: &<C as CommitmentScheme>::Setup,
+        _opening_proof: &Self::Proof,
+        _commitment: &InstructionCommitment<C>,
+        _opening_point: &[F],
+        _transcript: &mut ProofTranscript,
+    ) -> Result<(), ProofVerifyError> {
+        todo!()
+    }
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize)]
@@ -414,6 +475,31 @@ where
             &commitment.final_commitment.iter().collect::<Vec<_>>(),
             transcript,
         )
+    }
+
+    fn ram_open(polynomials: &InstructionPolynomials<F, C>, opening_point: &[F]) -> Self {
+        todo!()
+    }
+
+    fn ram_prove_openings(
+        generators: &<C as CommitmentScheme>::Setup,
+        polynomials: &InstructionPolynomials<F, C>,
+        opening_point: &[F],
+        openings: &Self,
+        transcript: &mut ProofTranscript,
+    ) -> Self::Proof {
+        todo!()
+    }
+
+    fn ram_verify_openings(
+        &self,
+        generators: &<C as CommitmentScheme>::Setup,
+        opening_proof: &Self::Proof,
+        commitment: &InstructionCommitment<C>,
+        opening_point: &[F],
+        transcript: &mut ProofTranscript,
+    ) -> Result<(), ProofVerifyError> {
+        todo!()
     }
 }
 
@@ -516,7 +602,17 @@ where
 
         ((memory_flags, read_write_leaves), init_final_leaves)
     }
-
+    fn compute_leaves_ram(
+        _preprocessing: &InstructionLookupsPreprocessing<F>,
+        _polynomials: &InstructionPolynomials<F, CS>,
+        _gamma: &F,
+        _tau: &F,
+    ) -> (
+        <Self::ReadWriteGrandProduct as BatchedGrandProduct<F>>::Leaves,
+        <Self::InitFinalGrandProduct as BatchedGrandProduct<F>>::Leaves,
+    ) {
+        todo!()
+    }
     fn interleave_hashes(
         preprocessing: &InstructionLookupsPreprocessing<F>,
         multiset_hashes: &MultisetHashes<F>,

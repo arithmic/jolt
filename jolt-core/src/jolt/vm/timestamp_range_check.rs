@@ -5,7 +5,9 @@ use crate::subprotocols::grand_product::{
 };
 use crate::utils::thread::drop_in_background_thread;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use common::constants::{MEMORY_OPS_PER_INSTRUCTION, RAM_WORD_OPS_PER_INSTRUCTION, REG_OPS_PER_INSTRUCTION};
+use common::constants::{
+    MEMORY_OPS_PER_INSTRUCTION, RAM_WORD_OPS_PER_INSTRUCTION, REG_OPS_PER_INSTRUCTION,
+};
 use itertools::interleave;
 use rayon::iter::{
     IntoParallelIterator, IntoParallelRefIterator, ParallelExtend, ParallelIterator,
@@ -40,10 +42,14 @@ where
 {
     _group: PhantomData<C>,
     pub read_timestamps: [Vec<u64>; REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION],
-    pub read_cts_read_timestamp: [DensePolynomial<F>; REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION],
-    pub read_cts_global_minus_read: [DensePolynomial<F>; REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION],
-    pub final_cts_read_timestamp: [DensePolynomial<F>; REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION],
-    pub final_cts_global_minus_read: [DensePolynomial<F>; REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION],
+    pub read_cts_read_timestamp:
+        [DensePolynomial<F>; REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION],
+    pub read_cts_global_minus_read:
+        [DensePolynomial<F>; REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION],
+    pub final_cts_read_timestamp:
+        [DensePolynomial<F>; REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION],
+    pub final_cts_global_minus_read:
+        [DensePolynomial<F>; REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION],
 }
 
 impl<F, C> RangeCheckPolynomials<F, C>
@@ -52,7 +58,9 @@ where
     C: CommitmentScheme<Field = F>,
 {
     #[tracing::instrument(skip_all, name = "RangeCheckPolynomials::new")]
-    pub fn new(read_timestamps: [Vec<u64>; REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION]) -> Self {
+    pub fn new(
+        read_timestamps: [Vec<u64>; REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION],
+    ) -> Self {
         let M = read_timestamps[0].len();
 
         #[cfg(test)]
@@ -64,7 +72,8 @@ where
             }
         }
 
-        let read_and_final_cts: Vec<[Vec<u64>; 4]> = (0..REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION)
+        let read_and_final_cts: Vec<[Vec<u64>; 4]> = (0..REG_OPS_PER_INSTRUCTION
+            + RAM_WORD_OPS_PER_INSTRUCTION)
             .into_par_iter()
             .map(|i| {
                 let mut read_cts_read_timestamp: Vec<u64> = vec![0; M];
@@ -255,6 +264,33 @@ where
     ) -> Result<(), ProofVerifyError> {
         unimplemented!("Openings are verified in TimestampValidityProof::verify");
     }
+
+    type Preprocessing = NoPreprocessing;
+
+    fn ram_open(polynomials: &RangeCheckPolynomials<F, C>, opening_point: &[F]) -> Self {
+        todo!()
+    }
+
+    fn ram_prove_openings(
+        generators: &<C as CommitmentScheme>::Setup,
+        polynomials: &RangeCheckPolynomials<F, C>,
+        opening_point: &[F],
+        openings: &Self,
+        transcript: &mut ProofTranscript,
+    ) -> Self::Proof {
+        todo!()
+    }
+
+    fn ram_verify_openings(
+        &self,
+        generators: &<C as CommitmentScheme>::Setup,
+        opening_proof: &Self::Proof,
+        commitment: &RangeCheckCommitment<C>,
+        opening_point: &[F],
+        transcript: &mut ProofTranscript,
+    ) -> Result<(), ProofVerifyError> {
+        todo!()
+    }
 }
 
 impl<F, C> MemoryCheckingProver<F, C, RangeCheckPolynomials<F, C>> for TimestampValidityProof<F, C>
@@ -305,7 +341,8 @@ where
         let M = polynomials.read_timestamps[0].len();
         let gamma_squared = gamma.square();
 
-        let read_write_leaves: Vec<Vec<F>> = (0..(REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION))
+        let read_write_leaves: Vec<Vec<F>> = (0..(REG_OPS_PER_INSTRUCTION
+            + RAM_WORD_OPS_PER_INSTRUCTION))
             .into_par_iter()
             .flat_map(|i| {
                 let read_fingerprints_0: Vec<F> = (0..M)
@@ -391,7 +428,14 @@ where
 
         (leaves, ())
     }
-
+    fn compute_leaves_ram(
+        _: &NoPreprocessing,
+        _polynomials: &RangeCheckPolynomials<F, C>,
+        _gamma: &F,
+        _tau: &F,
+    ) -> (Vec<Vec<F>>, ()) {
+        todo!()
+    }
     fn interleave_hashes(
         _: &NoPreprocessing,
         multiset_hashes: &MultisetHashes<F>,
@@ -756,7 +800,9 @@ where
 
         let t_read_commitments =
             &memory_commitment.trace_commitments[1 + (MEMORY_OPS_PER_INSTRUCTION) + 5
-                ..1 + (MEMORY_OPS_PER_INSTRUCTION) + 5 + (REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION)];
+                ..1 + (MEMORY_OPS_PER_INSTRUCTION)
+                    + 5
+                    + (REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION)];
         let commitments: Vec<_> = range_check_commitment
             .commitments
             .iter()
@@ -800,8 +846,8 @@ where
             grand_product_claims.len(),
             6 * (REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION) + 1
         );
-        let (read_write_claims, init_final_claims) =
-            grand_product_claims.split_at(4 * (REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION));
+        let (read_write_claims, init_final_claims) = grand_product_claims
+            .split_at(4 * (REG_OPS_PER_INSTRUCTION + RAM_WORD_OPS_PER_INSTRUCTION));
 
         let multiset_hashes = MultisetHashes {
             read_hashes,

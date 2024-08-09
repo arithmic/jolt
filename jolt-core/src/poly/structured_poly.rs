@@ -34,10 +34,18 @@ where
 
     /// Evaluates each of the given `polynomials` at the given `opening_point`.
     fn open(polynomials: &Polynomials, opening_point: &[F]) -> Self;
+    fn ram_open(polynomials: &Polynomials, opening_point: &[F]) -> Self;
 
     /// Proves that the `polynomials`, evaluated at `opening_point`, output the values given
     /// by `openings`. The polynomials should already be committed by the prover.
     fn prove_openings(
+        generators: &C::Setup,
+        polynomials: &Polynomials,
+        opening_point: &[F],
+        openings: &Self,
+        transcript: &mut ProofTranscript,
+    ) -> Self::Proof;
+    fn ram_prove_openings(
         generators: &C::Setup,
         polynomials: &Polynomials,
         opening_point: &[F],
@@ -54,9 +62,22 @@ where
         _opening_point: &[F],
     ) {
     }
-
+    fn ram_compute_verifier_openings(
+        &mut self,
+        _preprocessing: &Self::Preprocessing,
+        _opening_point: &[F],
+    ) {
+    }
     /// Verifies an opening proof, given the associated polynomial `commitment` and `opening_point`.
     fn verify_openings(
+        &self,
+        generators: &C::Setup,
+        opening_proof: &Self::Proof,
+        commitment: &Polynomials::Commitment,
+        opening_point: &[F],
+        transcript: &mut ProofTranscript,
+    ) -> Result<(), ProofVerifyError>;
+    fn ram_verify_openings(
         &self,
         generators: &C::Setup,
         opening_proof: &Self::Proof,

@@ -515,6 +515,26 @@ where
     fn protocol_name() -> &'static [u8] {
         b"Bytecode memory checking"
     }
+
+    type ReadWriteGrandProduct = crate::subprotocols::grand_product::BatchedDenseGrandProduct<F>;
+
+    type InitFinalGrandProduct = crate::subprotocols::grand_product::BatchedDenseGrandProduct<F>;
+
+    fn compute_leaves_ram(
+        preprocessing: &Self::Preprocessing,
+        polynomials: &BytecodePolynomials<F, C>,
+        gamma: &F,
+        tau: &F,
+    ) -> (
+        <Self::ReadWriteGrandProduct as crate::subprotocols::grand_product::BatchedGrandProduct<
+            F,
+        >>::Leaves,
+        <Self::InitFinalGrandProduct as crate::subprotocols::grand_product::BatchedGrandProduct<
+            F,
+        >>::Leaves,
+    ) {
+        todo!()
+    }
 }
 
 impl<F, C> MemoryCheckingVerifier<F, C, BytecodePolynomials<F, C>> for BytecodeProof<F, C>
@@ -673,6 +693,33 @@ where
             transcript,
         )
     }
+
+    type Preprocessing = crate::lasso::memory_checking::NoPreprocessing;
+
+    fn ram_open(_polynomials: &BytecodePolynomials<F, C>, _opening_point: &[F]) -> Self {
+        todo!()
+    }
+
+    fn ram_prove_openings(
+        _generators: &<C as CommitmentScheme>::Setup,
+        _polynomials: &BytecodePolynomials<F, C>,
+        _opening_point: &[F],
+        _openings: &Self,
+        _transcript: &mut ProofTranscript,
+    ) -> Self::Proof {
+        todo!()
+    }
+
+    fn ram_verify_openings(
+        &self,
+        _generators: &<C as CommitmentScheme>::Setup,
+        _opening_proof: &Self::Proof,
+        _commitment: &BytecodeCommitment<C>,
+        _opening_point: &[F],
+        _transcript: &mut ProofTranscript,
+    ) -> Result<(), ProofVerifyError> {
+        todo!()
+    }
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize)]
@@ -752,6 +799,31 @@ where
             &self.t_final,
             &commitment.t_final_commitment,
         )
+    }
+
+    fn ram_open(polynomials: &BytecodePolynomials<F, C>, opening_point: &[F]) -> Self {
+        todo!()
+    }
+
+    fn ram_prove_openings(
+        generators: &<C as CommitmentScheme>::Setup,
+        polynomials: &BytecodePolynomials<F, C>,
+        opening_point: &[F],
+        openings: &Self,
+        transcript: &mut ProofTranscript,
+    ) -> Self::Proof {
+        todo!()
+    }
+
+    fn ram_verify_openings(
+        &self,
+        generators: &<C as CommitmentScheme>::Setup,
+        opening_proof: &Self::Proof,
+        commitment: &BytecodeCommitment<C>,
+        opening_point: &[F],
+        transcript: &mut ProofTranscript,
+    ) -> Result<(), ProofVerifyError> {
+        todo!()
     }
 }
 

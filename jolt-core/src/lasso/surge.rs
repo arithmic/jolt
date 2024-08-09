@@ -123,6 +123,33 @@ where
             transcript,
         )
     }
+
+    type Preprocessing = super::memory_checking::NoPreprocessing;
+
+    fn ram_open(polynomials: &SurgePolys<F, PCS>, opening_point: &[F]) -> Self {
+        todo!()
+    }
+
+    fn ram_prove_openings(
+        generators: &<PCS as CommitmentScheme>::Setup,
+        polynomials: &SurgePolys<F, PCS>,
+        opening_point: &[F],
+        openings: &Self,
+        transcript: &mut ProofTranscript,
+    ) -> Self::Proof {
+        todo!()
+    }
+
+    fn ram_verify_openings(
+        &self,
+        generators: &<PCS as CommitmentScheme>::Setup,
+        opening_proof: &Self::Proof,
+        commitment: &SurgeCommitment<PCS>,
+        opening_point: &[F],
+        transcript: &mut ProofTranscript,
+    ) -> Result<(), ProofVerifyError> {
+        todo!()
+    }
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize)]
@@ -211,6 +238,33 @@ where
             transcript,
         )
     }
+
+    type Preprocessing = super::memory_checking::NoPreprocessing;
+
+    fn ram_open(polynomials: &SurgePolys<F, PCS>, opening_point: &[F]) -> Self {
+        todo!()
+    }
+
+    fn ram_prove_openings(
+        generators: &<PCS as CommitmentScheme>::Setup,
+        polynomials: &SurgePolys<F, PCS>,
+        opening_point: &[F],
+        openings: &Self,
+        transcript: &mut ProofTranscript,
+    ) -> Self::Proof {
+        todo!()
+    }
+
+    fn ram_verify_openings(
+        &self,
+        generators: &<PCS as CommitmentScheme>::Setup,
+        opening_proof: &Self::Proof,
+        commitment: &SurgeCommitment<PCS>,
+        opening_point: &[F],
+        transcript: &mut ProofTranscript,
+    ) -> Result<(), ProofVerifyError> {
+        todo!()
+    }
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize)]
@@ -298,6 +352,31 @@ where
             transcript,
         )
     }
+
+    fn ram_open(polynomials: &SurgePolys<F, PCS>, opening_point: &[F]) -> Self {
+        todo!()
+    }
+
+    fn ram_prove_openings(
+        generators: &<PCS as CommitmentScheme>::Setup,
+        polynomials: &SurgePolys<F, PCS>,
+        opening_point: &[F],
+        openings: &Self,
+        transcript: &mut ProofTranscript,
+    ) -> Self::Proof {
+        todo!()
+    }
+
+    fn ram_verify_openings(
+        &self,
+        generators: &<PCS as CommitmentScheme>::Setup,
+        opening_proof: &Self::Proof,
+        commitment: &SurgeCommitment<PCS>,
+        opening_point: &[F],
+        transcript: &mut ProofTranscript,
+    ) -> Result<(), ProofVerifyError> {
+        todo!()
+    }
 }
 
 impl<F, PCS, Instruction, const C: usize, const M: usize>
@@ -384,6 +463,28 @@ where
 
     fn protocol_name() -> &'static [u8] {
         b"Surge memory checking"
+    }
+
+    type ReadWriteGrandProduct = crate::subprotocols::grand_product::BatchedDenseGrandProduct<F>;
+
+    type InitFinalGrandProduct = crate::subprotocols::grand_product::BatchedDenseGrandProduct<F>;
+
+    type MemoryTuple = (F, F, F);
+
+    fn compute_leaves_ram(
+        _preprocessing: &Self::Preprocessing,
+        _polynomials: &SurgePolys<F, PCS>,
+        _gamma: &F,
+        _tau: &F,
+    ) -> (
+        <Self::ReadWriteGrandProduct as crate::subprotocols::grand_product::BatchedGrandProduct<
+            F,
+        >>::Leaves,
+        <Self::InitFinalGrandProduct as crate::subprotocols::grand_product::BatchedGrandProduct<
+            F,
+        >>::Leaves,
+    ) {
+        todo!()
     }
 }
 

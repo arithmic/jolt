@@ -427,7 +427,7 @@ pub trait Jolt<F: JoltField, PCS: CommitmentScheme<Field = F>, const C: usize, c
             &preprocessing.instruction_lookups,
             &mut transcript,
         );
-
+        println!("Read Write Memory Proof");
         let memory_proof = ReadWriteMemoryProof::prove(
             &preprocessing.generators,
             &preprocessing.read_write_memory,
@@ -484,6 +484,7 @@ pub trait Jolt<F: JoltField, PCS: CommitmentScheme<Field = F>, const C: usize, c
             &commitments.bytecode,
             &mut transcript,
         )?;
+        println!("Verify 0");
 
         Self::verify_instruction_lookups(
             &preprocessing.instruction_lookups,
@@ -492,7 +493,7 @@ pub trait Jolt<F: JoltField, PCS: CommitmentScheme<Field = F>, const C: usize, c
             &commitments.instruction_lookups,
             &mut transcript,
         )?;
-
+        println!("Verify 1");
         Self::verify_memory(
             &mut preprocessing.read_write_memory,
             &preprocessing.generators,
@@ -501,6 +502,7 @@ pub trait Jolt<F: JoltField, PCS: CommitmentScheme<Field = F>, const C: usize, c
             proof.program_io,
             &mut transcript,
         )?;
+        println!("Verify 2");
 
         Self::verify_r1cs(
             &preprocessing.generators,
