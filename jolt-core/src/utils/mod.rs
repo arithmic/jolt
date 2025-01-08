@@ -12,7 +12,7 @@ pub mod profiling;
 pub mod sol_types;
 pub mod thread;
 pub mod transcript;
-
+pub mod transcript2;
 /// Converts an integer value to a bitvector (all values {0,1}) of field elements.
 /// Note: ordering has the MSB in the highest index. All of the following represent the integer 1:
 /// - [1]

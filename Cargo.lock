@@ -1834,6 +1834,7 @@ dependencies = [
  "itertools 0.10.5",
  "lazy_static",
  "memory-stats",
+ "merlin",
  "num-integer",
  "postcard",
  "rand 0.7.3",
@@ -2032,6 +2033,18 @@ checksum = "c73f5c649995a115e1a0220b35e4df0a1294500477f97a91d0660fb5abeb574a"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "merlin"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58c38e2799fc0978b65dfff8023ec7843e2330bb462f19198840b34b6582397d"
+dependencies = [
+ "byteorder",
+ "keccak",
+ "rand_core 0.6.4",
+ "zeroize",
 ]
 
 [[package]]

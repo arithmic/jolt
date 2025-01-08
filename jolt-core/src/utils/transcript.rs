@@ -205,6 +205,10 @@ impl Transcript for KeccakTranscript {
         }
         q_powers
     }
+    
+    // fn append_protocol_name(&mut self, protocol_name: &'static [u8]) {
+    //     self.append_message(b"protocol_name");
+    //   }
 }
 
 pub trait Transcript: Clone + Sync + Send + 'static {
@@ -222,6 +226,8 @@ pub trait Transcript: Clone + Sync + Send + 'static {
     fn challenge_vector<F: JoltField>(&mut self, len: usize) -> Vec<F>;
     // Compute powers of scalar q : (1, q, q^2, ..., q^(len-1))
     fn challenge_scalar_powers<F: JoltField>(&mut self, len: usize) -> Vec<F>;
+    // fn append_protocol_name(&mut self, protocol_name: &'static [u8]);
+
 }
 
 pub trait AppendToTranscript {

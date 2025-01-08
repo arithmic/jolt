@@ -304,13 +304,13 @@ where
 //     use ark_bn254::Fr;
 //     use ark_std::One;
 
-//     use crate::poly::commitment::{commitment_scheme::CommitShape, hyrax::HyraxScheme};
+//     use crate::{jolt::vm::rv32i_vm::ProofTranscript, poly::commitment::{commitment_scheme::{BatchType, CommitShape}, hyrax::HyraxScheme}};
 
 //     use super::*;
 
 //     #[test]
 //     fn integration() {
-//         let (builder, key) = simp_test_builder_key();
+//         // let (builder, key) = simp_test_builder_key();
 //         let witness_segments: Vec<Vec<Fr>> = vec![
 //             vec![Fr::one(), Fr::from(5), Fr::from(9), Fr::from(13)], /* Q */
 //             vec![Fr::one(), Fr::from(5), Fr::from(9), Fr::from(13)], /* R */
