@@ -36,10 +36,10 @@ impl<F: JoltField, PCS: CommitmentScheme<ProofTranscript, Field = F>> KnowledgeP
     let t1 = random_tape.random_scalar(b"t1");
     let t2 = random_tape.random_scalar(b"t2");
 
-    let C= PCS::commit(&DensePolynomial::new([*x].to_vec()), gens_n);
-    C.append_to_transcript(transcript);
+    // let C= PCS::commit(&DensePolynomial::new([*x].to_vec()), gens_n);
+    // C.append_to_transcript(transcript);
 
-    let alpha = PCS::commit(&DensePolynomial::new([*t2].to_vec()), gens_n);
+    // let alpha = PCS::commit(&DensePolynomial::new([*t2].to_vec()), gens_n);
     // let alpha = t1.commit(&t2, gens_n);
     // <Transcript as ProofTranscript<G>>::append_point(transcript, b"alpha", &alpha);
 
