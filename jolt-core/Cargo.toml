@@ -35,6 +35,7 @@ icicle = [
     "dep:icicle-runtime",
     "dep:icicle-core",
     "dep:icicle-bn254",
+    "dep:icicle-grumpkin",
 ]
 
 [dependencies]
