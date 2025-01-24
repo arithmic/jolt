@@ -64,8 +64,6 @@ impl FieldOps for ark_grumpkin::Fr {}
 impl<'a, 'b> FieldOps<&'b ark_grumpkin::Fr, ark_grumpkin::Fr> for &'a ark_grumpkin::Fr {}
 impl<'b> FieldOps<&'b ark_grumpkin::Fr, ark_grumpkin::Fr> for ark_grumpkin::Fr {}
 
-
-
 impl JoltField for ark_grumpkin::Fr {
     const NUM_BYTES: usize = 32;
 
@@ -115,3 +113,4 @@ impl JoltField for ark_grumpkin::Fr {
         ark_grumpkin::Fr::from_le_bytes_mod_order(bytes)
     }
 }
+

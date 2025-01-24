@@ -230,17 +230,16 @@ dependencies = [
 
 [[package]]
 name = "ark-crypto-primitives"
-version = "0.4.0"
-source = "git+https://github.com/a16z/crypto-primitives.git?branch=poseidon#c483d945996ebf249ce6ebe7dd561c15747967c7"
+version = "0.5.0"
 dependencies = [
  "ahash",
  "ark-crypto-primitives-macros",
- "ark-ec 0.4.2",
- "ark-ff 0.4.2",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
  "ark-relations",
- "ark-serialize 0.4.2",
+ "ark-serialize 0.5.0",
  "ark-snark",
- "ark-std 0.4.0",
+ "ark-std 0.5.0",
  "blake2",
  "derivative",
  "digest 0.10.7",
@@ -251,8 +250,7 @@ dependencies = [
 
 [[package]]
 name = "ark-crypto-primitives-macros"
-version = "0.4.0"
-source = "git+https://github.com/a16z/crypto-primitives.git?branch=poseidon#c483d945996ebf249ce6ebe7dd561c15747967c7"
+version = "0.5.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -272,7 +270,6 @@ dependencies = [
  "hashbrown 0.13.2",
  "itertools 0.10.5",
  "num-traits",
- "rayon",
  "zeroize",
 ]
 
@@ -294,6 +291,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "rayon",
  "zeroize",
 ]
 
@@ -330,7 +328,6 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "paste",
- "rayon",
  "rustc_version 0.4.1",
  "zeroize",
 ]
@@ -352,6 +349,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "paste",
+ "rayon",
  "zeroize",
 ]
 
@@ -462,12 +460,12 @@ dependencies = [
 
 [[package]]
 name = "ark-relations"
-version = "0.4.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00796b6efc05a3f48225e59cb6a2cda78881e7c390872d5786aaf112f31fb4f0"
+checksum = "ec46ddc93e7af44bcab5230937635b06fb5744464dd6a7e7b083e80ebd274384"
 dependencies = [
- "ark-ff 0.4.2",
- "ark-std 0.4.0",
+ "ark-ff 0.5.0",
+ "ark-std 0.5.0",
  "tracing",
  "tracing-subscriber 0.2.25",
 ]
@@ -504,6 +502,7 @@ dependencies = [
  "arrayvec",
  "digest 0.10.7",
  "num-bigint",
+ "rayon",
 ]
 
 [[package]]
@@ -529,14 +528,14 @@ dependencies = [
 
 [[package]]
 name = "ark-snark"
-version = "0.4.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84d3cc6833a335bb8a600241889ead68ee89a3cf8448081fb7694c0fe503da63"
+checksum = "d368e2848c2d4c129ce7679a7d0d2d612b6a274d3ea6a13bad4445d61b381b88"
 dependencies = [
- "ark-ff 0.4.2",
+ "ark-ff 0.5.0",
  "ark-relations",
- "ark-serialize 0.4.2",
- "ark-std 0.4.0",
+ "ark-serialize 0.5.0",
+ "ark-std 0.5.0",
 ]
 
 [[package]]
@@ -557,7 +556,6 @@ checksum = "94893f1e0c6eeab764ade8dc4c0db24caf4fe7cbbaafc0eba0a9030f447b5185"
 dependencies = [
  "num-traits",
  "rand 0.8.5",
- "rayon",
 ]
 
 [[package]]
@@ -568,6 +566,7 @@ checksum = "246a225cc6131e9ee4f24619af0f19d67761fff15d7ccc22e42b80846e69449a"
 dependencies = [
  "num-traits",
  "rand 0.8.5",
+ "rayon",
 ]
 
 [[package]]
@@ -667,7 +666,7 @@ dependencies = [
 [[package]]
 name = "binius_field"
 version = "0.2.0"
-source = "git+https://gitlab.com/UlvetannaOSS/binius#d0f09efdd9f98158c47a9eac7a7581effd10ce9b"
+source = "git+https://gitlab.com/UlvetannaOSS/binius#22556b2e47d917a93d33aebf2d916c5acfaa88bb"
 dependencies = [
  "binius_maybe_rayon",
  "binius_utils",
@@ -686,7 +685,7 @@ dependencies = [
 [[package]]
 name = "binius_maybe_rayon"
 version = "0.2.0"
-source = "git+https://gitlab.com/UlvetannaOSS/binius#d0f09efdd9f98158c47a9eac7a7581effd10ce9b"
+source = "git+https://gitlab.com/UlvetannaOSS/binius#22556b2e47d917a93d33aebf2d916c5acfaa88bb"
 dependencies = [
  "cfg-if",
  "either",
@@ -696,7 +695,7 @@ dependencies = [
 [[package]]
 name = "binius_utils"
 version = "0.2.0"
-source = "git+https://gitlab.com/UlvetannaOSS/binius#d0f09efdd9f98158c47a9eac7a7581effd10ce9b"
+source = "git+https://gitlab.com/UlvetannaOSS/binius#22556b2e47d917a93d33aebf2d916c5acfaa88bb"
 dependencies = [
  "binius_maybe_rayon",
  "bytemuck",
@@ -951,7 +950,7 @@ checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 name = "common"
 version = "0.2.0"
 dependencies = [
- "ark-serialize 0.4.2",
+ "ark-serialize 0.5.0",
  "serde",
  "serde_json",
  "strum",
@@ -1834,6 +1833,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "icicle-grumpkin"
+version = "3.2.0"
+source = "git+https://github.com/ingonyama-zk/icicle-jolt.git?rev=ed93e21#ed93e21cbb405822b0aa1b58b5dc6c7837a04108"
+dependencies = [
+ "cmake",
+ "icicle-core",
+ "icicle-hash",
+ "icicle-runtime",
+]
+
+[[package]]
 name = "icicle-hash"
 version = "3.2.0"
 source = "git+https://github.com/ingonyama-zk/icicle-jolt.git?rev=ed93e21#ed93e21cbb405822b0aa1b58b5dc6c7837a04108"
@@ -2120,13 +2130,13 @@ version = "0.1.0"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
- "ark-bn254 0.4.0",
+ "ark-bn254 0.5.0",
  "ark-crypto-primitives",
- "ark-ec 0.4.2",
- "ark-ff 0.4.2",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
  "ark-grumpkin",
- "ark-serialize 0.4.2",
- "ark-std 0.4.0",
+ "ark-serialize 0.5.0",
+ "ark-std 0.5.0",
  "bincode",
  "binius_field",
  "bytemuck",
@@ -2141,6 +2151,7 @@ dependencies = [
  "iai-callgrind",
  "icicle-bn254",
  "icicle-core",
+ "icicle-grumpkin",
  "icicle-runtime",
  "indicatif",
  "itertools 0.10.5",
@@ -2554,9 +2565,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-probe"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
+checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
 
 [[package]]
 name = "openssl-sys"
@@ -4102,9 +4113,9 @@ checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.14"
+version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adb9e6ca4f869e1180728b7950e35922a7fc6397f7b641499e8f3ef06e50dc83"
+checksum = "11cd88e12b17c6494200a9c1b683a04fcac9573ed74cd1b62aeb2727c5592243"
 
 [[package]]
 name = "unicode-width"
