@@ -74,10 +74,10 @@ pub struct UniformSpartanProof<
     ProofTranscript: Transcript,
 > {
     _inputs: PhantomData<I>,
-    pub(crate) outer_sumcheck_proof: SumcheckInstanceProof<F, ProofTranscript>,
-    pub(crate) outer_sumcheck_claims: (F, F, F),
-    pub(crate) inner_sumcheck_proof: SumcheckInstanceProof<F, ProofTranscript>,
-    pub(crate) claimed_witness_evals: Vec<F>,
+    pub outer_sumcheck_proof: SumcheckInstanceProof<F, ProofTranscript>,
+    pub outer_sumcheck_claims: (F, F, F),
+    pub inner_sumcheck_proof: SumcheckInstanceProof<F, ProofTranscript>,
+    pub claimed_witness_evals: Vec<F>,
     _marker: PhantomData<ProofTranscript>,
 }
 

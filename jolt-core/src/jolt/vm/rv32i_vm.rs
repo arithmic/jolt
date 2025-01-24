@@ -241,7 +241,7 @@ impl Serializable for JoltHyperKZGProof {}
 // ==================== TEST ====================
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use ark_bn254::{Bn254, Fr, G1Projective};
 
     use std::collections::HashSet;

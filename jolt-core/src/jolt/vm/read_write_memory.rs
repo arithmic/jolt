@@ -820,11 +820,11 @@ where
     ProofTranscript: Transcript,
 {
     _pcs: PhantomData<(PCS, ProofTranscript)>,
-    num_rounds: usize,
+    pub num_rounds: usize,
     /// Sumcheck proof that v_final is equal to the program outputs at the relevant indices.
-    sumcheck_proof: SumcheckInstanceProof<F, ProofTranscript>,
+    pub sumcheck_proof: SumcheckInstanceProof<F, ProofTranscript>,
     /// Opening of v_final at the random point chosen over the course of sumcheck
-    opening: F,
+    pub opening: F,
 }
 
 impl<F, PCS, ProofTranscript> OutputSumcheckProof<F, PCS, ProofTranscript>
