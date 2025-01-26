@@ -19,10 +19,10 @@ impl fmt::Debug for ByteCodeStuffCircom {
         write!(
             f,
             r#"{{
-            "a_read_write": {:?},
-            "v_read_write": {:?},
-            "t_read": {:?},
-            "t_final": {:?}
+                "a_read_write": {:?},
+                "v_read_write": {:?},
+                "t_read": {:?},
+                "t_final": {:?}
             }}"#,
             self.a_read_write, self.v_read_write, self.t_read, self.t_final
         )
@@ -76,19 +76,19 @@ impl fmt::Debug for ReadWriteMemoryStuffCircom {
         write!(
             f,
             r#"{{
-            "a_ram": {:?},
-            "v_read_rd": {:?},
-            "v_read_rs1": {:?},
-            "v_read_rs2": {:?},
-            "v_read_ram": {:?},
-            "v_write_rd": {:?},
-            "v_write_ram": {:?},
-            "v_final": {:?},
-            "t_read_rd": {:?},
-            "t_read_rs1": {:?},
-            "t_read_rs2": {:?},
-            "t_read_ram": {:?},
-            "t_final": {:?}
+                "a_ram": {:?},
+                "v_read_rd": {:?},
+                "v_read_rs1": {:?},
+                "v_read_rs2": {:?},
+                "v_read_ram": {:?},
+                "v_write_rd": {:?},
+                "v_write_ram": {:?},
+                "v_final": {:?},
+                "t_read_rd": {:?},
+                "t_read_rs1": {:?},
+                "t_read_rs2": {:?},
+                "t_read_ram": {:?},
+                "t_final": {:?}
             }}"#,
             self.a_ram, self.v_read_rd, self.v_read_rs1, self.v_read_rs2, self.v_read_ram, self.v_write_rd, self.v_write_ram, self.v_final, self.t_read_rd, self.t_read_rs1, self.t_read_rs2, self.t_read_ram, self.t_final
         )
@@ -131,12 +131,12 @@ impl fmt::Debug for InstructionLookupStuffCircom {
         write!(
             f,
             r#"{{
-            "dim": {:?},
-            "read_cts": {:?},
-            "final_cts": {:?},
-            "E_polys": {:?},
-            "instruction_flags": {:?},
-            "lookup_outputs": {:?}
+                "dim": {:?},
+                "read_cts": {:?},
+                "final_cts": {:?},
+                "E_polys": {:?},
+                "instruction_flags": {:?},
+                "lookup_outputs": {:?}
             }}"#,
             self.dim, self.read_cts, self.final_cts, self.E_polys, self.instruction_flags, self.lookup_outputs
         )
@@ -189,10 +189,10 @@ impl fmt::Debug for TimestampRangeCheckStuffCircom {
         write!(
             f,
             r#"{{
-            "read_cts_read_timestamp": {:?},
-            "read_cts_global_minus_read": {:?},
-            "final_cts_read_timestamp": {:?},
-            "final_cts_global_minus_read": {:?},
+                "read_cts_read_timestamp": {:?},
+                "read_cts_global_minus_read": {:?},
+                "final_cts_read_timestamp": {:?},
+                "final_cts_global_minus_read": {:?}
             }}"#,
             self.read_cts_read_timestamp, self.read_cts_global_minus_read, self.final_cts_read_timestamp, self.final_cts_global_minus_read
         )
@@ -247,15 +247,15 @@ impl fmt::Debug for AuxVariableStuffCircom {
             write!(
                 f,
                 r#"{{
-                "left_lookup_operand": {:?},
-                "right_lookup_operand": {:?},
-                "product": {:?},
-                "relevant_y_chunks": {:?},
-                "write_lookup_output_to_rd": {:?},
-                "write_pc_to_rd": {:?},
-                "next_pc_jump": {:?},
-                "should_branch": {:?},
-                "next_pc": {:?}
+                    "left_lookup_operand": {:?},
+                    "right_lookup_operand": {:?},
+                    "product": {:?},
+                    "relevant_y_chunks": {:?},
+                    "write_lookup_output_to_rd": {:?},
+                    "write_pc_to_rd": {:?},
+                    "next_pc_jump": {:?},
+                    "should_branch": {:?},
+                    "next_pc": {:?}
                 }}"#,
                 self.left_lookup_operand, self.right_lookup_operand, self.product, self.relevant_y_chunks, self.write_lookup_output_to_rd, self.write_pc_to_rd, self.next_pc_jump, self.should_branch, self.next_pc
             )
@@ -294,10 +294,10 @@ impl fmt::Debug for R1CSStuffCircom {
         write!(
             f,
             r#"{{
-            "chunks_x": {:?},
-            "chunks_y": {:?},
-            "circuit_flags": {:?},
-            "aux": {:?}
+                "chunks_x": {:?},
+                "chunks_y": {:?},
+                "circuit_flags": {:?},
+                "aux": {:?}
             }}"#,
             self.chunks_x, self.chunks_y, self.circuit_flags, self.aux
         )
@@ -337,15 +337,17 @@ pub struct JoltStuffCircom{
 
 impl fmt::Debug for JoltStuffCircom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+
         write!(
             f,
             r#"{{
-            "bytecode": {:?},
-            "read_write_memeory": {:?},
-            "instruction_lookups": {:?},
-            "timestamp_range_check": {:?},
-            "r1cs": {:?}
-            }}"#,
+                "bytecode": {:?},
+                "read_write_memeory": {:?},
+                "instruction_lookups": {:?},
+                "timestamp_range_check": {:?},
+                "r1cs": {:?}
+        }}"#,
             self.bytecode, self.read_write_memeory, self.instruction_lookups, self.timestamp_range_check, self.r1cs
         )
     }

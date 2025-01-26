@@ -1,16 +1,18 @@
 use std::{fs::File, io::Write};
 use std::sync::{LazyLock, Mutex};
 use common::rv_trace::MemoryLayout;
-use helper_joltdevice::{convert_from_jolt_device_to_circom, convert_jolt_proof_to_circom};
+use helper_joltdevice::{convert_from_jolt_device_to_circom, convert_jolt_proof_to_circom, JoltproofCircom};
+use helper_preprocessing::{convert_joltpreprocessing_to_circom, JoltPreprocessingCircom};
+use helper_stuff::{convert_from_jolt_stuff_to_circom, JoltStuffCircom};
 use tracer::JoltDevice;
 
 use crate::jolt::vm::rv32i_vm::{RV32ISubtables, RV32I};
-use crate::jolt::vm::JoltProof;
-use crate::poly::commitment::hyperkzg::HyperKZG;
+use crate::jolt::vm::{JoltPreprocessing, JoltProof, JoltStuff};
+use crate::poly::commitment::hyperkzg::{HyperKZG, HyperKZGCommitment};
 use crate::r1cs::inputs::{ConstraintInput, JoltR1CSInputs};
 use crate::utils::poseidon_transcript::PoseidonTranscript;
 use crate::{field::JoltField, host, jolt::vm::{rv32i_vm::{RV32IJoltVM, C, M}, Jolt}, poly::commitment::commitment_scheme::CommitmentScheme, utils::transcript::Transcript};
-
+pub mod helper_preprocessing;
 pub mod helper_non_native;
 pub mod helper_sum_check;
 pub mod helper_bytecodeproof;
@@ -53,7 +55,7 @@ fn test_formatting_jolt_device() {
 
 static FIB_FILE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
-fn fib_e2e<F, PCS, ProofTranscript>() -> JoltProof<4, 65536, JoltR1CSInputs, F, PCS, RV32I, RV32ISubtables<F>, ProofTranscript>
+fn fib_e2e<F, PCS, ProofTranscript>() -> (JoltPreprocessing<C, F, PCS, ProofTranscript>, JoltProof<4, 65536, JoltR1CSInputs, F, PCS, RV32I, RV32ISubtables<F>, ProofTranscript>, JoltStuff<<PCS as CommitmentScheme<ProofTranscript>>::Commitment>)
 where
     F: JoltField,
     PCS: CommitmentScheme<ProofTranscript, Field = F>,
@@ -66,7 +68,7 @@ where
     let (io_device, trace) = program.trace();
     drop(artifact_guard);
 
-    let preprocessing = RV32IJoltVM::preprocess(
+    let preprocessing: JoltPreprocessing<C, F, PCS, ProofTranscript> = RV32IJoltVM::preprocess(
         bytecode.clone(),
         io_device.memory_layout.clone(),
         memory_init,
@@ -89,25 +91,30 @@ where
     //     "Verification failed with error: {:?}",
     //     verification_result.err()
     // );
-    return proof;
+    return (preprocessing, proof, commitments);
 }
 
 use ark_bn254::{Bn254, Fq as Fp, Fr as Scalar};
 #[test]
 fn fib_e2e_hyperkzg() {
     println!("Running Fib");
-    let proof_from_rust = fib_e2e::<
+    let (preprocessing, proof_from_rust, commitments) = fib_e2e::<
         Scalar,
         HyperKZG<Bn254, PoseidonTranscript<Fp>>,
         PoseidonTranscript<Fp>,
     >();
 
-    let circom_proof = convert_jolt_proof_to_circom(proof_from_rust);
+    let (circom_preprocessing, circom_proof, circom_stuff) = convert_full_proof_to_circom(preprocessing, proof_from_rust, commitments);
 
-    let input_json = format!(r#"{{
-            "proof": {:?}
-        }}"#,
-        circom_proof
+    let input_json = format!(
+        r#"{{
+            "preprocessing": {:?},
+            "proof": {:?},
+            "commitments": {:?}
+    }}"#,
+        circom_preprocessing,
+        circom_proof,
+        circom_stuff
     );
 
     let input_file_path = "input.json";
@@ -117,3 +124,17 @@ fn fib_e2e_hyperkzg() {
         .expect("Failed to write to input.json");
     println!("Input JSON file created successfully.");
 }
+
+pub fn convert_full_proof_to_circom(
+    jolt_preprocessing: JoltPreprocessing<C, Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>,PoseidonTranscript<Fp>>,
+    jolt_proof: JoltProof<{C}, {M}, JoltR1CSInputs, Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>, RV32I, RV32ISubtables<Scalar>, PoseidonTranscript<Fp>>,
+    jolt_stuff: JoltStuff<HyperKZGCommitment<Bn254>>
+) -> (JoltPreprocessingCircom, JoltproofCircom, JoltStuffCircom) {
+
+    (
+        convert_joltpreprocessing_to_circom(jolt_preprocessing),
+        convert_jolt_proof_to_circom(jolt_proof),
+        convert_from_jolt_stuff_to_circom(jolt_stuff),
+    )
+}
+

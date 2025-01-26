@@ -221,11 +221,11 @@ pub fn random_bytecode_trace(
 #[derive(Clone)]
 pub struct BytecodePreprocessing<F: JoltField> {
     /// Size of the (padded) bytecode.
-    code_size: usize,
+    pub code_size: usize,
     /// MLE of init/final values. Bytecode is read-only data, so the final memory values are unchanged from
     /// the initial memory values. There are six values (address, bitflags, rd, rs1, rs2, imm)
     /// associated with each memory address, so `v_init_final` comprises six polynomials.
-    v_init_final: [DensePolynomial<F>; 6],
+    pub v_init_final: [DensePolynomial<F>; 6],
     /// Maps the memory address of each instruction in the bytecode to its "virtual" address.
     /// See Section 6.1 of the Jolt paper, "Reflecting the program counter". The virtual address
     /// is the one used to keep track of the next (potentially virtual) instruction to execute.

@@ -59,19 +59,21 @@ pub fn convert_from_memory_layout_to_circom(mem_layput: MemoryLayout) -> MemoryL
 
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct JoltDeviceCircom {
-    inputs: Vec<Fp>,
-    outputs: Vec<Fp>,
-    panic: Fp,
+    pub inputs: Vec<Fp>,
+    pub outputs: Vec<Fp>,
+    pub panic: Fp,
 }
 
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Fpcircom(Fp);
+pub struct Fpcircom(pub Fp);
 
 impl fmt::Debug for Fpcircom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, r#""{}""#, self.0)
     }
 }
+
+#[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VecFP {
     pub vec: Vec<Fpcircom>,
 }

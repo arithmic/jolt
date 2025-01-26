@@ -34,7 +34,7 @@ use super::{JoltPolynomials, JoltStuff, JoltTraceStep};
 #[derive(Clone)]
 pub struct ReadWriteMemoryPreprocessing {
     min_bytecode_address: u64,
-    bytecode_words: Vec<u32>,
+    pub bytecode_words: Vec<u32>,
     // HACK: The verifier will populate this field by copying inputs/outputs from the
     // `ReadWriteMemoryProof` and the memory layout from preprocessing.
     // Having `program_io` in this preprocessing struct allows the verifier to access it
