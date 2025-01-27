@@ -1,6 +1,6 @@
 use crate::msm::{GpuBaseType, MsmType, VariableBaseMSM};
 use ark_bn254::G1Projective;
-use ark_grumpkin::GrumpkinProjective;
+use ark_grumpkin::Projective as GrumpkinProjective;
 use ark_ec::{CurveGroup, ScalarMul};
 use ark_ff::{BigInteger, Field, PrimeField};
 use icicle_bn254::curve::CurveCfg as IcicleBn254;
