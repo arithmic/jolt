@@ -47,8 +47,10 @@ where
         // let g1_table = FixedBase::get_window_table(scalar_bits, g1_window_size, g1);
         // let g2_table = FixedBase::get_window_table(scalar_bits, g2_window_size, g2);
 
-        let g1_preprocessing = BatchMulPreprocessing::with_num_scalars_and_scalar_size(g1, num_g1_powers, scalar_bits);
-        let g2_preprocessing = BatchMulPreprocessing::with_num_scalars_and_scalar_size(g2, num_g2_powers, scalar_bits);
+        let g1_preprocessing =
+            BatchMulPreprocessing::with_num_scalars_and_scalar_size(g1, num_g1_powers, scalar_bits);
+        let g2_preprocessing =
+            BatchMulPreprocessing::with_num_scalars_and_scalar_size(g2, num_g2_powers, scalar_bits);
         let (g1_powers, g2_powers) = rayon::join(
             || {
                 let beta_powers: Vec<P::ScalarField> = (0..=num_g1_powers)

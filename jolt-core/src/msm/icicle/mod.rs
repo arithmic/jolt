@@ -1,7 +1,10 @@
 #[cfg(not(feature = "icicle"))]
 use ark_bn254::G1Projective;
+use ark_ec::{
+    short_weierstrass::{Projective, SWCurveConfig},
+    CurveGroup, ScalarMul,
+};
 use ark_grumpkin::Projective as GrumpkinProjective;
-use ark_ec::{CurveGroup, ScalarMul, short_weierstrass::{Projective, SWCurveConfig}};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
 
@@ -29,7 +32,7 @@ pub trait Icicle {}
 // impl Icicle for G1Projective {}
 
 #[cfg(not(feature = "icicle"))]
-impl<P:SWCurveConfig> Icicle for Projective<P> {}
+impl<P: SWCurveConfig> Icicle for Projective<P> {}
 
 /// Initializes the icicle backend and sets the CUDA device as active and returns true if successful.
 ///

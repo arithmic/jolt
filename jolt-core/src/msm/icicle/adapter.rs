@@ -1,15 +1,15 @@
 use crate::msm::{GpuBaseType, MsmType, VariableBaseMSM};
 use ark_bn254::G1Projective;
-use ark_grumpkin::Projective as GrumpkinProjective;
 use ark_ec::{CurveGroup, ScalarMul};
 use ark_ff::{BigInteger, Field, PrimeField};
+use ark_grumpkin::Projective as GrumpkinProjective;
 use icicle_bn254::curve::CurveCfg as IcicleBn254;
-use icicle_grumpkin::curve::CurveCfg as IcicleGrumpkin;
 use icicle_core::curve::{Affine, Curve, Projective};
 use icicle_core::{
     msm::{msm, MSMConfig, MSM},
     traits::FieldImpl,
 };
+use icicle_grumpkin::curve::CurveCfg as IcicleGrumpkin;
 use icicle_runtime::memory::HostOrDeviceSlice;
 use icicle_runtime::stream::IcicleStreamHandle;
 use icicle_runtime::{
@@ -52,7 +52,6 @@ impl Icicle for G1Projective {
     }
 }
 
-
 impl Icicle for GrumpkinProjective {
     type C = IcicleGrumpkin;
 
@@ -85,7 +84,6 @@ impl Icicle for GrumpkinProjective {
         Affine::<Self::C> { x, y }
     }
 }
-
 
 pub trait Icicle: ScalarMul {
     type C: Curve<ScalarField: > + MSM<Self::C>;

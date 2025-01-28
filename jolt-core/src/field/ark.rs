@@ -57,7 +57,6 @@ impl JoltField for ark_bn254::Fr {
     }
 }
 
-
 //Implementing JoltField for arkworks' Grumpkin implemntation.
 
 impl FieldOps for ark_grumpkin::Fr {}
@@ -113,4 +112,3 @@ impl JoltField for ark_grumpkin::Fr {
         ark_grumpkin::Fr::from_le_bytes_mod_order(bytes)
     }
 }
-
