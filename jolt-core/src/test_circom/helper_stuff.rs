@@ -329,7 +329,7 @@ pub fn convert_from_r1cs_stuff_to_circom(r1cs_stuff: R1CSStuff<HyperKZGCommitmen
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct JoltStuffCircom{
     pub bytecode: ByteCodeStuffCircom,
-    pub read_write_memeory: ReadWriteMemoryStuffCircom,
+    pub read_write_memory: ReadWriteMemoryStuffCircom,
     pub instruction_lookups: InstructionLookupStuffCircom,
     pub timestamp_range_check: TimestampRangeCheckStuffCircom,
     pub r1cs: R1CSStuffCircom
@@ -343,12 +343,12 @@ impl fmt::Debug for JoltStuffCircom {
             f,
             r#"{{
                 "bytecode": {:?},
-                "read_write_memeory": {:?},
+                "read_write_memory": {:?},
                 "instruction_lookups": {:?},
                 "timestamp_range_check": {:?},
                 "r1cs": {:?}
         }}"#,
-            self.bytecode, self.read_write_memeory, self.instruction_lookups, self.timestamp_range_check, self.r1cs
+            self.bytecode, self.read_write_memory, self.instruction_lookups, self.timestamp_range_check, self.r1cs
         )
     }
 }
@@ -356,7 +356,7 @@ impl fmt::Debug for JoltStuffCircom {
 pub fn convert_from_jolt_stuff_to_circom(jolt_stuff: JoltStuff<HyperKZGCommitment<Bn254>>) -> JoltStuffCircom{
     JoltStuffCircom{
         bytecode: convert_from_byte_code_stuff_to_circom(jolt_stuff.bytecode),
-        read_write_memeory: convert_from_read_write_mem_stuff_to_circom(jolt_stuff.read_write_memory),
+        read_write_memory: convert_from_read_write_mem_stuff_to_circom(jolt_stuff.read_write_memory),
         instruction_lookups: convert_from_ins_lookup_stuff_to_circom(jolt_stuff.instruction_lookups),
         timestamp_range_check: convert_from_ts_lookup_stuff_to_circom(jolt_stuff.timestamp_range_check),
         r1cs: convert_from_r1cs_stuff_to_circom(jolt_stuff.r1cs)

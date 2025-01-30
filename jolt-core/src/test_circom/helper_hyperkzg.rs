@@ -34,9 +34,9 @@ impl fmt::Debug for Fp2Circom {
         write!(
             f,
             r#"{{
-            "x": "{}",
-            "y": "{}"
-            }}"#,
+                                "x": "{}",
+                                "y": "{}"
+                            }}"#,
             self.x,
             self.y
         )
@@ -54,9 +54,9 @@ impl fmt::Debug for G2AffineCircom {
         write!(
             f,
             r#"{{
-            "x": {:?},
-            "y": {:?}
-            }}"#,
+                            "x": {:?},
+                            "y": {:?}
+                                }}"#,
             self.x,
             self.y
         )
@@ -69,9 +69,9 @@ impl fmt::Debug for G1AffineCircom {
         write!(
             f,
             r#"{{
-            "x": "{}",
-            "y": "{}"
-            }}"#,
+                            "x": "{}",
+                            "y": "{}"
+                            }}"#,
             self.x,
             self.y
         )
@@ -108,9 +108,9 @@ impl fmt::Debug for KZGVerifierKeyCircom {
         write!(
             f,
             r#"{{
-            "g1": {:?},
-            "g2": {:?},
-            "beta_g2": {:?}
+                        "g1": {:?},
+                        "g2": {:?},
+                        "beta_g2": {:?}
             }}"#,
             self.g1,
             self.g2,
@@ -130,7 +130,7 @@ impl fmt::Debug for HyperKZGVerifierKeyCircom {
         write!(
             f,
             r#"{{
-            "kzg_vk": {:?}
+                    "kzg_vk": {:?}
             }}"#,
             self.kzg_vk
         )
@@ -150,9 +150,9 @@ impl fmt::Debug for HyperKZGProofCircom {
         write!(
             f,
             r#"{{
-            "com": {:?},
-            "w": [ {:?}, {:?}, {:?} ],
-            "v": {:?}
+                    "com": {:?},
+                    "w": [ {:?}, {:?}, {:?} ],
+                    "v": {:?}
             }}"#,
             self.com,
             self.w[0], self.w[1], self.w[2],

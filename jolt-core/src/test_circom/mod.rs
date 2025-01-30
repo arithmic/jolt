@@ -26,25 +26,31 @@ pub mod helper_uni_spartan_proof;
 pub mod helper_stuff;
 
 
+static FIB_FILE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+use ark_bn254::{Bn254, Fq as Fp, Fr as Scalar};
 #[test]
-fn test_formatting_jolt_device() {
-    let mem_layout = MemoryLayout::new(5, 10);
+fn fib_e2e_hyperkzg() {
+    println!("Running Fib");
+    let (preprocessing, proof_from_rust, commitments) = fib_e2e::<
+        Scalar,
+        HyperKZG<Bn254, PoseidonTranscript<Fp>>,
+        PoseidonTranscript<Fp>,
+    >();
+  
+    let (circom_preprocessing, circom_proof, circom_stuff) = convert_full_proof_to_circom(preprocessing, proof_from_rust, commitments);
 
-    let jolt_device = JoltDevice {
-        inputs: [3, 4, 5].to_vec(),
-        outputs: [3, 4, 5].to_vec(),
-        panic: false,
-        memory_layout: mem_layout,
-    };
-
-    let jolt_device_circom = convert_from_jolt_device_to_circom(jolt_device);
-
+    //         
     let input_json = format!(
         r#"{{
-            "program_io": {:?}
-        }}"#,
-        jolt_device_circom
+        "preprocessing": {:?},
+        "proof": {:?},
+        "commitments": {:?}
+    }}"#,
+        circom_preprocessing,
+        circom_proof,
+        circom_stuff
     );
+
     let input_file_path = "input.json";
     let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
     input_file
@@ -53,7 +59,6 @@ fn test_formatting_jolt_device() {
     println!("Input JSON file created successfully.");
 }
 
-static FIB_FILE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 fn fib_e2e<F, PCS, ProofTranscript>() -> (JoltPreprocessing<C, F, PCS, ProofTranscript>, JoltProof<4, 65536, JoltR1CSInputs, F, PCS, RV32I, RV32ISubtables<F>, ProofTranscript>, JoltStuff<<PCS as CommitmentScheme<ProofTranscript>>::Commitment>)
 where
@@ -94,36 +99,6 @@ where
     return (preprocessing, proof, commitments);
 }
 
-use ark_bn254::{Bn254, Fq as Fp, Fr as Scalar};
-#[test]
-fn fib_e2e_hyperkzg() {
-    println!("Running Fib");
-    let (preprocessing, proof_from_rust, commitments) = fib_e2e::<
-        Scalar,
-        HyperKZG<Bn254, PoseidonTranscript<Fp>>,
-        PoseidonTranscript<Fp>,
-    >();
-
-    let (circom_preprocessing, circom_proof, circom_stuff) = convert_full_proof_to_circom(preprocessing, proof_from_rust, commitments);
-
-    let input_json = format!(
-        r#"{{
-            "preprocessing": {:?},
-            "proof": {:?},
-            "commitments": {:?}
-    }}"#,
-        circom_preprocessing,
-        circom_proof,
-        circom_stuff
-    );
-
-    let input_file_path = "input.json";
-    let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
-    input_file
-        .write_all(input_json.as_bytes())
-        .expect("Failed to write to input.json");
-    println!("Input JSON file created successfully.");
-}
 
 pub fn convert_full_proof_to_circom(
     jolt_preprocessing: JoltPreprocessing<C, Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>,PoseidonTranscript<Fp>>,
@@ -138,3 +113,29 @@ pub fn convert_full_proof_to_circom(
     )
 }
 
+#[test]
+fn test_formatting_jolt_device() {
+    let mem_layout = MemoryLayout::new(5, 10);
+
+    let jolt_device = JoltDevice {
+        inputs: [3, 4, 5].to_vec(),
+        outputs: [3, 4, 5].to_vec(),
+        panic: false,
+        memory_layout: mem_layout,
+    };
+
+    let jolt_device_circom = convert_from_jolt_device_to_circom(jolt_device);
+
+    let input_json = format!(
+        r#"{{
+            "program_io": {:?}
+        }}"#,
+        jolt_device_circom
+    );
+    let input_file_path = "input.json";
+    let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+    input_file
+        .write_all(input_json.as_bytes())
+        .expect("Failed to write to input.json");
+    println!("Input JSON file created successfully.");
+}

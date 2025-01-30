@@ -48,9 +48,10 @@ impl fmt::Debug for Fqq {
         write!(
             f,
             r#"{{
-            "element": "{}",
-            "limbs": ["{}", "{}", "{}"]
-            }}"#,
+                              "element": "{}",
+                              "limbs": ["{}", "{}", "{}"]
+                              
+                              }}"#,
             self.element, &self.limbs[0], &self.limbs[1].to_string(), &self.limbs[2].to_string()
         )
     }

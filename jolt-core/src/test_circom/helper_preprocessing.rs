@@ -32,9 +32,9 @@ impl fmt::Debug for JoltPreprocessingCircom {
         write!(
             f,
         r#"{{
-            "generators": {:?},
-            "bytecode": {:?},
-            "read_write_memory": {:?}
+                "generators": {:?},
+                "bytecode": {:?},
+                "read_write_memory": {:?}
             }}"#,
             self.generators,
             self.bytecode,
@@ -54,7 +54,7 @@ pub fn convert_joltpreprocessing_to_circom(jolt_preprocessing: JoltPreprocessing
 
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BytecodePreprocessingCircom{
-    pub code_size: Fp,
+    // pub code_size: Fp,
     pub v_init_final: Vec<Vec<Fqq>>,
 }
 
@@ -63,11 +63,9 @@ impl fmt::Debug for BytecodePreprocessingCircom {
         write!(
             f,
                 r#"{{
-                "code_size": {},
-                "v_init_final": {:?}
+                        "v_init_final": {:?}
                 }}"#,
-            self.code_size,
-            self.v_init_final,
+            self.v_init_final
         )
     }
 }
@@ -85,7 +83,6 @@ pub fn convert_byte_code_preprocessing_to_circom(bytecode_preprocess: BytecodePr
         v_init_final.push(temp);
     }
     BytecodePreprocessingCircom{
-        code_size: Fp::from(bytecode_preprocess.code_size as u128),
         v_init_final: v_init_final,
     }
 }
@@ -103,8 +100,8 @@ impl fmt::Debug for ReadWriteMemoryPreprocessingCircom {
         write!(
             f,
             r#"{{
-            "bytecode_words": {:?},
-            "program_io": {:?}
+                    "bytecode_words": {:?},
+                    "program_io": {:?}
             }}"#,
             self.bytecode_words,
             self.program_io,
@@ -125,7 +122,6 @@ pub fn convert_rw_mem_processing(rw_mem_processing: ReadWriteMemoryPreprocessing
             outputs: vec![Fp::ZERO; 1],
             panic: Fp::ZERO,
         }
-        // convert_from_jolt_device_to_circom(rw_mem_processing.program_io.unwrap())
     }
 }
 

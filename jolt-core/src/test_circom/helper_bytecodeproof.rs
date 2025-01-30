@@ -33,6 +33,7 @@ pub fn convert_multiset_hashes_to_circom(
     multiset_hash: &MultisetHashes<Scalar>,
 ) -> MultiSethashesCircom {
     let mut read_hashes = Vec::new();
+
     for i in 0..multiset_hash.read_hashes.len() {
         read_hashes.push(Fqq {
             element: multiset_hash.read_hashes[i].clone(),
@@ -80,6 +81,8 @@ pub struct BytecodeProofCircom{
 
 impl fmt::Debug for BytecodeProofCircom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+        
         write!(
             f,
             r#"{{
@@ -102,7 +105,6 @@ pub fn convert_from_batched_GKRProof_to_circom(proof: &BatchedGrandProductProof<
     .len();
 
     let max_no_polys = proof.gkr_layers[num_gkr_layers - 1].proof.uni_polys.len();
-
 
     let mut updated_gkr_layers = Vec::new();
 
@@ -129,6 +131,7 @@ pub fn convert_from_batched_GKRProof_to_circom(proof: &BatchedGrandProductProof<
             },
         });
     }
+    // println!("updated_gkr_layers is {:?}", updated_gkr_layers.len());
 
     BatchedGrandProductProofCircom{
         gkr_layers: updated_gkr_layers
@@ -161,14 +164,13 @@ pub fn convert_from_bytecode_proof_to_circom(bytecode_proof: BytecodeProof<Scala
         });
     }
     // Last 7 init_final values will be update inside verifier
-    
 
-    BytecodeProofCircom{
+    return BytecodeProofCircom{
         multiset_hashes: convert_multiset_hashes_to_circom(&bytecode_proof.multiset_hashes),
         read_write_grand_product: convert_from_batched_GKRProof_to_circom(&bytecode_proof.read_write_grand_product),
         init_final_grand_product: convert_from_batched_GKRProof_to_circom(&bytecode_proof.init_final_grand_product),
         openings: openings
-    }
+    };
 }
 
 

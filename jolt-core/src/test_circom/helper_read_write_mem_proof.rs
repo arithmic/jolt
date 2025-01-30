@@ -38,13 +38,15 @@ use crate::jolt::vm::rv32i_vm::{RV32ISubtables, C, M, RV32I};
 
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReadWriteMemoryProofCircom{
-    pub memory_checking_proof: InstMemoryCheckingProofCircom,
+    pub memory_checking_proof: ReadWriteMemoryCheckingProofCircom,
     pub timestamp_validity_proof: TimestampValidityProofCircom,
     pub output_proof: OutputSumcheckProof,
 }
 
 impl fmt::Debug for ReadWriteMemoryProofCircom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        
+        // 
         write!(
             f,
             r#"{{
@@ -64,8 +66,13 @@ pub struct InstMemoryCheckingProofCircom{
     pub init_final_grand_product: BatchedGrandProductProofCircom,
     pub openings: Vec<Fqq>
 }
+
 impl fmt::Debug for InstMemoryCheckingProofCircom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // 
+        //             ,
+        // 
+        // 
         write!(
             f,
             r#"{{
@@ -89,6 +96,8 @@ pub struct TimestampValidityProofCircom{
 
 impl fmt::Debug for TimestampValidityProofCircom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // ,
+        //     
         write!(
             f,
             r#"{{
@@ -97,7 +106,8 @@ impl fmt::Debug for TimestampValidityProofCircom {
             "exogenous_openings": {:?},
             "batched_grand_product": {:?}
             }}"#,
-            self.multiset_hashes, self.openings, self.exogenous_openings, self.batched_grand_product
+            self.multiset_hashes, self.openings, self.exogenous_openings
+            , self.batched_grand_product
         )
     }
 }
@@ -195,37 +205,145 @@ pub struct InstructionLookupsProofCircom{
 
 impl fmt::Debug for InstructionLookupsProofCircom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // ,
+        // 
         write!(
             f,
             r#"{{
             "primary_sumcheck": {:?},
-            "memory_checking": {:?}
+            "memory_checking_proof": {:?}
             }}"#,
             self.primary_sumcheck, self.memory_checking
         )
     }
 }
 
-pub fn convert_from_read_write_mem_proof_to_circom(rw_mem_proof: ReadWriteMemoryProof<Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>, PoseidonTranscript<Fp>>) 
--> ReadWriteMemoryProofCircom
+pub fn convert_from_read_write_mem_proof_to_circom(rw_mem_proof: ReadWriteMemoryProof<Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>, PoseidonTranscript<Fp>>) -> ReadWriteMemoryProofCircom
 {
     let mut openings = Vec::new();
     // confirm the 9 required values
     let rw_openings = rw_mem_proof.memory_checking_proof.openings;
-    for opening in rw_openings.read_write_values() {
-        openings.push(Fqq {
-            element: opening.clone(),
-            limbs: convert_to_3_limbs(opening.clone()),
-        });
+    
+    openings.push(
+        Fqq{
+            element: rw_openings.a_ram,
+            limbs: convert_to_3_limbs(rw_openings.a_ram),
+        }
+    );
+    openings.push(
+        Fqq{
+            element: rw_openings.v_read_rd,
+            limbs: convert_to_3_limbs(rw_openings.v_read_rd),
+        }
+    );
+    openings.push(
+        Fqq{
+            element: rw_openings.v_read_rs1,
+            limbs: convert_to_3_limbs(rw_openings.v_read_rs1),
+        }
+    );
+    openings.push(
+        Fqq{
+            element: rw_openings.v_read_rs2,
+            limbs: convert_to_3_limbs(rw_openings.v_read_rs2),
+        }
+    );
+    openings.push(
+        Fqq{
+            element: rw_openings.v_read_ram,
+            limbs: convert_to_3_limbs(rw_openings.v_read_ram),
+        }
+    );
+    openings.push(
+        Fqq{
+            element: rw_openings.v_write_rd,
+            limbs: convert_to_3_limbs(rw_openings.v_write_rd),
+        }
+    );
+    openings.push(
+        Fqq{
+            element: rw_openings.v_write_ram,
+            limbs: convert_to_3_limbs(rw_openings.v_write_ram),
+        }
+    );
+    openings.push(
+        Fqq{
+            element: rw_openings.v_final,
+            limbs: convert_to_3_limbs(rw_openings.v_final),
+        }
+    );
+    openings.push( 
+        Fqq{
+            element: rw_openings.t_read_rd,
+            limbs: convert_to_3_limbs(rw_openings.t_read_rd),
+        }
+    );
+    openings.push(
+        Fqq{
+            element: rw_openings.t_read_rs1,
+            limbs: convert_to_3_limbs(rw_openings.t_read_rs1),
+        }
+    );
+    openings.push(
+        Fqq{
+            element: rw_openings.t_read_rs2,
+            limbs: convert_to_3_limbs(rw_openings.t_read_rs2),
+        }
+    );
+    openings.push(
+        Fqq{
+            element: rw_openings.t_read_ram,
+            limbs: convert_to_3_limbs(rw_openings.t_read_ram),
+        }
+    );
+    openings.push(
+        Fqq{
+            element: rw_openings.t_final,
+            limbs: convert_to_3_limbs(rw_openings.t_final),
+            }
+    );
+    for i in 0..3{
+        openings.push(
+            Fqq{
+                element: Scalar::from(0u8),
+                limbs: [Fp::from(0u8); 3],
+                }
+        );
     }
 
+    // println!("openings.len() is {}", openings.len());
 
-    let inst_mem_checking_proof = InstMemoryCheckingProofCircom{
+    let exogenous_openings_from_rust = rw_mem_proof.memory_checking_proof.exogenous_openings;
+    let mut exogenous_openings = Vec::new();
+    exogenous_openings.push(
+        Fqq{
+            element: exogenous_openings_from_rust.a_rd,
+            limbs: convert_to_3_limbs(exogenous_openings_from_rust.a_rd),
+        }
+    );
+    exogenous_openings.push(
+        Fqq{
+            element: exogenous_openings_from_rust.a_rs1,
+            limbs: convert_to_3_limbs(exogenous_openings_from_rust.a_rs1),
+        }
+    );
+    exogenous_openings.push(
+        Fqq{
+            element: exogenous_openings_from_rust.a_rs2,
+            limbs: convert_to_3_limbs(exogenous_openings_from_rust.a_rs2),
+        }
+    );
+    // println!("exogenous_openings.len() is {}", exogenous_openings.len());
+
+
+    let mem_checking_proof = ReadWriteMemoryCheckingProofCircom {
         multiset_hashes: convert_multiset_hashes_to_circom(&rw_mem_proof.memory_checking_proof.multiset_hashes),
         read_write_grand_product: convert_from_batched_GKRProof_to_circom(&rw_mem_proof.memory_checking_proof.read_write_grand_product),
         init_final_grand_product: convert_from_batched_GKRProof_to_circom(&rw_mem_proof.memory_checking_proof.init_final_grand_product),
-        openings: openings,
+        openings,
+        exogenous_openings,
     };
+
 
     let ts_openings = rw_mem_proof.timestamp_validity_proof.openings;
     let mut openings = Vec::new();
@@ -239,11 +357,12 @@ pub fn convert_from_read_write_mem_proof_to_circom(rw_mem_proof: ReadWriteMemory
     let ts_exo_openings = rw_mem_proof.timestamp_validity_proof.exogenous_openings;
     let mut exo_openings: Vec<Fqq> = Vec::new();
     for opening in ts_exo_openings {
-        openings.push(Fqq {
+        exo_openings.push(Fqq {
             element: opening.clone(),
             limbs: convert_to_3_limbs(opening.clone()),
         });
     }
+
     
     let ts_validity_proof = TimestampValidityProofCircom{
         multiset_hashes: convert_multiset_hashes_to_circom(&rw_mem_proof.timestamp_validity_proof.multiset_hashes),
@@ -267,7 +386,7 @@ pub fn convert_from_read_write_mem_proof_to_circom(rw_mem_proof: ReadWriteMemory
     };
 
     ReadWriteMemoryProofCircom{
-        memory_checking_proof: inst_mem_checking_proof,
+        memory_checking_proof: mem_checking_proof,
         timestamp_validity_proof: ts_validity_proof,
         output_proof: ouput_sum_check_proof,
     }
@@ -276,7 +395,7 @@ pub fn convert_from_read_write_mem_proof_to_circom(rw_mem_proof: ReadWriteMemory
 const MEMORY_OPS_PER_INSTRUCTION: usize = 4;
 
 
-fn convert_from_inst_lookups_proof_to_circom(inst_lookup_proof: InstructionLookupsProof<{C}, {M}, Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>, RV32I, RV32ISubtables<Scalar> ,PoseidonTranscript<Fp>>) -> InstructionLookupsProofCircom{
+pub fn convert_from_inst_lookups_proof_to_circom(inst_lookup_proof: InstructionLookupsProof<{C}, {M}, Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>, RV32I, RV32ISubtables<Scalar> ,PoseidonTranscript<Fp>>) -> InstructionLookupsProofCircom{
     let primary_sum_check = PrimarySumcheckCircom{
         sumcheck_proof: convert_sum_check_proof_to_circom(&inst_lookup_proof.primary_sumcheck.sumcheck_proof),
         openings: convert_from_primary_sum_check_opening_to_circom(&inst_lookup_proof.primary_sumcheck.openings),
@@ -284,12 +403,77 @@ fn convert_from_inst_lookups_proof_to_circom(inst_lookup_proof: InstructionLooku
 
     let mut openings = Vec::new();
     let lookup_openings = inst_lookup_proof.memory_checking.openings;
-    for opening in lookup_openings.read_write_values() {
-        openings.push(Fqq {
-            element: opening.clone(),
-            limbs: convert_to_3_limbs(opening.clone()),
-        });
+    // for opening in lookup_openings.read_write_values() {
+    //     openings.push(Fqq {
+    //         element: opening.clone(),
+    //         limbs: convert_to_3_limbs(opening.clone()),
+    //     });
+    // }
+    // pub(crate) dim: Vec<T>,
+    // /// `num_memories`-sized vector of polynomials/commitments/openings corresponding to
+    // /// the read access counts for each memory.
+    // pub read_cts: Vec<T>,
+    // /// `num_memories`-sized vector of polynomials/commitments/openings corresponding to
+    // /// the final access counts for each memory.
+    // pub(crate) final_cts: Vec<T>,
+    // /// `num_memories`-sized vector of polynomials/commitments/openings corresponding to
+    // /// the values read from each memory.
+    // pub(crate) E_polys: Vec<T>,
+    // /// `NUM_INSTRUCTIONS`-sized vector of polynomials/commitments/openings corresponding
+    // /// to the indicator bitvectors designating which lookup to perform at each step of
+    // /// the execution trace.
+    // pub(crate) instruction_flags: Vec<T>,
+    // /// The polynomial/commitment/opening corresponding to the lookup output for each
+    // /// step of the execution trace.
+    // pub(crate) lookup_outputs: T,
+    for i in 0..lookup_openings.dim.len(){
+        openings.push(
+            Fqq{
+                element: lookup_openings.dim[i],
+                limbs: convert_to_3_limbs(lookup_openings.dim[i]),
+            }
+        );
     }
+    for i in 0..lookup_openings.read_cts.len(){
+        openings.push(
+            Fqq{
+                element: lookup_openings.read_cts[i],
+                limbs: convert_to_3_limbs(lookup_openings.read_cts[i])
+            }
+        )
+    };
+    for i in 0..lookup_openings.final_cts.len(){
+        openings.push(
+            Fqq{
+                element: lookup_openings.final_cts[i],
+                limbs: convert_to_3_limbs(lookup_openings.final_cts[i])
+            }
+        )
+    };
+    for i in 0..lookup_openings.E_polys.len(){
+        openings.push(
+            Fqq{
+                element: lookup_openings.E_polys[i],
+                limbs: convert_to_3_limbs(lookup_openings.E_polys[i])
+            }
+        )
+    };
+    for i in 0..lookup_openings.instruction_flags.len(){
+        openings.push(
+            Fqq{
+                element: lookup_openings.instruction_flags[i],
+                limbs: convert_to_3_limbs(lookup_openings.instruction_flags[i])
+            }
+        )
+    };
+    openings.push(
+        Fqq{
+            element: lookup_openings.lookup_outputs,
+            limbs: convert_to_3_limbs(lookup_openings.lookup_outputs)
+        }
+    );
+    // println!("openings.len() is {}", openings.len());
+    
 
     let mem_checking_proof = InstMemoryCheckingProofCircom{
         multiset_hashes: convert_multiset_hashes_to_circom(&inst_lookup_proof.memory_checking.multiset_hashes),
@@ -340,6 +524,7 @@ pub fn convert_from_primary_sum_check_opening_to_circom(prim_s_c_openings: &Prim
 
 pub fn convert_reduced_opening_proof_to_circom(red_opening: ReducedOpeningProof<Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>, PoseidonTranscript<Fp>>) -> ReducedOpeningProofCircom{
     let mut claims = Vec::new();
+    // println!("red_opening.sumcheck_claims.len() is {}", red_opening.sumcheck_claims.len());
     for i in 0..red_opening.sumcheck_claims.len(){
         claims.push(
             Fqq{
@@ -354,4 +539,32 @@ pub fn convert_reduced_opening_proof_to_circom(red_opening: ReducedOpeningProof<
         joint_opening_proof: hyper_kzg_proof_to_hyper_kzg_circom(red_opening.joint_opening_proof),
     }
 }
+
+#[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ReadWriteMemoryCheckingProofCircom{
+    pub multiset_hashes: MultiSethashesCircom,
+    pub read_write_grand_product: BatchedGrandProductProofCircom,
+    pub init_final_grand_product: BatchedGrandProductProofCircom,
+    pub openings: Vec<Fqq>,
+    pub exogenous_openings: Vec<Fqq>
+}
+impl fmt::Debug for ReadWriteMemoryCheckingProofCircom {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        //             
+        write!(
+            f,
+            r#"{{
+            "multiset_hashes": {:?},
+            "read_write_grand_product": {:?},
+            "init_final_grand_product": {:?},
+            "openings": {:?},
+            "exogenous_openings": {:?}
+            }}"#,
+            self.multiset_hashes, self.read_write_grand_product, self.init_final_grand_product,self.openings
+            , self.exogenous_openings,
+        )
+    }
+}
+
+
 
