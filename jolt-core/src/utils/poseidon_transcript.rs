@@ -9,9 +9,6 @@ use ark_serialize::CanonicalSerialize;
 
 use super::transcript::Transcript;
 
-
-
-
 //Transcript struct designed to handle the case when non native elements are of modulus
 //larger than the native modulus
 #[derive(Clone)]
@@ -29,8 +26,6 @@ pub struct GrumpkinPoseidonTranscript<F: PrimeField> {
     /// tell us where it happened.
     expected_state_history: Option<Vec<F>>,
 }
-
-
 
 impl<F: PrimeField> GrumpkinPoseidonTranscript<F> {
     /// Gives the hasher object with the running seed and index added
@@ -224,7 +219,7 @@ impl<K: PrimeField + Absorb> Transcript for GrumpkinPoseidonTranscript<K> {
         let to_absorb = [
             K::from_bigint(self.n_rounds.into()).unwrap(),
             wrapped_scalar_lo,
-            wrapped_scalar_hi
+            wrapped_scalar_hi,
         ]
         .to_vec();
         self.absorb(&to_absorb);
@@ -308,7 +303,6 @@ impl<K: PrimeField + Absorb> Transcript for GrumpkinPoseidonTranscript<K> {
         q_powers
     }
 }
-
 
 /// Represents the current state of the protocol's Fiat-Shamir transcript.
 #[derive(Clone)]
@@ -400,7 +394,7 @@ impl<F: PrimeField> PoseidonTranscript<F> {
         bits.truncate(num_bits);
         bits
     }
-
+    
     fn squeeze_field_element(&mut self) -> F {
         self.state.squeeze_native_field_elements(1)[0]
     }
