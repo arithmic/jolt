@@ -1,6 +1,8 @@
 use core::fmt;
 
 use ark_bn254::{Fr as Scalar, Fq as Fp};
+
+use crate::utils::poseidon_transcript::PoseidonTranscript;
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TestTranscript{
     pub state: Fp,
@@ -45,5 +47,12 @@ impl fmt::Debug for G1AffineFormTest {
             }}"#,
             self.x, self.y
         )
+    }
+}
+
+pub fn convert_transcript_to_circom(transcript: PoseidonTranscript<Fp>) -> TestTranscript {
+    TestTranscript {
+        state: Fp::from(transcript.state.state[1]),
+        nrounds: Fp::from(transcript.n_rounds),
     }
 }

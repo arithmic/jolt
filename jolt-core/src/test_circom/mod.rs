@@ -4,8 +4,8 @@ use common::rv_trace::MemoryLayout;
 use helper_joltdevice::{convert_from_jolt_device_to_circom, convert_jolt_proof_to_circom, JoltproofCircom};
 use helper_preprocessing::{convert_joltpreprocessing_to_circom, JoltPreprocessingCircom};
 use helper_stuff::{convert_from_jolt_stuff_to_circom, JoltStuffCircom};
+use helper_transcript::convert_transcript_to_circom;
 use tracer::JoltDevice;
-
 use crate::jolt::vm::rv32i_vm::{RV32ISubtables, RV32I};
 use crate::jolt::vm::{JoltPreprocessing, JoltProof, JoltStuff};
 use crate::poly::commitment::hyperkzg::{HyperKZG, HyperKZGCommitment};
@@ -40,12 +40,16 @@ fn fib_e2e_hyperkzg() {
     let (circom_preprocessing, circom_proof, circom_stuff) = convert_full_proof_to_circom(preprocessing, proof_from_rust, commitments);
 
     //         
+    let mut transcipt_init = <PoseidonTranscript<Fp> as Transcript>::new(b"Jolt transcript");
+
     let input_json = format!(
         r#"{{
+        "transcript_init": {:?},
         "preprocessing": {:?},
         "proof": {:?},
         "commitments": {:?}
     }}"#,
+        convert_transcript_to_circom(transcipt_init),
         circom_preprocessing,
         circom_proof,
         circom_stuff
@@ -139,3 +143,29 @@ fn test_formatting_jolt_device() {
         .expect("Failed to write to input.json");
     println!("Input JSON file created successfully.");
 }
+
+#[test]
+fn test_fib(){
+    let artifact_guard = FIB_FILE_LOCK.lock().unwrap();
+    let mut program = host::Program::new("fibonacci-guest");
+    program.set_input(&9u32);
+    let (bytecode, memory_init) = program.decode();
+    let (io_device, trace) = program.trace();
+    drop(artifact_guard);
+
+    let preprocessing: JoltPreprocessing<C, Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>, PoseidonTranscript<Fp>> = RV32IJoltVM::preprocess(
+        bytecode.clone(),
+        io_device.memory_layout.clone(),
+        memory_init,
+        1 << 20,
+        1 << 20,
+        1 << 20,
+    );
+    let (proof, commitments, debug_info) =
+    <RV32IJoltVM as Jolt<Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>, C, M, PoseidonTranscript<Fp>>>::prove(
+        io_device,
+        trace,
+        preprocessing.clone(),
+    );
+}
+
