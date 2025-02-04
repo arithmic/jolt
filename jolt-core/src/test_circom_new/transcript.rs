@@ -27,7 +27,7 @@ impl fmt::Debug for TestTranscript {
 
 // change it after fixing rust transcript
 use ark_ff::PrimeField;
-pub fn convert_transcript_to_circom(transcript: PoseidonTranscript<Fp>) -> TestTranscript {
+pub fn convert_transcript_to_circom(transcript: PoseidonTranscript<Scalar>) -> TestTranscript {
     TestTranscript {
         state: Scalar::from(transcript.state.state[1].into_bigint()),
         nrounds: Scalar::from(transcript.n_rounds),

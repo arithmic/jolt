@@ -38,7 +38,7 @@ impl fmt::Debug for JoltproofCircom {
 use crate::{jolt::vm::{rv32i_vm::{RV32ISubtables, C, M, RV32I}, JoltProof}, poly::commitment::hyperkzg::HyperKZG, r1cs::inputs::JoltR1CSInputs, utils::poseidon_transcript::PoseidonTranscript};
 
 
-pub fn convert_jolt_proof_to_circom(proof: JoltProof<{C}, {M}, JoltR1CSInputs, Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>, RV32I, RV32ISubtables<Scalar>, PoseidonTranscript<Fp>>) -> JoltproofCircom{
+pub fn convert_jolt_proof_to_circom(proof: JoltProof<{C}, {M}, JoltR1CSInputs, Scalar, HyperKZG<Bn254, PoseidonTranscript<Scalar>>, RV32I, RV32ISubtables<Scalar>, PoseidonTranscript<Scalar>>) -> JoltproofCircom{
     let bytecode= convert_from_bytecode_proof_to_circom(proof.bytecode);
     JoltproofCircom{
         trace_length: Scalar::from(proof.trace_length as u128),

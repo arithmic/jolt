@@ -30,7 +30,7 @@ impl fmt::Debug for UniformSpartanProofCircom {
 }
 
 
-pub fn compute_uniform_spartan_to_circom(uni_spartan_proof: UniformSpartanProof<C, JoltR1CSInputs, Scalar, PoseidonTranscript<Fp>>) -> UniformSpartanProofCircom {
+pub fn compute_uniform_spartan_to_circom(uni_spartan_proof: UniformSpartanProof<C, JoltR1CSInputs, Scalar, PoseidonTranscript<Scalar>>) -> UniformSpartanProofCircom {
 
     let mut outer_s_c_claims: [FqCircom; 3] = [FqCircom(
         Scalar::ZERO) ; 3];

@@ -27,7 +27,7 @@ impl fmt::Debug for ReducedOpeningProofCircom {
     }
 }
 
-pub fn convert_reduced_opening_proof_to_circom(red_opening: ReducedOpeningProof<Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>, PoseidonTranscript<Fp>>) -> ReducedOpeningProofCircom{
+pub fn convert_reduced_opening_proof_to_circom(red_opening: ReducedOpeningProof<Scalar, HyperKZG<Bn254, PoseidonTranscript<Scalar>>, PoseidonTranscript<Scalar>>) -> ReducedOpeningProofCircom{
     let mut claims = Vec::new();
     // println!("red_opening.sumcheck_claims.len() is {}", red_opening.sumcheck_claims.len());
     for i in 0..red_opening.sumcheck_claims.len(){

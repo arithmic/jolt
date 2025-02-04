@@ -183,7 +183,7 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
     //TODO:-
     fn append_message(&mut self, msg: &'static [u8]) {
         assert!(msg.len() < 32);
-        let scalar = <ark_bn254::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&msg);
+        let scalar = <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&msg);
         let n_rounds = self.n_rounds;
         self.absorb(&n_rounds);
         self.absorb(&scalar);
@@ -210,10 +210,10 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
     fn append_scalar<F: JoltField>(&mut self, scalar: &F) {
         let mut buf = vec![];
         scalar.serialize_uncompressed(&mut buf).unwrap();
-        let wrapped_scalar = <ark_bn254::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&buf);
+        let wrapped_scalar = <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&buf);
 
         let to_absorb = [
-            <ark_bn254::Fq as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
+            <ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
             wrapped_scalar,
         ]
         .to_vec();
@@ -235,9 +235,9 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
     fn append_point<G: CurveGroup>(&mut self, point: &G) {
         if point.is_zero() {
             let to_absorb = [
-                <ark_bn254::Fq as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
-                <ark_bn254::Fq as ark_ff::Zero>::zero(),
-                <ark_bn254::Fq as ark_ff::Zero>::zero(),
+                <ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
+                <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                <ark_bn254::Fr as ark_ff::Zero>::zero(),
             ]
             .to_vec();
             self.absorb(&to_absorb);
@@ -255,9 +255,9 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
         let y = aff.y().unwrap();
         y.serialize_compressed(&mut y_bytes).unwrap();
         let to_absorb = [
-            <ark_bn254::Fq as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
-            <ark_bn254::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&x_bytes),
-            <ark_bn254::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&y_bytes),
+            <ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
+            <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&x_bytes),
+            <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&y_bytes),
         ]
         .to_vec();
         self.absorb(&to_absorb);

@@ -356,7 +356,7 @@ pub mod tests {
 
     #[test]
     fn fib_e2e_zeromorph() {
-        fib_e2e::<Fr, Zeromorph<Bn254, PoseidonTranscript<ark_bn254::Fq>>, PoseidonTranscript<ark_bn254::Fq>>();
+        fib_e2e::<Fr, Zeromorph<Bn254, PoseidonTranscript<ark_bn254::Fr>>, PoseidonTranscript<ark_bn254::Fr>>();
     }
     
     #[test]
@@ -364,8 +364,8 @@ pub mod tests {
         println!("Running Fib");
         fib_e2e::<
             Fr,
-            HyperKZG<Bn254, PoseidonTranscript<ark_bn254::Fq>>,
-            PoseidonTranscript<ark_bn254::Fq>,
+            HyperKZG<Bn254, PoseidonTranscript<ark_bn254::Fr>>,
+            PoseidonTranscript<ark_bn254::Fr>,
         >();
     }
     // #[test]

@@ -123,7 +123,7 @@ use crate::poly::commitment::hyperkzg::HyperKZG;
 use crate::utils::poseidon_transcript::PoseidonTranscript;
 
 
-pub fn convert_from_inst_lookups_proof_to_circom(inst_lookup_proof: InstructionLookupsProof<{C}, {M}, Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp>>, RV32I, RV32ISubtables<Scalar> ,PoseidonTranscript<Fp>>) -> InstructionLookupsProofCircom{
+pub fn convert_from_inst_lookups_proof_to_circom(inst_lookup_proof: InstructionLookupsProof<{C}, {M}, Scalar, HyperKZG<Bn254, PoseidonTranscript<Scalar>>, RV32I, RV32ISubtables<Scalar> ,PoseidonTranscript<Scalar>>) -> InstructionLookupsProofCircom{
     let primary_sum_check = PrimarySumcheckCircom{
         sumcheck_proof: convert_sum_check_proof_to_circom(&inst_lookup_proof.primary_sumcheck.sumcheck_proof),
         openings: convert_from_primary_sum_check_opening_to_circom(&inst_lookup_proof.primary_sumcheck.openings),
