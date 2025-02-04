@@ -26,11 +26,10 @@ impl fmt::Debug for JoltproofCircom {
             "bytecode": {:?},
             "read_write_memory": {:?},
             "instruction_lookups": {:?},
-            "r1cs": {:?},
-            "opening_proof": {:?}
+            "r1cs": {:?}
             }}"#,
             self.trace_length, self.program_io, self.bytecode, self.read_write_memory,
-            self.instruction_lookups, self.r1cs, self.opening_proof
+            self.instruction_lookups, self.r1cs
         )
     }
 }
