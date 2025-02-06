@@ -41,6 +41,7 @@ use super::{Assignment, Instance};
 
 #[derive(Default, CanonicalSerialize, CanonicalDeserialize)]
 pub struct SpartanStuff<T: CanonicalSerialize + CanonicalDeserialize + Sync> {
+    witness: T,
     read_cts_rows: Vec<T>,
     read_cts_cols: Vec<T>,
     final_cts_rows: Vec<T>,
@@ -52,7 +53,7 @@ pub struct SpartanStuff<T: CanonicalSerialize + CanonicalDeserialize + Sync> {
     e_ry: Vec<T>,
     eq_rx: VerifierComputedOpening<T>,
     eq_ry: VerifierComputedOpening<T>,
-    identity: VerifierComputedOpening<T>,
+    // identity: VerifierComputedOpening<T>,
 }
 
 impl<T: CanonicalSerialize + CanonicalDeserialize + Sync> StructuredPolynomialData<T>
