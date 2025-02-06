@@ -4,7 +4,7 @@ use ark_crypto_primitives::sponge::{
     Absorb, CryptographicSponge, DuplexSpongeMode, FieldBasedCryptographicSponge,
 };
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInt, BigInteger, BigInteger256, Field, PrimeField};
+use ark_ff::{AdditiveGroup, BigInt, BigInteger, BigInteger256, Field, PrimeField};
 use ark_serialize::CanonicalSerialize;
 
 use super::transcript::Transcript;
@@ -240,9 +240,9 @@ impl<K: PrimeField + Absorb> Transcript for GrumpkinPoseidonTranscript<K> {
     fn append_point<G: CurveGroup>(&mut self, point: &G) {
         if point.is_zero() {
             let to_absorb = [
-                <ark_bn254::Fq as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
-                <ark_bn254::Fq as ark_ff::Zero>::zero(),
-                <ark_bn254::Fq as ark_ff::Zero>::zero(),
+                <ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
+                <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                <ark_bn254::Fr as ark_ff::Zero>::zero(),
             ]
             .to_vec();
             self.absorb(&to_absorb);
@@ -260,9 +260,9 @@ impl<K: PrimeField + Absorb> Transcript for GrumpkinPoseidonTranscript<K> {
         let y = aff.y().unwrap();
         y.serialize_compressed(&mut y_bytes).unwrap();
         let to_absorb = [
-            <ark_bn254::Fq as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
-            <ark_bn254::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&x_bytes),
-            <ark_bn254::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&y_bytes),
+            <ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
+            <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&x_bytes),
+            <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&y_bytes),
         ]
         .to_vec();
         self.absorb(&to_absorb);
@@ -394,7 +394,7 @@ impl<F: PrimeField> PoseidonTranscript<F> {
         bits.truncate(num_bits);
         bits
     }
-    
+
     fn squeeze_field_element(&mut self) -> F {
         self.state.squeeze_native_field_elements(1)[0]
     }
@@ -648,4 +648,12 @@ impl<K: PrimeField + Absorb> Transcript for PoseidonTranscript<K> {
         }
         q_powers
     }
+}
+
+
+#[test]
+fn montgomery_test(){
+    let one = -ark_grumpkin::Fr::ONE;
+
+    println!("{:?}",one.into_bigint());
 }
