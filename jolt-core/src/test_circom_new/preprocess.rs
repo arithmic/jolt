@@ -72,11 +72,6 @@ pub fn convert_rw_mem_processing(rw_mem_processing: ReadWriteMemoryPreprocessing
     }
     ReadWriteMemoryPreprocessingCircom {
         bytecode_words: bytecode_words,
-        program_io: JoltDeviceCircom{
-            inputs: vec![FqCircom(Scalar::ZERO); 1],
-            outputs: vec![FqCircom(Scalar::ZERO); 1],
-            panic: FqCircom(Scalar::ZERO),
-        }
     }
 }
 use crate::jolt::vm::rv32i_vm::{C, M};

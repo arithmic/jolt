@@ -626,7 +626,7 @@ where
             &reduced_opening_proof.sumcheck_proof,
             transcript,
         )?;
-
+        println!("num of num_sumcheck_rounds is {}", num_sumcheck_rounds);
         // Compute random linear combination of the claims, accounting for the fact that the
         // polynomials may be of different sizes
         let expected_sumcheck_claim: F = self
@@ -713,3 +713,4 @@ where
         sumcheck_proof.verify(combined_claim, num_sumcheck_rounds, 2, transcript)
     }
 }
+

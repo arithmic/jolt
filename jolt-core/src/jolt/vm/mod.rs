@@ -481,29 +481,29 @@ where
 
         let jolt_commitments = jolt_polynomials.commit::<C, PCS, ProofTranscript>(&preprocessing);
 
-        transcript.append_scalar(&spartan_key.vk_digest);
+        // transcript.append_scalar(&spartan_key.vk_digest);
 
-        jolt_commitments
-            .read_write_values()
-            .iter()
-            .for_each(|value| value.append_to_transcript(&mut transcript));
-        jolt_commitments
-            .init_final_values()
-            .iter()
-            .for_each(|value| value.append_to_transcript(&mut transcript));
+        // jolt_commitments
+        //     .read_write_values()
+        //     .iter()
+        //     .for_each(|value| value.append_to_transcript(&mut transcript));
+        // jolt_commitments
+        //     .init_final_values()
+        //     .iter()
+        //     .for_each(|value| value.append_to_transcript(&mut transcript));
 
         let mut opening_accumulator: ProverOpeningAccumulator<F, ProofTranscript> =
             ProverOpeningAccumulator::new();
-
-        let bytecode_proof = BytecodeProof::prove_memory_checking(
-            &preprocessing.generators,
-            &preprocessing.bytecode,
-            &jolt_polynomials.bytecode,
-            &jolt_polynomials,
-            &mut opening_accumulator,
-            &mut transcript,
-        );
-
+            
+            let bytecode_proof = BytecodeProof::prove_memory_checking(
+                &preprocessing.generators,
+                &preprocessing.bytecode,
+                &jolt_polynomials.bytecode,
+                &jolt_polynomials,
+                &mut opening_accumulator,
+                &mut transcript,
+            );
+                
         let instruction_proof = InstructionLookupsProof::prove(
             &preprocessing.generators,
             &jolt_polynomials,
@@ -534,10 +534,10 @@ where
             &mut transcript,
         )
         .expect("r1cs proof failed");
-
+            
         // Batch-prove all openings
         let opening_proof =
-            opening_accumulator.reduce_and_prove::<PCS>(&preprocessing.generators, &mut transcript);
+        opening_accumulator.reduce_and_prove::<PCS>(&preprocessing.generators, &mut transcript);
 
         drop_in_background_thread(jolt_polynomials);
 
@@ -603,7 +603,7 @@ where
             &r1cs_builder,
             padded_trace_length,
         );
-        transcript.append_scalar(&spartan_key.vk_digest);
+        // transcript.append_scalar(&spartan_key.vk_digest);
 
         let r1cs_proof = R1CSProof {
             key: spartan_key,
@@ -611,15 +611,15 @@ where
             _marker: PhantomData,
         };
 
-        commitments
-            .read_write_values()
-            .iter()
-            .for_each(|value| value.append_to_transcript(&mut transcript));
-        commitments
-            .init_final_values()
-            .iter()
-            .for_each(|value| value.append_to_transcript(&mut transcript));
-
+        // commitments
+        //     .read_write_values()
+        //     .iter()
+        //     .for_each(|value| value.append_to_transcript(&mut transcript));
+        // commitments
+        //     .init_final_values()
+        //     .iter()
+        //     .for_each(|value| value.append_to_transcript(&mut transcript));
+                // Batch-verify all openings
         Self::verify_bytecode(
             &preprocessing.bytecode,
             &preprocessing.generators,
@@ -652,14 +652,12 @@ where
             &mut opening_accumulator,
             &mut transcript,
         )?;
-
-        // Batch-verify all openings
         opening_accumulator.reduce_and_verify(
             &preprocessing.generators,
             &proof.opening_proof,
             &mut transcript,
         )?;
-
+        
         Ok(())
     }
 
@@ -783,4 +781,5 @@ pub mod instruction_lookups;
 pub mod read_write_memory;
 pub mod rv32i_vm;
 pub mod timestamp_range_check;
+
 

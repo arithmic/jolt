@@ -55,7 +55,7 @@ pub fn convert_from_jolt_device_to_circom(jolt_device: JoltDevice) -> JoltDevice
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReadWriteMemoryPreprocessingCircom{
     pub bytecode_words: Vec<FqCircom>,
-    pub program_io: JoltDeviceCircom
+    // pub program_io: JoltDeviceCircom
 }
 
 impl fmt::Debug for ReadWriteMemoryPreprocessingCircom {
@@ -63,11 +63,9 @@ impl fmt::Debug for ReadWriteMemoryPreprocessingCircom {
         write!(
             f,
             r#"{{
-                    "bytecode_words": {:?},
-                    "program_io": {:?}
+                    "bytecode_words": {:?}
             }}"#,
             self.bytecode_words,
-            self.program_io,
         )
     }
 }
