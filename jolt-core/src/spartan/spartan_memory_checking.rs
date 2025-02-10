@@ -28,6 +28,7 @@ use crate::{
     },
     utils::errors::ProofVerifyError,
 };
+use ark_ff::BigInt;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::{chain, interleave, Itertools};
 use rayon::prelude::*;
@@ -47,11 +48,13 @@ pub struct SpartanStuff<T: CanonicalSerialize + CanonicalDeserialize + Sync> {
     rows: Vec<T>,
     cols: Vec<T>,
     vals: Vec<T>,
+    rows: Vec<T>,
+    cols: Vec<T>,
     e_rx: Vec<T>,
     e_ry: Vec<T>,
     eq_rx: VerifierComputedOpening<T>,
     eq_ry: VerifierComputedOpening<T>,
-    // identity: VerifierComputedOpening<T>,
+    identity: VerifierComputedOpening<T>,
 }
 
 impl<T: CanonicalSerialize + CanonicalDeserialize + Sync> StructuredPolynomialData<T>

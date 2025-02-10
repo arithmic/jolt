@@ -2,10 +2,8 @@ use std::cmp::max;
 
 use super::sparse_mlpoly::SparseMatPolynomial;
 use crate::{
-    field::JoltField,
-    poly::dense_mlpoly::DensePolynomial,
-    spartan::sparse_mlpoly::SparseMatEntry,
-    utils::{math::Math, transcript::Transcript},
+    field::JoltField, poly::dense_mlpoly::DensePolynomial, spartan::sparse_mlpoly::SparseMatEntry,
+    utils::math::Math,
 };
 use serde::{Deserialize, Serialize};
 
@@ -18,33 +16,6 @@ pub struct R1CSInstance<F: JoltField> {
     B: SparseMatPolynomial<F>,
     C: SparseMatPolynomial<F>,
 }
-
-// #[derive(Serialize, Deserialize)]
-// pub struct R1CSCommitmentGens {
-//     gens: SparseMatPolyCommitmentGens,
-// }
-
-// impl R1CSCommitmentGens {
-//     pub fn new(
-//         label: &'static [u8],
-//         num_cons: usize,
-//         num_vars: usize,
-//         num_inputs: usize,
-//         num_nz_entries: usize,
-//     ) -> R1CSCommitmentGens {
-//         assert!(num_inputs < num_vars);
-//         let num_poly_vars_x = num_cons.log_2();
-//         let num_poly_vars_y = (2 * num_vars).log_2();
-//         let gens = SparseMatPolyCommitmentGens::new(
-//             label,
-//             num_poly_vars_x,
-//             num_poly_vars_y,
-//             num_nz_entries,
-//             3,
-//         );
-//         R1CSCommitmentGens { gens }
-//     }
-// }
 
 // #[derive(Debug, Serialize, Deserialize)]
 // pub struct R1CSCommitment {
@@ -63,30 +34,14 @@ pub struct R1CSInstance<F: JoltField> {
 //     }
 // }
 
-// #[derive(Serialize, Deserialize)]
-// pub struct R1CSDecommitment {
-//     dense: MultiSparseMatPolynomialAsDense,
-// }
-
-// impl R1CSCommitment {
-//     pub fn get_num_cons(&self) -> usize {
-//         self.num_cons
-//     }
-
-//     pub fn get_num_vars(&self) -> usize {
-//         self.num_vars
-//     }
-
-//     pub fn get_num_inputs(&self) -> usize {
-//         self.num_inputs
-//     }
-// }
-
 impl<F: JoltField> R1CSInstance<F> {
     pub fn new(
         num_cons: usize,
         num_vars: usize,
         num_inputs: usize,
+        A: SparseMatPolynomial<F>,
+        B: SparseMatPolynomial<F>,
+        C: SparseMatPolynomial<F>,
         A: SparseMatPolynomial<F>,
         B: SparseMatPolynomial<F>,
         C: SparseMatPolynomial<F>,
@@ -100,10 +55,17 @@ impl<F: JoltField> R1CSInstance<F> {
         // check that number_inputs + 1 <= num_vars
         assert!(num_inputs < num_vars);
 
+        // no errors, so create polynomials
+        let num_poly_vars_x = num_cons.log_2();
+        let num_poly_vars_y = (2 * num_vars).log_2();
+
         Self {
             num_cons,
             num_vars,
             num_inputs,
+            A,
+            B,
+            C,
             A,
             B,
             C,
@@ -130,42 +92,34 @@ impl<F: JoltField> R1CSInstance<F> {
     //     encoder.finish().unwrap()
     // }
 
-    // pub fn produce_synthetic_r1cs(
-    //     num_cons: usize,
-    //     num_vars: usize,
-    //     num_inputs: usize,
-    // ) -> (R1CSInstance, Vec<Scalar>, Vec<Scalar>) {
-    //     Timer::print(&format!("number_of_constraints {num_cons}"));
-    //     Timer::print(&format!("number_of_variables {num_vars}"));
-    //     Timer::print(&format!("number_of_inputs {num_inputs}"));
+    pub fn produce_synthetic_r1cs(
+        num_cons: usize,
+        num_vars: usize,
+        num_inputs: usize,
+    ) -> (R1CSInstance<F>, Vec<F>, Vec<F>) {
+        let mut rng = rand::thread_rng();
 
-    //     let mut csprng: OsRng = OsRng;
-
-    //     // assert num_cons and num_vars are power of 2
-    //     assert_eq!((num_cons.log_2()).pow2(), num_cons);
-    //     assert_eq!((num_vars.log_2()).pow2(), num_vars);
+        // assert num_cons and num_vars are power of 2
+        assert_eq!((num_cons.log_2()).pow2(), num_cons);
+        assert_eq!((num_vars.log_2()).pow2(), num_vars);
 
         // num_inputs + 1 <= num_vars
         assert!(num_inputs < num_vars);
-
-        let append_zeroes = num_vars - num_inputs - 1;
+        // num_inputs + 1 <= num_vars
+        assert!(num_inputs < num_vars);
 
         // z is organized as [vars,1,io]
-        let size_z = append_zeroes + num_vars + num_inputs + 1;
+        let size_z = num_vars + num_inputs + 1;
 
         // produce a random satisfying assignment
         let Z = {
-            let mut Z = vec![F::zero(); size_z];
-            Z[0] = F::one(); // set the constant term to 1
-            Z.iter_mut()
-                .take(num_inputs + 1)
-                .skip(1)
-                .for_each(|z| *z = F::random::<ChaCha8Rng>(&mut rng));
-            Z.iter_mut()
-                .skip(append_zeroes + num_inputs + 1)
-                .for_each(|z| *z = F::random::<ChaCha8Rng>(&mut rng));
+            let mut Z: Vec<F> = (0..size_z)
+                .map(|_i| F::random(&mut rng))
+                .collect::<Vec<F>>();
+            Z[num_vars] = F::one(); // set the constant term to 1
             Z
         };
+
         // three sparse matrices
         let mut A: Vec<SparseMatEntry<F>> = Vec::new();
         let mut B: Vec<SparseMatEntry<F>> = Vec::new();
@@ -180,9 +134,11 @@ impl<F: JoltField> R1CSInstance<F> {
 
             let C_idx = (i + 3) % size_z;
             let C_val = Z[C_idx];
+            let C_idx = (i + 3) % size_z;
+            let C_val = Z[C_idx];
 
             if C_val == F::zero() {
-                C.push(SparseMatEntry::new(i, 0, AB_val));
+                C.push(SparseMatEntry::new(i, num_vars, AB_val));
             } else {
                 C.push(SparseMatEntry::new(
                     i,
@@ -191,9 +147,9 @@ impl<F: JoltField> R1CSInstance<F> {
                 ));
             }
         }
-        let max = max(size_z, num_cons);
-        let num_poly_vars_x = max.next_power_of_two().log_2();
-        let num_poly_vars_y = num_poly_vars_x;
+
+        let num_poly_vars_x = num_cons.log_2();
+        let num_poly_vars_y = (2 * num_vars).log_2();
         let poly_A = SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, A);
         let poly_B = SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, B);
         let poly_C = SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, C);
@@ -206,27 +162,28 @@ impl<F: JoltField> R1CSInstance<F> {
             B: poly_B,
             C: poly_C,
         };
+        let inst = R1CSInstance {
+            num_cons,
+            num_vars,
+            num_inputs,
+            A: poly_A,
+            B: poly_B,
+            C: poly_C,
+        };
 
-        assert!(inst.is_sat(&Z[1..num_inputs + 1], &Z[num_inputs + append_zeroes + 1..]));
+        assert!(inst.is_sat(&Z[..num_vars], &Z[num_vars + 1..]));
 
-        (
-            inst,
-            Z[1..num_inputs + 1].to_vec(),
-            Z[num_inputs + append_zeroes + 1..].to_vec(),
-        )
+        (inst, Z[..num_vars].to_vec(), Z[num_vars + 1..].to_vec())
     }
 
-    pub fn is_sat(&self, input: &[F], vars: &[F]) -> bool {
+    pub fn is_sat(&self, vars: &[F], input: &[F]) -> bool {
         assert_eq!(vars.len(), self.num_vars);
         assert_eq!(input.len(), self.num_inputs);
 
-        let append_zeroes = self.num_vars - self.num_inputs - 1;
-
         let z = {
-            let mut z = vec![F::one()];
+            let mut z = vars.to_vec();
+            z.extend(&vec![F::one()]);
             z.extend(input);
-            z.extend(&vec![F::zero(); append_zeroes]);
-            z.extend(vars.to_vec());
             z
         };
 
@@ -240,8 +197,21 @@ impl<F: JoltField> R1CSInstance<F> {
         let Cz = self
             .C
             .multiply_vec(self.num_cons, self.num_vars + self.num_inputs + 1, &z);
+        // verify if Az * Bz - Cz = [0...]
+        let Az = self
+            .A
+            .multiply_vec(self.num_cons, self.num_vars + self.num_inputs + 1, &z);
+        let Bz = self
+            .B
+            .multiply_vec(self.num_cons, self.num_vars + self.num_inputs + 1, &z);
+        let Cz = self
+            .C
+            .multiply_vec(self.num_cons, self.num_vars + self.num_inputs + 1, &z);
 
-        (0..z.len()).all(|i| Az[i] * Bz[i] == Cz[i])
+        assert_eq!(Az.len(), self.num_cons);
+        assert_eq!(Bz.len(), self.num_cons);
+        assert_eq!(Cz.len(), self.num_cons);
+        (0..self.num_cons).all(|i| Az[i] * Bz[i] == Cz[i])
     }
 
     pub fn multiply_vec(
@@ -296,52 +266,3 @@ impl<F: JoltField> R1CSInstance<F> {
     //     (r1cs_comm, r1cs_decomm)
     // }
 }
-
-// #[derive(Debug, Serialize, Deserialize)]
-// pub struct R1CSEvalProof<F, ProofTranscript>
-// where
-//     F: JoltField,
-//     ProofTranscript: Transcript,
-// {
-//     proof: SparseMatPolyEvalProof<F, ProofTranscript>,
-// }
-
-// impl<F: JoltField, ProofTranscript: Transcript> R1CSEvalProof<F, ProofTranscript> {
-//     pub fn prove(
-//         // decomm: &R1CSDecommitment,
-//         rx: &[F], // point at which the polynomial is evaluated
-//         ry: &[F],
-//         evals: &(F, F, F),
-//         // gens: &R1CSCommitmentGens,
-//         transcript: &mut ProofTranscript,
-//     ) -> R1CSEvalProof<F, ProofTranscript> {
-//         let proof = SparseMatPolyEvalProof::prove(
-//             // &decomm.dense,
-//             rx,
-//             ry,
-//             &[evals.0, evals.1, evals.2],
-//             // &gens.gens,
-//             transcript,
-//         );
-//         R1CSEvalProof { proof }
-//     }
-
-// pub fn verify(
-//     &self,
-//     comm: &R1CSCommitment,
-//     rx: &[Scalar], // point at which the R1CS matrix polynomials are evaluated
-//     ry: &[Scalar],
-//     evals: &(Scalar, Scalar, Scalar),
-//     gens: &R1CSCommitmentGens,
-//     transcript: &mut Transcript,
-// ) -> Result<(), ProofVerifyError> {
-//     self.proof.verify(
-//         &comm.comm,
-//         rx,
-//         ry,
-//         &[evals.0, evals.1, evals.2],
-//         &gens.gens,
-//         transcript,
-//     )
-// }
-// }
