@@ -9,10 +9,15 @@ use crate::poly::commitment::commitment_scheme::{BatchType, CommitShape, Commitm
 use crate::poly::opening_proof::{
     ProverOpeningAccumulator, ReducedOpeningProof, VerifierOpeningAccumulator,
 };
+use crate::r1cs::spartan::SpartanError;
 use crate::spartan::r1csinstance::R1CSInstance;
 use crate::spartan::sparse_mlpoly::CircuitConfig;
 use crate::spartan::sparse_mlpoly::SparseMatEntry;
-use crate::subprotocols::grand_product::BatchedGrandProduct;
+use crate::subprotocols::grand_product::{
+    BatchedDenseGrandProduct, BatchedGrandProduct, BatchedGrandProductLayer,
+    BatchedGrandProductProof,
+};
+use crate::subprotocols::sparse_grand_product::ToggledBatchedGrandProduct;
 use crate::subprotocols::sumcheck::SumcheckInstanceProof;
 use crate::utils::math::Math;
 use crate::utils::transcript::{AppendToTranscript, Transcript};
@@ -25,11 +30,17 @@ use crate::{
     },
     utils::errors::ProofVerifyError,
 };
+use ark_ff::BigInt;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::{chain, interleave, Itertools};
 use rayon::prelude::*;
-use std::array;
+#[cfg(test)]
+use std::collections::HashSet;
 use std::fs::File;
+use std::ops;
+
+use super::sparse_mlpoly::SparseMatPolynomial;
+use super::{Assignment, Instance};
 
 #[derive(Default, CanonicalSerialize, CanonicalDeserialize)]
 pub struct SpartanStuff<T: CanonicalSerialize + CanonicalDeserialize + Sync> {
@@ -41,6 +52,8 @@ pub struct SpartanStuff<T: CanonicalSerialize + CanonicalDeserialize + Sync> {
     rows: Vec<T>,
     cols: Vec<T>,
     vals: Vec<T>,
+    rows: Vec<T>,
+    cols: Vec<T>,
     e_rx: Vec<T>,
     e_ry: Vec<T>,
     eq_rx: VerifierComputedOpening<T>,
@@ -110,74 +123,68 @@ pub struct SpartanPreprocessing<F: JoltField> {
 
 impl<F: JoltField> SpartanPreprocessing<F> {
     #[tracing::instrument(skip_all, name = "Spartan::preprocess")]
-    // pub fn preprocess(circuit_file: &str) -> Self {
-    pub fn preprocess() -> Self {
-        // let file = File::open(circuit_file);
+    pub fn preprocess(circuit_file: &str) -> Self {
+        let file = File::open(circuit_file);
 
-        // if file.is_err() {
-        //     let reader = std::io::BufReader::new(file.unwrap());
-        //     let config: CircuitConfig = serde_json::from_reader(reader).unwrap();
+        if file.is_err() {
+            let reader = std::io::BufReader::new(file.unwrap());
+            let config: CircuitConfig = serde_json::from_reader(reader).unwrap();
 
-        //     let mut sparse_entries = vec![Vec::new(); 3];
+            let mut sparse_entries = vec![Vec::new(); 3];
 
-        //     // Reading JSON file
-        //     for (row, constraint) in config.constraints.iter().enumerate() {
-        //         for (j, dict) in constraint.iter().enumerate() {
-        //             for (key, value) in dict {
-        //                 let col = key.parse::<usize>().unwrap();
-        //                 let val = value.as_bytes();
+            // Reading JSON file
+            for (row, constraint) in config.constraints.iter().enumerate() {
+                for (j, dict) in constraint.iter().enumerate() {
+                    for (key, value) in dict {
+                        let col = key.parse::<usize>().unwrap();
+                        let val = value.as_bytes();
 
-        //                 sparse_entries[j].push(SparseMatEntry::new(
-        //                     row,
-        //                     col as usize,
-        //                     F::from_bytes(val),
-        //                 ));
-        //             }
-        //         }
-        //     }
+                        sparse_entries[j].push(SparseMatEntry::new(
+                            row,
+                            col as usize,
+                            F::from_bytes(val),
+                        ));
+                    }
+                }
+            }
 
-        //     let num_cons = sparse_entries[0].len();
-        //     let num_vars = 10; //TODO(Ashish):- fix num_vars.
-        //     let num_inputs = 0; //TODO(Ashish):- fix num_inputs.
-        //     let num_poly_vars_x = num_cons.log_2();
-        //     let num_poly_vars_y = (2 * num_vars).log_2();
+            let num_cons = sparse_entries[0].len();
+            let num_vars = 10; //TODO(Ashish):- fix num_vars.
+            let num_inputs = 0; //TODO(Ashish):- fix num_inputs.
+            let num_poly_vars_x = num_cons.log_2();
+            let num_poly_vars_y = (2 * num_vars).log_2();
 
-        //     let poly_A = SparseMatPolynomial::new(
-        //         num_poly_vars_x,
-        //         num_poly_vars_y,
-        //         sparse_entries[0].clone(),
-        //     );
-        //     let poly_B = SparseMatPolynomial::new(
-        //         num_poly_vars_x,
-        //         num_poly_vars_y,
-        //         sparse_entries[1].clone(),
-        //     );
-        //     let poly_C = SparseMatPolynomial::new(
-        //         num_poly_vars_x,
-        //         num_poly_vars_y,
-        //         sparse_entries[2].clone(),
-        //     );
-        //     let inst = R1CSInstance::new(num_cons, num_vars, num_inputs, poly_A, poly_B, poly_C);
+            let poly_A = SparseMatPolynomial::new(
+                num_poly_vars_x,
+                num_poly_vars_y,
+                sparse_entries[0].clone(),
+            );
+            let poly_B = SparseMatPolynomial::new(
+                num_poly_vars_x,
+                num_poly_vars_y,
+                sparse_entries[1].clone(),
+            );
+            let poly_C = SparseMatPolynomial::new(
+                num_poly_vars_x,
+                num_poly_vars_y,
+                sparse_entries[2].clone(),
+            );
+            let inst = R1CSInstance::new(num_cons, num_vars, num_inputs, poly_A, poly_B, poly_C);
 
-        //     //TODO():- Implement
-        //     SpartanPreprocessing {
-        //         inst: Instance { inst },
-        //         vars: todo!(),
-        //         inputs: todo!(),
-        //     }
-        // } else {
-        let num_vars = (2_usize).pow(10 as u32);
-        let num_cons = num_vars;
-        let num_inputs = 10;
-        let (inst, vars, inputs) =
-            Instance::<F>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
-        SpartanPreprocessing {
-            inst,
-            vars,
-            inputs,
-            rx_ry: None,
+            //TODO():- Implement
+            SpartanPreprocessing {
+                inst: Instance { inst },
+                vars: todo!(),
+                inputs: todo!(),
+            }
+        } else {
+            let num_vars = (2_usize).pow(10 as u32);
+            let num_cons = num_vars;
+            let num_inputs = 10;
+            let (inst, vars, inputs) =
+                Instance::<F>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
+            SpartanPreprocessing { inst, vars, inputs }
         }
-        // }
     }
 }
 

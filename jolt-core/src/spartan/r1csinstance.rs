@@ -17,6 +17,23 @@ pub struct R1CSInstance<F: JoltField> {
     C: SparseMatPolynomial<F>,
 }
 
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct R1CSCommitment {
+//     num_cons: usize,
+//     num_vars: usize,
+//     num_inputs: usize,
+//     comm: SparseMatPolyCommitment,
+// }
+
+// impl AppendToTranscript for R1CSCommitment {
+//     fn append_to_transcript(&self, _label: &'static [u8], transcript: &mut Transcript) {
+//         transcript.append_u64(b"num_cons", self.num_cons as u64);
+//         transcript.append_u64(b"num_vars", self.num_vars as u64);
+//         transcript.append_u64(b"num_inputs", self.num_inputs as u64);
+//         self.comm.append_to_transcript(b"comm", transcript);
+//     }
+// }
+
 impl<F: JoltField> R1CSInstance<F> {
     pub fn new(
         num_cons: usize,
@@ -74,7 +91,7 @@ impl<F: JoltField> R1CSInstance<F> {
         num_vars: usize,
         num_inputs: usize,
     ) -> (R1CSInstance<F>, Vec<F>, Vec<F>) {
-        let mut rng = ChaCha8Rng::from_seed([2; 32]);
+        let mut rng = rand::thread_rng();
 
         // assert num_cons and num_vars are power of 2
         assert_eq!((num_cons.log_2()).pow2(), num_cons);
@@ -89,7 +106,7 @@ impl<F: JoltField> R1CSInstance<F> {
         // produce a random satisfying assignment
         let Z = {
             let mut Z: Vec<F> = (0..size_z)
-                .map(|_i| F::random::<ChaCha8Rng>(&mut rng))
+                .map(|_i| F::random(&mut rng))
                 .collect::<Vec<F>>();
             Z[num_vars] = F::one(); // set the constant term to 1
             Z
