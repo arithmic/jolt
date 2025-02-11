@@ -483,14 +483,14 @@ where
 
         // transcript.append_scalar(&spartan_key.vk_digest);
 
-        // jolt_commitments
-        //     .read_write_values()
-        //     .iter()
-        //     .for_each(|value| value.append_to_transcript(&mut transcript));
-        // jolt_commitments
-        //     .init_final_values()
-        //     .iter()
-        //     .for_each(|value| value.append_to_transcript(&mut transcript));
+        jolt_commitments
+            .read_write_values()
+            .iter()
+            .for_each(|value| value.append_to_transcript(&mut transcript));
+        jolt_commitments
+            .init_final_values()
+            .iter()
+            .for_each(|value| value.append_to_transcript(&mut transcript));
 
         let mut opening_accumulator: ProverOpeningAccumulator<F, ProofTranscript> =
             ProverOpeningAccumulator::new();
@@ -611,15 +611,15 @@ where
             _marker: PhantomData,
         };
 
-        // commitments
-        //     .read_write_values()
-        //     .iter()
-        //     .for_each(|value| value.append_to_transcript(&mut transcript));
-        // commitments
-        //     .init_final_values()
-        //     .iter()
-        //     .for_each(|value| value.append_to_transcript(&mut transcript));
-                // Batch-verify all openings
+        commitments
+            .read_write_values()
+            .iter()
+            .for_each(|value| value.append_to_transcript(&mut transcript));
+        commitments
+            .init_final_values()
+            .iter()
+            .for_each(|value| value.append_to_transcript(&mut transcript));
+        // Batch-verify all openings
         Self::verify_bytecode(
             &preprocessing.bytecode,
             &preprocessing.generators,

@@ -1,4 +1,5 @@
 use crate::field::JoltField;
+use ark_bn254::{Fq, Fr};
 use ark_crypto_primitives::sponge::{
     poseidon::{get_poseidon_parameters, PoseidonDefaultConfigEntry, PoseidonSponge},
     Absorb, CryptographicSponge, DuplexSpongeMode, FieldBasedCryptographicSponge,
@@ -6,7 +7,8 @@ use ark_crypto_primitives::sponge::{
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, BigInteger256, Field, PrimeField};
 use ark_serialize::CanonicalSerialize;
-
+use num_bigint::BigUint;
+use std::str::FromStr;
 use super::transcript::Transcript;
 /// Represents the current state of the protocol's Fiat-Shamir transcript.
 #[derive(Clone)]
@@ -236,6 +238,12 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
         if point.is_zero() {
             let to_absorb = [
                 <ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
+                
+                <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                
+                <ark_bn254::Fr as ark_ff::Zero>::zero(),
                 <ark_bn254::Fr as ark_ff::Zero>::zero(),
                 <ark_bn254::Fr as ark_ff::Zero>::zero(),
             ]
@@ -248,18 +256,35 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
         }
         // If we add the point at infinity then we hash over a region of zeros
         let aff = point.into_affine();
-        let mut x_bytes = vec![];
-        let mut y_bytes = vec![];
+
         let x = aff.x().unwrap();
-        x.serialize_compressed(&mut x_bytes).unwrap();
+        let x = x.to_string();
+        let x = Fq::from_str(&x).unwrap();
+        
+        let x_limbs = convert_fp_to_3_limbs_of_scalar(&x);
+
         let y = aff.y().unwrap();
-        y.serialize_compressed(&mut y_bytes).unwrap();
-        let to_absorb = [
-            <ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
-            <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&x_bytes),
-            <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&y_bytes),
-        ]
-        .to_vec();
+        let y = y.to_string();
+        let y = Fq::from_str(&y).unwrap();
+
+        let y_limbs = convert_fp_to_3_limbs_of_scalar(&y);
+
+        let mut to_absorb = Vec::new();
+
+        to_absorb.push(<ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap());
+
+        for _ in x_limbs{
+            let mut x_limbs_bytes = vec![];
+            x.serialize_compressed(&mut x_limbs_bytes).unwrap();
+            to_absorb.push(<ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&x_limbs_bytes));
+        }
+
+        for _ in y_limbs{
+            let mut y_limbs_bytes = vec![];
+            y.serialize_compressed(&mut y_limbs_bytes).unwrap();
+            to_absorb.push(<ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&y_limbs_bytes));
+        }
+
         self.absorb(&to_absorb);
 
         let new_state = self.squeeze_field_element();
@@ -297,4 +322,19 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
         }
         q_powers
     }
+}
+
+
+pub fn convert_fp_to_3_limbs_of_scalar(r: &Fq) -> [Fr; 3] {
+    let mut limbs= [Fr::ZERO; 3];
+
+    let mask = BigUint::from((1u128 << 125) - 1);
+
+    limbs[0] = Fr::from(BigUint::from(r.into_bigint()) & mask.clone());
+
+    limbs[1] = Fr::from((BigUint::from(r.into_bigint()) >> 125) & mask.clone());
+
+    limbs[2] = Fr::from((BigUint::from(r.into_bigint()) >> 250) & mask.clone());
+
+    limbs
 }

@@ -8,13 +8,15 @@ pub mod joltproof_uniform_spartan;
 pub mod joltproof_red_opening;
 pub mod joltproof;
 pub mod transcript;
+pub mod helper_commitms;
 use std::{fs::File, io::Write, sync::{LazyLock, Mutex}};
 
-use crate::{field::JoltField, host, jolt::vm::{rv32i_vm::{RV32IJoltVM, C, M}, Jolt}, poly::commitment::{commitment_scheme::CommitmentScheme, hyperkzg::HyperKZG}, utils::{poseidon_transcript::PoseidonTranscript, transcript::Transcript}};
+use crate::{field::JoltField, host, jolt::vm::{rv32i_vm::{RV32IJoltVM, C, M}, Jolt}, poly::commitment::{commitment_scheme::CommitmentScheme, hyperkzg::{HyperKZG, HyperKZGCommitment}}, utils::{poseidon_transcript::PoseidonTranscript, transcript::Transcript}};
 use crate::jolt::vm::{JoltPreprocessing, JoltProof, JoltStuff};
 
 static FIB_FILE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 use ark_bn254::{Bn254, Fq as Fp, Fr as Scalar};
+use helper_commitms::{convert_from_jolt_stuff_to_circom, JoltStuffCircom};
 use joltproof::{convert_jolt_proof_to_circom, JoltproofCircom};
 use preprocess::{convert_joltpreprocessing_to_circom, JoltPreprocessingCircom};
 use transcript::convert_transcript_to_circom;
@@ -36,8 +38,9 @@ fn fib_e2e_hyperkzg() {
     PoseidonTranscript<Scalar>,
     >();
 
-    let (circom_preprocessing, circom_proof) = convert_full_proof_to_circom(preprocessing, proof_from_rust
+    let (circom_preprocessing, circom_proof, circom_stuff) = convert_full_proof_to_circom(preprocessing, proof_from_rust, commitments
     );
+    
       
     let mut transcipt_init = <PoseidonTranscript<Scalar> as Transcript>::new(b"Jolt transcript");
 
@@ -45,11 +48,13 @@ fn fib_e2e_hyperkzg() {
         r#"{{
         "transcript_init": {:?},
         "preprocessing": {:?},
-        "proof": {:?}
+        "proof": {:?},
+        "commitments": {:?}
     }}"#,
         convert_transcript_to_circom(transcipt_init),
         circom_preprocessing,
         circom_proof,
+        circom_stuff
     );
 
     let input_file_path = "input.json";
@@ -146,14 +151,13 @@ where
 pub fn convert_full_proof_to_circom(
     jolt_preprocessing: JoltPreprocessing<C, Scalar, HyperKZG<Bn254, PoseidonTranscript<Scalar>>,PoseidonTranscript<Scalar>>,
     jolt_proof: JoltProof<{C}, {M}, JoltR1CSInputs, Scalar, HyperKZG<Bn254, PoseidonTranscript<Scalar>>, RV32I, RV32ISubtables<Scalar>, PoseidonTranscript<Scalar>>,
-    // jolt_stuff: JoltStuff<HyperKZGCommitment<Bn254>>
-) -> (JoltPreprocessingCircom, JoltproofCircom
-    // , JoltStuffCircom
+    jolt_stuff: JoltStuff<HyperKZGCommitment<Bn254>>
+) -> (JoltPreprocessingCircom, JoltproofCircom, JoltStuffCircom
 ) {
 
     (
         convert_joltpreprocessing_to_circom(jolt_preprocessing),
         convert_jolt_proof_to_circom(jolt_proof),
-        // convert_from_jolt_stuff_to_circom(jolt_stuff),
+        convert_from_jolt_stuff_to_circom(jolt_stuff),
     )
 }
