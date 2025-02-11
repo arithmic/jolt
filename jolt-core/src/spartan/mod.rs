@@ -1,4 +1,5 @@
 use crate::field::JoltField;
+use errors::R1CSError;
 use r1csinstance::R1CSInstance;
 
 extern crate core;
