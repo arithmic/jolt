@@ -41,8 +41,6 @@ pub struct SpartanStuff<T: CanonicalSerialize + CanonicalDeserialize + Sync> {
     rows: Vec<T>,
     cols: Vec<T>,
     vals: Vec<T>,
-    rows: Vec<T>,
-    cols: Vec<T>,
     e_rx: Vec<T>,
     e_ry: Vec<T>,
     eq_rx: VerifierComputedOpening<T>,
