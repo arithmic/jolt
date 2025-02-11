@@ -624,103 +624,75 @@ where
                 2,
                 transcript,
             );
-
+        
+        let (A_eval, B_eval, C_eval) = preprocessing.inst.inst.evaluate(&outer_sumcheck_r, &inner_sumcheck_r);
+        
+        let inner_sumcheck_claims = (A_eval, B_eval, C_eval, claims_inner[1]);
+        
         //TODO:Add inner sum check openings to accumulator
         transcript.append_scalars(&claims_inner);
 
         //Spark preprocessing
 
-        let (rx, ry) = inner_sumcheck_r.split_at(inner_sumcheck_r.len() / 2);
+        let (rx, ry) = (outer_sumcheck_r, inner_sumcheck_r);
 
-        let eq_rx = EqPolynomial::evals(rx);
-        let eq_ry = EqPolynomial::evals(ry);
+        let eq_rx = EqPolynomial::evals(&rx);
+        let eq_ry = EqPolynomial::evals(&ry);
 
         let matrices = preprocessing.inst.inst.get_matrices();
 
         let A = matrices[0];
         let B = matrices[1];
         let C = matrices[2];
+        
+        let (a_rx, a_ry): (Vec<F>, Vec<F>) =
+            A.M.iter()
+                .map(|entry| {
+                    (
+                        eq_rx[entry.row],
+                        eq_ry[entry.col],
+                    )
+                })
+                .multiunzip();
+        let (b_rx, b_ry): (Vec<F>, Vec<F>) =
+            B.M.iter()
+                .map(|entry| {
+                    (
+                        eq_rx[entry.row],
+                        eq_ry[entry.col],
+                    )
+                })
+                .multiunzip();
+        let (c_rx, c_ry): (Vec<F>, Vec<F>) =
+            C.M.iter()
+                .map(|entry| {
+                    (
+                        eq_rx[entry.row],
+                        eq_ry[entry.col],
+                    )
+                })
+                .multiunzip();
 
-        // let (a_rows, a_cols, a_vals, a_rx, a_ry): (Vec<F>, Vec<F>, Vec<F>, Vec<F>, Vec<F>) =
-        //     A.M.iter()
-        //         .map(|entry| {
-        //             (
-        //                 F::from_u64(entry.row as u64).unwrap(),
-        //                 F::from_u64(entry.col as u64).unwrap(),
-        //                 entry.val,
-        //                 eq_rx[entry.row],
-        //                 eq_ry[entry.col],
-        //             )
-        //         })
-        //         .multiunzip();
-        // let (b_rows, b_cols, b_vals, b_rx, b_ry): (Vec<F>, Vec<F>, Vec<F>, Vec<F>, Vec<F>) =
-        //     B.M.iter()
-        //         .map(|entry| {
-        //             (
-        //                 F::from_u64(entry.row as u64).unwrap(),
-        //                 F::from_u64(entry.col as u64).unwrap(),
-        //                 entry.val,
-        //                 eq_rx[entry.row],
-        //                 eq_ry[entry.col],
-        //             )
-        //         })
-        //         .multiunzip();
-        // let (c_rows, c_cols, c_vals, c_rx, c_ry): (Vec<F>, Vec<F>, Vec<F>, Vec<F>, Vec<F>) =
-        //     C.M.iter()
-        //         .map(|entry| {
-        //             (
-        //                 F::from_u64(entry.row as u64).unwrap(),
-        //                 F::from_u64(entry.col as u64).unwrap(),
-        //                 entry.val,
-        //                 eq_rx[entry.row],
-        //                 eq_ry[entry.col],
-        //             )
-        //         })
-        //         .multiunzip();
+        polynomials.e_rx = vec![
+            DensePolynomial::new(a_rx),
+            DensePolynomial::new(b_rx),
+            DensePolynomial::new(c_rx),
+        ];
 
-        // polynomials.rows = vec![
-        //     DensePolynomial::new(a_rows),
-        //     DensePolynomial::new(b_rows),
-        //     DensePolynomial::new(c_rows),
-        // ];
-
-        // polynomials.cols = vec![
-        //     DensePolynomial::new(a_cols),
-        //     DensePolynomial::new(b_cols),
-        //     DensePolynomial::new(c_cols),
-        // ];
-
-        // polynomials.vals = vec![
-        //     DensePolynomial::new(a_vals),
-        //     DensePolynomial::new(b_vals),
-        //     DensePolynomial::new(c_vals),
-        // ];
-
-        // polynomials.e_rx = vec![
-        //     DensePolynomial::new(a_rx),
-        //     DensePolynomial::new(b_rx),
-        //     DensePolynomial::new(c_rx),
-        // ];
-
-        // polynomials.e_ry = vec![
-        //     DensePolynomial::new(a_ry),
-        //     DensePolynomial::new(b_ry),
-        //     DensePolynomial::new(c_ry),
-        // ];
+        polynomials.e_ry = vec![
+            DensePolynomial::new(a_ry),
+            DensePolynomial::new(b_ry),
+            DensePolynomial::new(c_ry),
+        ];
 
         let (a_claim, b_claim, c_claim) = (claims_inner[0], claims_inner[1], claims_inner[2]);
 
-        // commitments.rows = PCS::batch_commit_polys(&polynomials.rows, pcs_setup, BatchType::Big);
-        // commitments.cols = PCS::batch_commit_polys(&polynomials.cols, pcs_setup, BatchType::Big);
-        // commitments.vals = PCS::batch_commit_polys(&polynomials.vals, pcs_setup, BatchType::Big);
-        // commitments.e_rx = PCS::batch_commit_polys(&polynomials.e_rx, pcs_setup, BatchType::Big);
-        // commitments.e_ry = PCS::batch_commit_polys(&polynomials.e_ry, pcs_setup, BatchType::Big);
+
+        commitments.e_rx = PCS::batch_commit_polys(&polynomials.e_rx, pcs_setup, BatchType::Big);
+        commitments.e_ry = PCS::batch_commit_polys(&polynomials.e_ry, pcs_setup, BatchType::Big);
 
         //Appending commitments to the transcript
         for i in 0..3 {
-            commitments.rows[i].append_to_transcript(transcript);
-            commitments.cols[i].append_to_transcript(transcript);
-            commitments.vals[i].append_to_transcript(transcript);
             commitments.e_rx[i].append_to_transcript(transcript);
             commitments.e_ry[i].append_to_transcript(transcript);
         }
@@ -733,7 +705,7 @@ where
         let spark_func = |polys: &[F]| -> F {
             let mut val = F::zero();
             for i in 0..3 {
-                val = (polys[i] + polys[i + 3] + polys[i + 6]) + val * batching_scalar
+                val = (polys[i] * polys[i + 3] * polys[i + 6]) + val * batching_scalar
             }
             val
         };
@@ -798,12 +770,7 @@ where
                 outer_sumcheck_claims[1],
                 outer_sumcheck_claims[2],
             ),
-            inner_sumcheck_claims: (
-                claims_inner[0],
-                claims_inner[1],
-                claims_inner[2],
-                claims_inner[3],
-            ),
+            inner_sumcheck_claims,
             spark_sumcheck_claims,
             memory_checking,
             opening_proof,
@@ -915,7 +882,7 @@ where
 
         let mut expected_spark_claim = F::zero();
         for i in 0..3 {
-            expected_spark_claim = (spark_claims[i] + spark_claims[i + 3] + spark_claims[i + 6]) + expected_spark_claim * batching_scalar
+            expected_spark_claim = (spark_claims[i] * spark_claims[i + 3] * spark_claims[i + 6]) + expected_spark_claim * batching_scalar
         }
         if claim_spark_final != expected_spark_claim {
             return Err(ProofVerifyError::SpartanError(
