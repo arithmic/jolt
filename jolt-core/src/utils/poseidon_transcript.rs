@@ -273,15 +273,15 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
 
         to_absorb.push(<ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap());
 
-        for _ in x_limbs{
+        for i in x_limbs{
             let mut x_limbs_bytes = vec![];
-            x.serialize_compressed(&mut x_limbs_bytes).unwrap();
+            i.serialize_compressed(&mut x_limbs_bytes).unwrap();
             to_absorb.push(<ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&x_limbs_bytes));
         }
 
-        for _ in y_limbs{
+        for i in y_limbs{
             let mut y_limbs_bytes = vec![];
-            y.serialize_compressed(&mut y_limbs_bytes).unwrap();
+            i.serialize_compressed(&mut y_limbs_bytes).unwrap();
             to_absorb.push(<ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&y_limbs_bytes));
         }
 
