@@ -1,10 +1,10 @@
 use super::sparse_mlpoly::SparseMatPolynomial;
 use crate::{
-    field::JoltField, poly::dense_mlpoly::DensePolynomial, spartan::sparse_mlpoly::SparseMatEntry,
-    utils::math::Math,
+    field::JoltField,
+    poly::dense_mlpoly::DensePolynomial,
+    spartan::sparse_mlpoly::SparseMatEntry,
+    utils::{math::Math, transcript::Transcript},
 };
-use rand_chacha::ChaCha8Rng;
-use rand_core::SeedableRng;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +16,33 @@ pub struct R1CSInstance<F: JoltField> {
     B: SparseMatPolynomial<F>,
     C: SparseMatPolynomial<F>,
 }
+
+// #[derive(Serialize, Deserialize)]
+// pub struct R1CSCommitmentGens {
+//     gens: SparseMatPolyCommitmentGens,
+// }
+
+// impl R1CSCommitmentGens {
+//     pub fn new(
+//         label: &'static [u8],
+//         num_cons: usize,
+//         num_vars: usize,
+//         num_inputs: usize,
+//         num_nz_entries: usize,
+//     ) -> R1CSCommitmentGens {
+//         assert!(num_inputs < num_vars);
+//         let num_poly_vars_x = num_cons.log_2();
+//         let num_poly_vars_y = (2 * num_vars).log_2();
+//         let gens = SparseMatPolyCommitmentGens::new(
+//             label,
+//             num_poly_vars_x,
+//             num_poly_vars_y,
+//             num_nz_entries,
+//             3,
+//         );
+//         R1CSCommitmentGens { gens }
+//     }
+// }
 
 // #[derive(Debug, Serialize, Deserialize)]
 // pub struct R1CSCommitment {
@@ -31,6 +58,25 @@ pub struct R1CSInstance<F: JoltField> {
 //         transcript.append_u64(b"num_vars", self.num_vars as u64);
 //         transcript.append_u64(b"num_inputs", self.num_inputs as u64);
 //         self.comm.append_to_transcript(b"comm", transcript);
+//     }
+// }
+
+// #[derive(Serialize, Deserialize)]
+// pub struct R1CSDecommitment {
+//     dense: MultiSparseMatPolynomialAsDense,
+// }
+
+// impl R1CSCommitment {
+//     pub fn get_num_cons(&self) -> usize {
+//         self.num_cons
+//     }
+
+//     pub fn get_num_vars(&self) -> usize {
+//         self.num_vars
+//     }
+
+//     pub fn get_num_inputs(&self) -> usize {
+//         self.num_inputs
 //     }
 // }
 
@@ -86,16 +132,20 @@ impl<F: JoltField> R1CSInstance<F> {
     //     encoder.finish().unwrap()
     // }
 
-    pub fn produce_synthetic_r1cs(
-        num_cons: usize,
-        num_vars: usize,
-        num_inputs: usize,
-    ) -> (R1CSInstance<F>, Vec<F>, Vec<F>) {
-        let mut rng = rand::thread_rng();
+    // pub fn produce_synthetic_r1cs(
+    //     num_cons: usize,
+    //     num_vars: usize,
+    //     num_inputs: usize,
+    // ) -> (R1CSInstance, Vec<Scalar>, Vec<Scalar>) {
+    //     Timer::print(&format!("number_of_constraints {num_cons}"));
+    //     Timer::print(&format!("number_of_variables {num_vars}"));
+    //     Timer::print(&format!("number_of_inputs {num_inputs}"));
 
-        // assert num_cons and num_vars are power of 2
-        assert_eq!((num_cons.log_2()).pow2(), num_cons);
-        assert_eq!((num_vars.log_2()).pow2(), num_vars);
+    //     let mut csprng: OsRng = OsRng;
+
+    //     // assert num_cons and num_vars are power of 2
+    //     assert_eq!((num_cons.log_2()).pow2(), num_cons);
+    //     assert_eq!((num_vars.log_2()).pow2(), num_vars);
 
         // num_inputs + 1 <= num_vars
         assert!(num_inputs < num_vars);
@@ -103,14 +153,14 @@ impl<F: JoltField> R1CSInstance<F> {
         // z is organized as [vars,1,io]
         let size_z = num_vars + num_inputs + 1;
 
-        // produce a random satisfying assignment
-        let Z = {
-            let mut Z: Vec<F> = (0..size_z)
-                .map(|_i| F::random(&mut rng))
-                .collect::<Vec<F>>();
-            Z[num_vars] = F::one(); // set the constant term to 1
-            Z
-        };
+    //     // produce a random satisfying assignment
+    //     let Z = {
+    //         let mut Z: Vec<Scalar> = (0..size_z)
+    //             .map(|_i| Scalar::random(&mut csprng))
+    //             .collect::<Vec<Scalar>>();
+    //         Z[num_vars] = Scalar::one(); // set the constant term to 1
+    //         Z
+    //     };
 
         // three sparse matrices
         let mut A: Vec<SparseMatEntry<F>> = Vec::new();
@@ -222,4 +272,68 @@ impl<F: JoltField> R1CSInstance<F> {
         let evals = SparseMatPolynomial::multi_evaluate(&[&self.A, &self.B, &self.C], rx, ry);
         (evals[0], evals[1], evals[2])
     }
+
+    // pub fn commit(&self, gens: &R1CSCommitmentGens) -> (R1CSCommitment, R1CSDecommitment) {
+    //     let (comm, dense) =
+    //         SparseMatPolynomial::multi_commit(&[&self.A, &self.B, &self.C], &gens.gens);
+    //     let r1cs_comm = R1CSCommitment {
+    //         num_cons: self.num_cons,
+    //         num_vars: self.num_vars,
+    //         num_inputs: self.num_inputs,
+    //         comm,
+    //     };
+
+    //     let r1cs_decomm = R1CSDecommitment { dense };
+
+    //     (r1cs_comm, r1cs_decomm)
+    // }
 }
+
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct R1CSEvalProof<F, ProofTranscript>
+// where
+//     F: JoltField,
+//     ProofTranscript: Transcript,
+// {
+//     proof: SparseMatPolyEvalProof<F, ProofTranscript>,
+// }
+
+// impl<F: JoltField, ProofTranscript: Transcript> R1CSEvalProof<F, ProofTranscript> {
+//     pub fn prove(
+//         // decomm: &R1CSDecommitment,
+//         rx: &[F], // point at which the polynomial is evaluated
+//         ry: &[F],
+//         evals: &(F, F, F),
+//         // gens: &R1CSCommitmentGens,
+//         transcript: &mut ProofTranscript,
+//     ) -> R1CSEvalProof<F, ProofTranscript> {
+//         let proof = SparseMatPolyEvalProof::prove(
+//             // &decomm.dense,
+//             rx,
+//             ry,
+//             &[evals.0, evals.1, evals.2],
+//             // &gens.gens,
+//             transcript,
+//         );
+//         R1CSEvalProof { proof }
+//     }
+
+// pub fn verify(
+//     &self,
+//     comm: &R1CSCommitment,
+//     rx: &[Scalar], // point at which the R1CS matrix polynomials are evaluated
+//     ry: &[Scalar],
+//     evals: &(Scalar, Scalar, Scalar),
+//     gens: &R1CSCommitmentGens,
+//     transcript: &mut Transcript,
+// ) -> Result<(), ProofVerifyError> {
+//     self.proof.verify(
+//         &comm.comm,
+//         rx,
+//         ry,
+//         &[evals.0, evals.1, evals.2],
+//         &gens.gens,
+//         transcript,
+//     )
+// }
+// }
