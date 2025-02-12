@@ -295,7 +295,7 @@ where
 
         open_hyperkzg_components_in_file("v", v_circom);
 
-        let q_power_str = q_power_multiplier.to_string();
+        let q_power_str = q_powers[1].to_string();
         let q_power_scalar = Fr::from_str(&q_power_str).unwrap();
         let q_power_circom = Fqq{
             element: q_power_scalar,
