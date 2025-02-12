@@ -4,6 +4,8 @@
 //! can use a sumcheck to reduce multiple opening proofs (multiple polynomials, not
 //! necessarily of the same size, each opened at a different point) into a single opening.
 
+use ark_bn254::{Fq, Fr};
+use std::{fs::OpenOptions, io::Write, str::FromStr};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use rayon::prelude::*;
 use std::marker::PhantomData;
@@ -15,13 +17,11 @@ use super::{
     unipoly::{CompressedUniPoly, UniPoly},
 };
 use crate::{
-    field::{JoltField, OptimizedMul},
-    subprotocols::sumcheck::SumcheckInstanceProof,
-    utils::{
+    field::{JoltField, OptimizedMul}, subprotocols::sumcheck::SumcheckInstanceProof, test_circom_link::{file_opening::{close_brackets_in_file_for_each_opening_combiners, close_brackets_in_file_for_each_opening_combiners_coeff, close_brackets_in_file_for_each_opening_combiners_spartan, close_last_brackets_in_file_for_combiners}, link_opening_combiners::{convert_to_3_limbs, Fqq}}, utils::{
         errors::ProofVerifyError,
         thread::unsafe_allocate_zero_vec,
         transcript::{AppendToTranscript, Transcript},
-    },
+    }
 };
 
 /// An opening computed by the prover.
@@ -537,6 +537,31 @@ where
     ) {
         assert_eq!(commitments.len(), claims.len());
         let rho: F = transcript.challenge_scalar();
+
+        let rho_str = rho.to_string();
+        let rho_scalar = Fr::from_str(&rho_str).unwrap();
+
+        let rho_circom = Fqq{
+            element: rho_scalar,
+            limbs: convert_to_3_limbs(rho_scalar),
+        };
+
+        let input_json = format!(
+                            r#"
+                                {:?}
+                        "# , rho_circom
+        );
+        let input_file_path = "input_link.json";
+
+        let mut input_file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(input_file_path)
+        .expect("Failed to open input.json");
+        input_file
+            .write_all(input_json.as_bytes())
+            .expect("Failed to write to input.json");
+
         let mut rho_powers = vec![F::one()];
         for i in 1..commitments.len() {
             rho_powers.push(rho_powers[i - 1] * rho);
@@ -649,6 +674,30 @@ where
         transcript.append_scalars(&reduced_opening_proof.sumcheck_claims);
 
         let gamma: F = transcript.challenge_scalar();
+        let gamma_str = gamma.to_string();
+        let gamma_scalar = Fr::from_str(&gamma_str).unwrap();
+
+        let gamma_circom = Fqq{
+            element: gamma_scalar,
+            limbs: convert_to_3_limbs(gamma_scalar),
+        };
+
+                let input_json = format!(
+            r#"
+                {:?}
+        "# , gamma_circom
+        );
+        let input_file_path = "input_link.json";
+
+        let mut input_file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(input_file_path)
+        .expect("Failed to open input.json");
+        input_file
+            .write_all(input_json.as_bytes())
+            .expect("Failed to write to input.json");
+
         let mut gamma_powers = vec![F::one()];
         for i in 1..self.openings.len() {
             gamma_powers.push(gamma_powers[i - 1] * gamma);
@@ -676,6 +725,10 @@ where
                 *coeff * claim * lagrange_eval
             })
             .sum();
+
+        close_brackets_in_file_for_each_opening_combiners_coeff();
+
+        close_last_brackets_in_file_for_combiners();
 
         // Verify the reduced opening proof
         PCS::verify(

@@ -1,10 +1,14 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
 
+use std::fs::{File, OpenOptions};
+use std::io::Write;
+
 use crate::jolt::vm::{JoltCommitments, JoltPolynomials, JoltStuff};
 use crate::poly::dense_mlpoly::DensePolynomial;
 use crate::poly::eq_poly::EqPolynomial;
 use crate::poly::opening_proof::{ProverOpeningAccumulator, VerifierOpeningAccumulator};
+use crate::test_circom_link::file_opening::{close_brackets_in_file_for_each_opening_combiners, create_file_for_opening_combiners, file_add_comma_in_between};
 use crate::utils::errors::ProofVerifyError;
 use crate::utils::math::Math;
 use crate::utils::thread::drop_in_background_thread;
@@ -606,12 +610,15 @@ where
             transcript,
         );
 
+        file_add_comma_in_between();
+
         opening_accumulator.append(
             &commitments.init_final_values(),
             r_init_final_opening.to_vec(),
             &proof.openings.init_final_values(),
             transcript,
         );
+
 
         Self::compute_verifier_openings(
             &mut proof.openings,

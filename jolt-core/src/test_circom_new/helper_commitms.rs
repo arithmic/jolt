@@ -128,21 +128,21 @@ impl fmt::Debug for ByteCodeStuffCircom {
     }
 }
 
-pub fn convert_from_byte_code_stuff_to_circom(byte_code_stuff: BytecodeStuff<HyperKZGCommitment<Bn254>>) -> ByteCodeStuffCircom{
+pub fn convert_from_byte_code_stuff_to_circom(byte_code_stuff: &BytecodeStuff<HyperKZGCommitment<Bn254>>) -> ByteCodeStuffCircom{
     let mut v_read_write = Vec::new();
     for i in 0..byte_code_stuff.v_read_write.len(){
-        v_read_write.push(convert_hyperkzg_commitment_to_circom(byte_code_stuff.v_read_write[i].clone()))
+        v_read_write.push(convert_hyperkzg_commitment_to_circom(&byte_code_stuff.v_read_write[i].clone()))
     }
     ByteCodeStuffCircom{
-        a_read_write: convert_hyperkzg_commitment_to_circom(byte_code_stuff.a_read_write),
+        a_read_write: convert_hyperkzg_commitment_to_circom(&byte_code_stuff.a_read_write),
         v_read_write: v_read_write,
-        t_read: convert_hyperkzg_commitment_to_circom(byte_code_stuff.t_read),
-        t_final: convert_hyperkzg_commitment_to_circom(byte_code_stuff.t_final)
+        t_read: convert_hyperkzg_commitment_to_circom(&byte_code_stuff.t_read),
+        t_final: convert_hyperkzg_commitment_to_circom(&byte_code_stuff.t_final)
     }
 }
 
 pub fn convert_hyperkzg_commitment_to_circom(
-    commitment: HyperKZGCommitment<Bn254>,
+    commitment: &HyperKZGCommitment<Bn254>,
 ) -> HyperKZGCommitmentCircom {
     HyperKZGCommitmentCircom {
         commitment: G1AffineCircom{
@@ -206,22 +206,22 @@ impl fmt::Debug for ReadWriteMemoryStuffCircom {
 }
 
 
-pub fn convert_from_read_write_mem_stuff_to_circom(rw_stuff: ReadWriteMemoryStuff<HyperKZGCommitment<Bn254>>) -> ReadWriteMemoryStuffCircom{
+pub fn convert_from_read_write_mem_stuff_to_circom(rw_stuff: &ReadWriteMemoryStuff<HyperKZGCommitment<Bn254>>) -> ReadWriteMemoryStuffCircom{
 
     ReadWriteMemoryStuffCircom{
-        a_ram: convert_hyperkzg_commitment_to_circom(rw_stuff.a_ram.clone()),
-        v_read_rd: convert_hyperkzg_commitment_to_circom(rw_stuff.v_read_rd),
-        v_read_rs1: convert_hyperkzg_commitment_to_circom(rw_stuff.v_read_rs1),
-        v_read_rs2: convert_hyperkzg_commitment_to_circom(rw_stuff.v_read_rs2),
-        v_read_ram: convert_hyperkzg_commitment_to_circom(rw_stuff.v_read_ram),
-        v_write_rd: convert_hyperkzg_commitment_to_circom(rw_stuff.v_write_rd),
-        v_write_ram: convert_hyperkzg_commitment_to_circom(rw_stuff.v_write_ram),
-        v_final: convert_hyperkzg_commitment_to_circom(rw_stuff.v_final),
-        t_read_rd: convert_hyperkzg_commitment_to_circom(rw_stuff.t_read_rd),
-        t_read_rs1: convert_hyperkzg_commitment_to_circom(rw_stuff.t_read_rs1),
-        t_read_rs2: convert_hyperkzg_commitment_to_circom(rw_stuff.t_read_rs2),
-        t_read_ram: convert_hyperkzg_commitment_to_circom(rw_stuff.t_read_ram),
-        t_final: convert_hyperkzg_commitment_to_circom(rw_stuff.t_final)
+        a_ram: convert_hyperkzg_commitment_to_circom(&rw_stuff.a_ram.clone()),
+        v_read_rd: convert_hyperkzg_commitment_to_circom(&rw_stuff.v_read_rd),
+        v_read_rs1: convert_hyperkzg_commitment_to_circom(&rw_stuff.v_read_rs1),
+        v_read_rs2: convert_hyperkzg_commitment_to_circom(&rw_stuff.v_read_rs2),
+        v_read_ram: convert_hyperkzg_commitment_to_circom(&rw_stuff.v_read_ram),
+        v_write_rd: convert_hyperkzg_commitment_to_circom(&rw_stuff.v_write_rd),
+        v_write_ram: convert_hyperkzg_commitment_to_circom(&rw_stuff.v_write_ram),
+        v_final: convert_hyperkzg_commitment_to_circom(&rw_stuff.v_final),
+        t_read_rd: convert_hyperkzg_commitment_to_circom(&rw_stuff.t_read_rd),
+        t_read_rs1: convert_hyperkzg_commitment_to_circom(&rw_stuff.t_read_rs1),
+        t_read_rs2: convert_hyperkzg_commitment_to_circom(&rw_stuff.t_read_rs2),
+        t_read_ram: convert_hyperkzg_commitment_to_circom(&rw_stuff.t_read_ram),
+        t_final: convert_hyperkzg_commitment_to_circom(&rw_stuff.t_final)
     }
 }
 
@@ -253,26 +253,26 @@ impl fmt::Debug for InstructionLookupStuffCircom {
     }
 }
 
-pub fn convert_from_ins_lookup_stuff_to_circom(ins_lookup_stuff: InstructionLookupStuff<HyperKZGCommitment<Bn254>>) -> InstructionLookupStuffCircom{
+pub fn convert_from_ins_lookup_stuff_to_circom(ins_lookup_stuff: &InstructionLookupStuff<HyperKZGCommitment<Bn254>>) -> InstructionLookupStuffCircom{
     let mut dim = Vec::new();
     let mut read_cts = Vec::new();
     let mut final_cts = Vec::new();
     let mut E_polys = Vec::new();
     let mut instruction_flags = Vec::new();
     for i in 0..ins_lookup_stuff.dim.len(){
-        dim.push(convert_hyperkzg_commitment_to_circom(ins_lookup_stuff.dim[i].clone()));
+        dim.push(convert_hyperkzg_commitment_to_circom(&ins_lookup_stuff.dim[i].clone()));
     }
     for i in 0..ins_lookup_stuff.read_cts.len(){
-        read_cts.push(convert_hyperkzg_commitment_to_circom(ins_lookup_stuff.read_cts[i].clone()));
+        read_cts.push(convert_hyperkzg_commitment_to_circom(&ins_lookup_stuff.read_cts[i].clone()));
     }
     for i in 0..ins_lookup_stuff.final_cts.len(){
-        final_cts.push(convert_hyperkzg_commitment_to_circom(ins_lookup_stuff.final_cts[i].clone()))
+        final_cts.push(convert_hyperkzg_commitment_to_circom(&ins_lookup_stuff.final_cts[i].clone()))
     }
     for i in 0..ins_lookup_stuff.E_polys.len(){
-        E_polys.push(convert_hyperkzg_commitment_to_circom(ins_lookup_stuff.E_polys[i].clone()));
+        E_polys.push(convert_hyperkzg_commitment_to_circom(&ins_lookup_stuff.E_polys[i].clone()));
     }
     for i in 0..ins_lookup_stuff.instruction_flags.len(){
-        instruction_flags.push(convert_hyperkzg_commitment_to_circom(ins_lookup_stuff.instruction_flags[i].clone()));
+        instruction_flags.push(convert_hyperkzg_commitment_to_circom(&ins_lookup_stuff.instruction_flags[i].clone()));
     }
 
     InstructionLookupStuffCircom{
@@ -281,7 +281,7 @@ pub fn convert_from_ins_lookup_stuff_to_circom(ins_lookup_stuff: InstructionLook
         final_cts,
         E_polys,
         instruction_flags,
-        lookup_outputs: convert_hyperkzg_commitment_to_circom(ins_lookup_stuff.lookup_outputs)
+        lookup_outputs: convert_hyperkzg_commitment_to_circom(&ins_lookup_stuff.lookup_outputs)
     }
 }
 
@@ -309,23 +309,23 @@ impl fmt::Debug for TimestampRangeCheckStuffCircom {
     }
 }
 
-pub fn convert_from_ts_lookup_stuff_to_circom(ts_lookup_stuff: TimestampRangeCheckStuff<HyperKZGCommitment<Bn254>>) -> TimestampRangeCheckStuffCircom{
+pub fn convert_from_ts_lookup_stuff_to_circom(ts_lookup_stuff: &TimestampRangeCheckStuff<HyperKZGCommitment<Bn254>>) -> TimestampRangeCheckStuffCircom{
 
     let mut read_cts_read_timestamp = Vec::new();
     let mut read_cts_global_minus_read = Vec::new();
     let mut final_cts_read_timestamp = Vec::new();
     let mut final_cts_global_minus_read = Vec::new();
     for i in 0..ts_lookup_stuff.read_cts_read_timestamp.len(){
-        read_cts_read_timestamp.push(convert_hyperkzg_commitment_to_circom(ts_lookup_stuff.read_cts_read_timestamp[i].clone()))
+        read_cts_read_timestamp.push(convert_hyperkzg_commitment_to_circom(&ts_lookup_stuff.read_cts_read_timestamp[i].clone()))
     }
     for i in 0..ts_lookup_stuff.read_cts_global_minus_read.len(){
-        read_cts_global_minus_read.push(convert_hyperkzg_commitment_to_circom(ts_lookup_stuff.read_cts_global_minus_read[i].clone()));
+        read_cts_global_minus_read.push(convert_hyperkzg_commitment_to_circom(&ts_lookup_stuff.read_cts_global_minus_read[i].clone()));
     }
     for i in 0..ts_lookup_stuff.final_cts_read_timestamp.len(){
-        final_cts_read_timestamp.push(convert_hyperkzg_commitment_to_circom(ts_lookup_stuff.final_cts_global_minus_read[i].clone()));
+        final_cts_read_timestamp.push(convert_hyperkzg_commitment_to_circom(&ts_lookup_stuff.final_cts_read_timestamp[i].clone()));
     }
     for i in 0..ts_lookup_stuff.final_cts_global_minus_read.len(){
-        final_cts_global_minus_read.push(convert_hyperkzg_commitment_to_circom(ts_lookup_stuff.final_cts_global_minus_read[i].clone()));
+        final_cts_global_minus_read.push(convert_hyperkzg_commitment_to_circom(&ts_lookup_stuff.final_cts_global_minus_read[i].clone()));
     }
 
 
@@ -373,21 +373,21 @@ impl fmt::Debug for AuxVariableStuffCircom {
     }
 
 
-    pub fn convert_from_aux_stuff_to_circom(aux_stuff: AuxVariableStuff<HyperKZGCommitment<Bn254>>) -> AuxVariableStuffCircom{
+    pub fn convert_from_aux_stuff_to_circom(aux_stuff: &AuxVariableStuff<HyperKZGCommitment<Bn254>>) -> AuxVariableStuffCircom{
         let mut relevant_y_chunks = Vec::new();
         for i in 0..aux_stuff.relevant_y_chunks.len(){
-            relevant_y_chunks.push(convert_hyperkzg_commitment_to_circom(aux_stuff.relevant_y_chunks[i].clone()))
+            relevant_y_chunks.push(convert_hyperkzg_commitment_to_circom(&aux_stuff.relevant_y_chunks[i].clone()))
         }
         AuxVariableStuffCircom{
-            left_lookup_operand: convert_hyperkzg_commitment_to_circom(aux_stuff.left_lookup_operand),
-            right_lookup_operand: convert_hyperkzg_commitment_to_circom(aux_stuff.right_lookup_operand),
-            product: convert_hyperkzg_commitment_to_circom(aux_stuff.product),
+            left_lookup_operand: convert_hyperkzg_commitment_to_circom(&aux_stuff.left_lookup_operand),
+            right_lookup_operand: convert_hyperkzg_commitment_to_circom(&aux_stuff.right_lookup_operand),
+            product: convert_hyperkzg_commitment_to_circom(&aux_stuff.product),
             relevant_y_chunks: relevant_y_chunks,
-            write_lookup_output_to_rd: convert_hyperkzg_commitment_to_circom(aux_stuff.write_lookup_output_to_rd),
-            write_pc_to_rd: convert_hyperkzg_commitment_to_circom(aux_stuff.write_pc_to_rd),
-            next_pc_jump: convert_hyperkzg_commitment_to_circom(aux_stuff.next_pc_jump),
-            should_branch: convert_hyperkzg_commitment_to_circom(aux_stuff.should_branch),
-            next_pc: convert_hyperkzg_commitment_to_circom(aux_stuff.next_pc)
+            write_lookup_output_to_rd: convert_hyperkzg_commitment_to_circom(&aux_stuff.write_lookup_output_to_rd),
+            write_pc_to_rd: convert_hyperkzg_commitment_to_circom(&aux_stuff.write_pc_to_rd),
+            next_pc_jump: convert_hyperkzg_commitment_to_circom(&aux_stuff.next_pc_jump),
+            should_branch: convert_hyperkzg_commitment_to_circom(&aux_stuff.should_branch),
+            next_pc: convert_hyperkzg_commitment_to_circom(&aux_stuff.next_pc)
         }
     }
 
@@ -414,24 +414,24 @@ impl fmt::Debug for R1CSStuffCircom {
     }
 }
 
-pub fn convert_from_r1cs_stuff_to_circom(r1cs_stuff: R1CSStuff<HyperKZGCommitment<Bn254>>) -> R1CSStuffCircom{
+pub fn convert_from_r1cs_stuff_to_circom(r1cs_stuff: &R1CSStuff<HyperKZGCommitment<Bn254>>) -> R1CSStuffCircom{
     let mut chunks_x = Vec::new();
     let mut chunks_y = Vec::new();
     let mut circuit_flags = Vec::new();
     for i in 0..r1cs_stuff.chunks_x.len(){
-        chunks_x.push(convert_hyperkzg_commitment_to_circom(r1cs_stuff.chunks_x[i].clone()));
+        chunks_x.push(convert_hyperkzg_commitment_to_circom(&&r1cs_stuff.chunks_x[i].clone()));
     }
     for i in 0..r1cs_stuff.chunks_y.len(){
-        chunks_y.push(convert_hyperkzg_commitment_to_circom(r1cs_stuff.chunks_y[i].clone()));
+        chunks_y.push(convert_hyperkzg_commitment_to_circom(&r1cs_stuff.chunks_y[i].clone()));
     }
     for i in 0..r1cs_stuff.circuit_flags.len(){
-        circuit_flags.push(convert_hyperkzg_commitment_to_circom(r1cs_stuff.circuit_flags[i].clone()));
+        circuit_flags.push(convert_hyperkzg_commitment_to_circom(&r1cs_stuff.circuit_flags[i].clone()));
     }
     R1CSStuffCircom{
         chunks_x,
         chunks_y,
         circuit_flags,
-        aux: convert_from_aux_stuff_to_circom(r1cs_stuff.aux),
+        aux: convert_from_aux_stuff_to_circom(&r1cs_stuff.aux),
     }
 }
 
@@ -463,12 +463,12 @@ impl fmt::Debug for JoltStuffCircom {
     }
 }
 
-pub fn convert_from_jolt_stuff_to_circom(jolt_stuff: JoltStuff<HyperKZGCommitment<Bn254>>) -> JoltStuffCircom{
+pub fn convert_from_jolt_stuff_to_circom(jolt_stuff: &JoltStuff<HyperKZGCommitment<Bn254>>) -> JoltStuffCircom{
     JoltStuffCircom{
-        bytecode: convert_from_byte_code_stuff_to_circom(jolt_stuff.bytecode),
-        read_write_memory: convert_from_read_write_mem_stuff_to_circom(jolt_stuff.read_write_memory),
-        instruction_lookups: convert_from_ins_lookup_stuff_to_circom(jolt_stuff.instruction_lookups),
-        timestamp_range_check: convert_from_ts_lookup_stuff_to_circom(jolt_stuff.timestamp_range_check),
-        r1cs: convert_from_r1cs_stuff_to_circom(jolt_stuff.r1cs)
+        bytecode: convert_from_byte_code_stuff_to_circom(&jolt_stuff.bytecode),
+        read_write_memory: convert_from_read_write_mem_stuff_to_circom(&jolt_stuff.read_write_memory),
+        instruction_lookups: convert_from_ins_lookup_stuff_to_circom(&jolt_stuff.instruction_lookups),
+        timestamp_range_check: convert_from_ts_lookup_stuff_to_circom(&jolt_stuff.timestamp_range_check),
+        r1cs: convert_from_r1cs_stuff_to_circom(&jolt_stuff.r1cs)
     }
 }

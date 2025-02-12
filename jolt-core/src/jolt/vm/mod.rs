@@ -7,6 +7,7 @@ use crate::poly::opening_proof::{
 };
 use crate::r1cs::constraints::R1CSConstraints;
 use crate::r1cs::spartan::{self, UniformSpartanProof};
+use crate::test_circom_link::file_opening::{close_brackets_in_file_for_each_opening_combiners, close_brackets_in_file_for_each_opening_combiners_spartan, close_last_brackets_in_file_for_combiners, create_file_for_opening_combiners, open_brackets_in_file_for_each_opening_combiners, open_brackets_in_file_for_each_opening_combiners_coeff, open_brackets_in_file_for_each_opening_combiners_spartan};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use common::rv_trace::{MemoryLayout, NUM_CIRCUIT_FLAGS};
 use serde::{Deserialize, Serialize};
@@ -619,6 +620,9 @@ where
             .init_final_values()
             .iter()
             .for_each(|value| value.append_to_transcript(&mut transcript));
+
+        create_file_for_opening_combiners();
+        
         // Batch-verify all openings
         Self::verify_bytecode(
             &preprocessing.bytecode,
@@ -628,6 +632,12 @@ where
             &mut opening_accumulator,
             &mut transcript,
         )?;
+
+        close_brackets_in_file_for_each_opening_combiners();
+
+
+        open_brackets_in_file_for_each_opening_combiners("instructionlookupcombiners");
+
         Self::verify_instruction_lookups(
             &preprocessing.instruction_lookups,
             &preprocessing.generators,
@@ -636,6 +646,13 @@ where
             &mut opening_accumulator,
             &mut transcript,
         )?;
+
+
+        close_brackets_in_file_for_each_opening_combiners();
+
+        open_brackets_in_file_for_each_opening_combiners("readwriteoutputtimestampcombiners");
+
+
         Self::verify_memory(
             &mut preprocessing.read_write_memory,
             &preprocessing.generators,
@@ -646,17 +663,27 @@ where
             &mut opening_accumulator,
             &mut transcript,
         )?;
+        close_brackets_in_file_for_each_opening_combiners();
+
+        open_brackets_in_file_for_each_opening_combiners_spartan("spartancombiners");
+
         Self::verify_r1cs(
             r1cs_proof,
             &commitments,
             &mut opening_accumulator,
             &mut transcript,
         )?;
+
+        close_brackets_in_file_for_each_opening_combiners_spartan();
+
+        open_brackets_in_file_for_each_opening_combiners_coeff("coefficient");
+
         opening_accumulator.reduce_and_verify(
             &preprocessing.generators,
             &proof.opening_proof,
             &mut transcript,
         )?;
+
         
         Ok(())
     }

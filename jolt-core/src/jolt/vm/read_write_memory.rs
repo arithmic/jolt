@@ -4,6 +4,7 @@ use crate::lasso::memory_checking::{
     ExogenousOpenings, Initializable, StructuredPolynomialData, VerifierComputedOpening,
 };
 use crate::poly::opening_proof::{ProverOpeningAccumulator, VerifierOpeningAccumulator};
+use crate::test_circom_link::file_opening::file_add_comma_in_between;
 use crate::utils::thread::unsafe_allocate_zero_vec;
 use rayon::prelude::*;
 #[cfg(test)]
@@ -1032,6 +1033,7 @@ where
             "Output sumcheck check failed."
         );
 
+        
         opening_accumulator.append(
             &[&commitment.v_final],
             r_sumcheck,
@@ -1124,6 +1126,8 @@ where
             opening_accumulator,
             transcript,
         )?;
+        file_add_comma_in_between();
+
         OutputSumcheckProof::verify(
             &self.output_proof,
             preprocessing,
@@ -1131,6 +1135,9 @@ where
             opening_accumulator,
             transcript,
         )?;
+
+        file_add_comma_in_between();
+
         TimestampValidityProof::verify(
             &mut self.timestamp_validity_proof,
             generators,

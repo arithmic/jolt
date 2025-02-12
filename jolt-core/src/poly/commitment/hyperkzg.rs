@@ -11,7 +11,7 @@ use super::{
     commitment_scheme::{BatchType, CommitmentScheme},
     kzg::{KZGProverKey, KZGVerifierKey, UnivariateKZG},
 };
-use crate::field::JoltField;
+use crate::{field::JoltField, test_circom_link::{file_opening::{open_hyperkzg_components_in_file, open_hyperkzg_in_file}, link_opening_combiners::{convert_to_3_limbs, Fqq}}};
 use crate::poly::commitment::commitment_scheme::CommitShape;
 use crate::poly::commitment::kzg::CommitMode;
 use crate::utils::mul_0_1_optimized;
@@ -23,6 +23,8 @@ use crate::{
     poly::{commitment::kzg::SRS, dense_mlpoly::DensePolynomial, unipoly::UniPoly},
     utils::{errors::ProofVerifyError, transcript::AppendToTranscript},
 };
+use std::str::FromStr;
+use ark_bn254::Fr;
 use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{One, Zero};
@@ -233,6 +235,16 @@ where
     let d_0: P::ScalarField = transcript.challenge_scalar();
     let d_1 = d_0 * d_0;
 
+    let d0_str = d_0.to_string();
+    let d0_scalar = Fr::from_str(&d0_str).unwrap();
+    let d0_circom = Fqq{
+        element: d0_scalar,
+        limbs: convert_to_3_limbs(d0_scalar),
+    };
+
+    open_hyperkzg_components_in_file("d_0", d0_circom);
+
+
     assert_eq!(t, 3);
     assert_eq!(W.len(), 3);
     // We write a special case for t=3, since this what is required for
@@ -260,6 +272,7 @@ where
         .map(|q_power| *q_power * q_power_multiplier)
         .collect();
 
+
     // Compute the batched openings
     // compute B(u_i) = v[i][0] + q*v[i][1] + ... + q^(t-1) * v[i][t-1]
     let B_u = v
@@ -271,6 +284,25 @@ where
                 .sum()
         })
         .collect::<Vec<P::ScalarField>>();
+
+        let v_circom = B_u[0] + d_0 * B_u[1] + d_1 * B_u[2];
+        let v_circom_str = v_circom.to_string();
+        let v_circom_scalar = Fr::from_str(&v_circom_str).unwrap();
+        let v_circom = Fqq{
+            element: v_circom_scalar,
+            limbs: convert_to_3_limbs(v_circom_scalar),
+            };
+
+        open_hyperkzg_components_in_file("v", v_circom);
+
+        let q_power_str = q_power_multiplier.to_string();
+        let q_power_scalar = Fr::from_str(&q_power_str).unwrap();
+        let q_power_circom = Fqq{
+            element: q_power_scalar,
+            limbs: convert_to_3_limbs(q_power_scalar),
+        };
+        open_hyperkzg_components_in_file("q_power", q_power_circom);
+
 
     let L = <P::G1 as VariableBaseMSM>::msm(
         &[&C[..k], &[W[0], W[1], W[2], vk.kzg_vk.g1]].concat(),
@@ -399,6 +431,16 @@ where
         // obtained from the transcript
         transcript.append_points(&com.iter().map(|g| g.into_group()).collect::<Vec<P::G1>>());
         let r: <P as Pairing>::ScalarField = transcript.challenge_scalar();
+        
+
+        let r_str = r.to_string();
+        let r_scalar = Fr::from_str(&r_str).unwrap();
+        let r_circom = Fqq{
+            element: r_scalar,
+            limbs: convert_to_3_limbs(r_scalar),
+        };
+
+        open_hyperkzg_in_file(r_circom);
 
         if r == P::ScalarField::zero() || C.0 == P::G1Affine::zero() {
             return Err(ProofVerifyError::InternalError);

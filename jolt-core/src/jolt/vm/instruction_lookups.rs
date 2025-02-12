@@ -1,6 +1,7 @@
 use crate::poly::opening_proof::{ProverOpeningAccumulator, VerifierOpeningAccumulator};
 use crate::subprotocols::grand_product::BatchedGrandProduct;
 use crate::subprotocols::sparse_grand_product::ToggledBatchedGrandProduct;
+use crate::test_circom_link::file_opening::file_add_comma_in_between;
 use crate::utils::thread::{drop_in_background_thread, unsafe_allocate_zero_vec};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::{interleave, Itertools};
@@ -820,12 +821,16 @@ where
             .chain([&proof.primary_sumcheck.openings.lookup_outputs_opening])
             .collect::<Vec<_>>();
 
+        
+        
         opening_accumulator.append(
             &primary_sumcheck_commitments,
             r_primary_sumcheck.clone(),
             &primary_sumcheck_openings,
             transcript,
         );
+
+        file_add_comma_in_between();
 
         Self::verify_memory_checking(
             preprocessing,
