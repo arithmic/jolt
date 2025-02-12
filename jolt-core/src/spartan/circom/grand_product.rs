@@ -1,5 +1,14 @@
 use core::fmt;
 
+use crate::poly::commitment::hyperkzg::HyperKZG;
+use crate::poly::unipoly::UniPoly;
+use crate::subprotocols::grand_product::BatchedGrandProductProof;
+use crate::utils::poseidon_transcript::PoseidonTranscript;
+use ark_bn254::Bn254;
+use ark_bn254::Fr as Scalar;
+use ark_bn254::Fq as Fp;
+use super::non_native::convert_to_3_limbs;
+use super::sum_check::convert_uni_polys_to_circom;
 use super::{non_native::Fqq, sum_check::SumcheckInstanceProofCircom};
 
 // use crate::{helper_non_native::Fqq, helper_sum_check::SumcheckInstanceProofCircom};
@@ -58,5 +67,47 @@ impl fmt::Debug for VecFqq {
             ]"#,
             self.state
         )
+    }
+}
+
+pub fn convert_from_batched_GKRProof_to_circom(proof: &BatchedGrandProductProof<HyperKZG<Bn254, PoseidonTranscript<Fp>>, PoseidonTranscript<Fp>>) -> BatchedGrandProductProofCircom
+{
+    let num_gkr_layers = proof.gkr_layers.len();
+
+    let num_coeffs = proof.gkr_layers[num_gkr_layers - 1].proof.uni_polys[0]
+    .coeffs
+    .len();
+
+    let max_no_polys = proof.gkr_layers[num_gkr_layers - 1].proof.uni_polys.len();
+
+    let mut updated_gkr_layers = Vec::new();
+
+    for idx in 0..num_gkr_layers {
+        let zero_poly = UniPoly::from_coeff(vec![Scalar::from(0u8); num_coeffs]);
+        let len = proof.gkr_layers[idx].proof.uni_polys.len();
+        let updated_uni_poly: Vec<_> = proof.gkr_layers[idx]
+            .proof
+            .uni_polys
+            .clone()
+            .into_iter()
+            .chain(vec![zero_poly; max_no_polys - len].into_iter())
+            .collect();
+
+        updated_gkr_layers.push(BatchedGrandProductLayerProofCircom {
+            proof: convert_uni_polys_to_circom(updated_uni_poly),
+            left_claim: Fqq {
+                element: proof.gkr_layers[idx].left_claim,
+                limbs: convert_to_3_limbs(proof.gkr_layers[idx].left_claim),
+            },
+            right_claim: Fqq {
+                element: proof.gkr_layers[idx].right_claim,
+                limbs: convert_to_3_limbs(proof.gkr_layers[idx].right_claim),
+            },
+        });
+    }
+    // println!("updated_gkr_layers is {:?}", updated_gkr_layers.len());
+
+    BatchedGrandProductProofCircom{
+        gkr_layers: updated_gkr_layers
     }
 }

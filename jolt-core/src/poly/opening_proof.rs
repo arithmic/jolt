@@ -135,9 +135,9 @@ pub struct ReducedOpeningProof<
     PCS: CommitmentScheme<ProofTranscript, Field = F>,
     ProofTranscript: Transcript,
 > {
-    sumcheck_proof: SumcheckInstanceProof<F, ProofTranscript>,
-    sumcheck_claims: Vec<F>,
-    joint_opening_proof: PCS::Proof,
+    pub sumcheck_proof: SumcheckInstanceProof<F, ProofTranscript>,
+    pub sumcheck_claims: Vec<F>,
+    pub joint_opening_proof: PCS::Proof,
 }
 
 impl<F: JoltField, ProofTranscript: Transcript> Default
