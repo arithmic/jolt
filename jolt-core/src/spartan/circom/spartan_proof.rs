@@ -81,20 +81,20 @@ impl fmt::Debug for SpartanProofCircom {
             f,
             r#"
             {{
-            outer_sumcheck_proof: {:?}
-            outer_sumcheck_claims: {:?}
-            inner_sumcheck_proof: {:?}
-            inner_sumcheck_claims: {:?}
-            spark_sumcheck_proof: {:?}
-            spark_sumcheck_claims: {:?}
-            memory_checking: {:?}
-            opening_proof: {:?}
+            "outer_sumcheck_proof": {:?},
+            "outer_sumcheck_claims": {:?},
+            "inner_sumcheck_proof": {:?},
+            "inner_sumcheck_claims": {:?},
+            "spark_sumcheck_proof": {:?},
+            "spark_sumcheck_claims": {:?},
+            "memory_checking": {:?},
+            "opening_proof": {:?}
             }}"#,
             self.outer_sumcheck_proof,
-            self.inner_sumcheck_proof,
-            self.spark_sumcheck_proof,
             self.outer_sumcheck_claims,
+            self.inner_sumcheck_proof,
             self.inner_sumcheck_claims,
+            self.spark_sumcheck_proof,
             self.spark_sumcheck_claims,
             self.memory_checking,
             self.opening_proof

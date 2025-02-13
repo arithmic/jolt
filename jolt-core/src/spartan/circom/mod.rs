@@ -53,7 +53,7 @@ fn parse_spartan() {
         "pub_inp": {:?},
         "vk": {:?},
         "proof": {:?},
-        "commits": {:?}
+        "commits": {:?},
         "transcript": {:?}
     }}"#,
         preprocessing_to_pi_circom(&preprocessing),

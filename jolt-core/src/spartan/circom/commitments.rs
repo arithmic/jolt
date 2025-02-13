@@ -23,8 +23,7 @@ pub struct SpartanCommitmentsCircom{
 }
 
 impl SpartanCommitmentsCircom{
-    pub fn convert(commitments:&SpartanCommitments<HyperKZG<Bn254, PoseidonTranscript<Fp>>, PoseidonTranscript<Fp>>){
-
+    pub fn convert(commitments:&SpartanCommitments<HyperKZG<Bn254, PoseidonTranscript<Fp>>, PoseidonTranscript<Fp>>)->Self{
         Self{
             witness: convert_hyperkzg_commitment_to_circom(&commitments.witness),
             read_cts_rows: commitments.read_cts_rows.iter().map(|com| convert_hyperkzg_commitment_to_circom(com)).collect(),
@@ -36,7 +35,7 @@ impl SpartanCommitmentsCircom{
             vals: commitments.vals.iter().map(|com| convert_hyperkzg_commitment_to_circom(com)).collect(),
             e_rx: commitments.e_rx.iter().map(|com| convert_hyperkzg_commitment_to_circom(com)).collect(),
             e_ry: commitments.e_ry.iter().map(|com| convert_hyperkzg_commitment_to_circom(com)).collect(),
-        };
+        }
     }
 }
 
