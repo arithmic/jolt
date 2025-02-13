@@ -1,23 +1,22 @@
 use super::sparse_mlpoly::SparseMatPolynomial;
-use super::{Assignment, Instance};
+use super::Instance;
 use crate::field::{JoltField, OptimizedMul};
 use crate::jolt::vm::{JoltCommitments, JoltPolynomials};
-use crate::jolt::vm::{JoltCommitments, JoltPolynomials};
 use crate::lasso::memory_checking::{
-    Initializable, NoExogenousOpenings, StructuredPolynomialData, VerifierComputedOpening,
     Initializable, NoExogenousOpenings, StructuredPolynomialData, VerifierComputedOpening,
 };
 use crate::poly::commitment::commitment_scheme::{BatchType, CommitShape, CommitmentScheme};
 use crate::poly::opening_proof::{
     ProverOpeningAccumulator, ReducedOpeningProof, VerifierOpeningAccumulator,
 };
+use crate::r1cs::special_polys::SparsePolynomial;
 use crate::spartan::r1csinstance::R1CSInstance;
 use crate::spartan::sparse_mlpoly::CircuitConfig;
 use crate::spartan::sparse_mlpoly::SparseMatEntry;
 use crate::subprotocols::grand_product::BatchedGrandProduct;
-use crate::subprotocols::grand_product::BatchedGrandProduct;
 use crate::subprotocols::sumcheck::SumcheckInstanceProof;
 use crate::utils::math::Math;
+use crate::utils::mul_0_1_optimized;
 use crate::utils::transcript::{AppendToTranscript, Transcript};
 use crate::{
     lasso::memory_checking::{
@@ -32,23 +31,22 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::{chain, interleave, Itertools};
 use rayon::prelude::*;
 use std::array;
+use std::cmp::max;
+use std::fmt::Debug;
 use std::fs::File;
 
 #[derive(Default, CanonicalSerialize, CanonicalDeserialize)]
 pub struct SpartanStuff<T: CanonicalSerialize + CanonicalDeserialize + Sync> {
-    witness: T,
-    read_cts_rows: Vec<T>,
-    read_cts_cols: Vec<T>,
-    final_cts_rows: Vec<T>,
-    final_cts_cols: Vec<T>,
-    vals: Vec<T>,
-    rows: Vec<T>,
-    cols: Vec<T>,
-    vals: Vec<T>,
-    rows: Vec<T>,
-    cols: Vec<T>,
-    e_rx: Vec<T>,
-    e_ry: Vec<T>,
+    pub(crate) witness: T,
+    pub(crate) read_cts_rows: Vec<T>,
+    pub(crate) read_cts_cols: Vec<T>,
+    pub(crate) final_cts_rows: Vec<T>,
+    pub(crate) final_cts_cols: Vec<T>,
+    pub(crate) rows: Vec<T>,
+    pub(crate) cols: Vec<T>,
+    pub(crate) vals: Vec<T>,
+    pub(crate) e_rx: Vec<T>,
+    pub(crate) e_ry: Vec<T>,
     eq_rx: VerifierComputedOpening<T>,
     eq_ry: VerifierComputedOpening<T>,
     identity: VerifierComputedOpening<T>,
@@ -66,50 +64,23 @@ impl<T: CanonicalSerialize + CanonicalDeserialize + Sync> StructuredPolynomialDa
             .chain(self.e_rx.iter())
             .chain(self.e_ry.iter())
             .collect()
-        self.read_cts_rows
-            .iter()
-            .chain(self.read_cts_cols.iter())
-            .chain(self.rows.iter())
-            .chain(self.cols.iter())
-            .chain(self.e_rx.iter())
-            .chain(self.e_ry.iter())
-            .collect()
     }
-
 
     fn init_final_values(&self) -> Vec<&T> {
         self.final_cts_rows
             .iter()
             .chain(self.final_cts_cols.iter())
             .collect()
-        self.final_cts_rows
-            .iter()
-            .chain(self.final_cts_cols.iter())
-            .collect()
     }
-
 
     fn init_final_values_mut(&mut self) -> Vec<&mut T> {
         self.final_cts_rows
             .iter_mut()
             .chain(self.final_cts_cols.iter_mut())
             .collect()
-        self.final_cts_rows
-            .iter_mut()
-            .chain(self.final_cts_cols.iter_mut())
-            .collect()
     }
 
-
     fn read_write_values_mut(&mut self) -> Vec<&mut T> {
-        self.read_cts_rows
-            .iter_mut()
-            .chain(self.read_cts_cols.iter_mut())
-            .chain(self.rows.iter_mut())
-            .chain(self.cols.iter_mut())
-            .chain(self.e_rx.iter_mut())
-            .chain(self.e_ry.iter_mut())
-            .collect()
         self.read_cts_rows
             .iter_mut()
             .chain(self.read_cts_cols.iter_mut())
@@ -152,82 +123,116 @@ impl<F: JoltField, T: CanonicalSerialize + CanonicalDeserialize + Default>
 
 #[derive(Clone)]
 pub struct SpartanPreprocessing<F: JoltField> {
-    inst: Instance<F>,
-    vars: Assignment<F>,
-    inputs: Assignment<F>,
-    rx_ry: Option<Vec<F>>,
+    pub(crate) inst: Instance<F>,
+    pub(crate) vars: Vec<F>,
+    pub(crate) inputs: Vec<F>,
+    pub(crate) rx_ry: Option<Vec<F>>,
 }
 
 impl<F: JoltField> SpartanPreprocessing<F> {
     #[tracing::instrument(skip_all, name = "Spartan::preprocess")]
-    // pub fn preprocess(circuit_file: &str) -> Self {
-    pub fn preprocess() -> Self {
-        // let file = File::open(circuit_file);
+    pub fn preprocess(
+        constraints_file: Option<&str>,
+        witness_file: Option<&str>,
+        num_inputs: usize,
+    ) -> Self {
+        match constraints_file {
+            Some(constraints_file) => {
+                let file = File::open(witness_file.unwrap()).expect("File not found");
+                let reader = std::io::BufReader::new(file);
+                let witness: Vec<String> = serde_json::from_reader(reader).unwrap();
+                let mut z = Vec::new();
+                for value in witness {
+                    let val = value.as_bytes();
+                    z.push(F::from_bytes(val));
+                }
 
-        // if file.is_err() {
-        //     let reader = std::io::BufReader::new(file.unwrap());
-        //     let config: CircuitConfig = serde_json::from_reader(reader).unwrap();
+                let num_vars = z.len() - num_inputs - 1;
+                assert!(num_inputs < num_vars);
 
-        //     let mut sparse_entries = vec![Vec::new(); 3];
+                let append_zeroes = num_vars.next_power_of_two() - num_inputs - 1;
+                let size_z = num_vars.next_power_of_two() + append_zeroes + num_inputs + 1;
 
-        //     // Reading JSON file
-        //     for (row, constraint) in config.constraints.iter().enumerate() {
-        //         for (j, dict) in constraint.iter().enumerate() {
-        //             for (key, value) in dict {
-        //                 let col = key.parse::<usize>().unwrap();
-        //                 let val = value.as_bytes();
+                let vars = [
+                    z[num_inputs + 1..].to_vec(),
+                    vec![F::zero(); num_vars.next_power_of_two() - num_vars],
+                ]
+                .concat();
 
-        //                 sparse_entries[j].push(SparseMatEntry::new(
-        //                     row,
-        //                     col as usize,
-        //                     F::from_bytes(val),
-        //                 ));
-        //             }
-        //         }
-        //     }
+                let inputs = z[1..num_inputs].to_vec();
 
-        //     let num_cons = sparse_entries[0].len();
-        //     let num_vars = 10; //TODO(Ashish):- fix num_vars.
-        //     let num_inputs = 0; //TODO(Ashish):- fix num_inputs.
-        //     let num_poly_vars_x = num_cons.log_2();
-        //     let num_poly_vars_y = (2 * num_vars).log_2();
+                let file = File::open(constraints_file);
+                let reader = std::io::BufReader::new(file.unwrap());
+                let config: CircuitConfig = serde_json::from_reader(reader).unwrap();
 
-        //     let poly_A = SparseMatPolynomial::new(
-        //         num_poly_vars_x,
-        //         num_poly_vars_y,
-        //         sparse_entries[0].clone(),
-        //     );
-        //     let poly_B = SparseMatPolynomial::new(
-        //         num_poly_vars_x,
-        //         num_poly_vars_y,
-        //         sparse_entries[1].clone(),
-        //     );
-        //     let poly_C = SparseMatPolynomial::new(
-        //         num_poly_vars_x,
-        //         num_poly_vars_y,
-        //         sparse_entries[2].clone(),
-        //     );
-        //     let inst = R1CSInstance::new(num_cons, num_vars, num_inputs, poly_A, poly_B, poly_C);
+                let mut sparse_entries = vec![Vec::new(); 3];
 
-        //     //TODO():- Implement
-        //     SpartanPreprocessing {
-        //         inst: Instance { inst },
-        //         vars: todo!(),
-        //         inputs: todo!(),
-        //     }
-        // } else {
-        let num_vars = (2_usize).pow(10 as u32);
-        let num_cons = num_vars;
-        let num_inputs = 10;
-        let (inst, vars, inputs) =
-            Instance::<F>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
-        SpartanPreprocessing {
-            inst,
-            vars,
-            inputs,
-            rx_ry: None,
+                // Reading JSON file
+                let num_cons = config.constraints.len() - 1;
+                for (row, constraint) in config.constraints.iter().enumerate() {
+                    for (j, dict) in constraint.iter().enumerate() {
+                        for (key, value) in dict {
+                            let col = key.parse::<usize>().unwrap();
+                            let val = value.as_bytes();
+                            let col = if col > 1 + num_inputs {
+                                col + append_zeroes
+                            } else {
+                                col
+                            };
+                            sparse_entries[j].push(SparseMatEntry::new(
+                                row,
+                                col as usize,
+                                F::from_bytes(val),
+                            ));
+                        }
+                    }
+                }
+
+                let num_vars = size_z - num_inputs - 1;
+                let max = max(size_z, num_cons);
+                let num_poly_vars_x = max.next_power_of_two().log_2();
+                let num_poly_vars_y = num_poly_vars_x;
+
+                let poly_A = SparseMatPolynomial::new(
+                    num_poly_vars_x,
+                    num_poly_vars_y,
+                    sparse_entries[0].clone(),
+                );
+                let poly_B = SparseMatPolynomial::new(
+                    num_poly_vars_x,
+                    num_poly_vars_y,
+                    sparse_entries[1].clone(),
+                );
+                let poly_C = SparseMatPolynomial::new(
+                    num_poly_vars_x,
+                    num_poly_vars_y,
+                    sparse_entries[2].clone(),
+                );
+                let inst =
+                    R1CSInstance::new(num_cons, num_vars, num_inputs, poly_A, poly_B, poly_C);
+
+                SpartanPreprocessing {
+                    inst: Instance { inst },
+                    vars,
+                    inputs,
+                    rx_ry: None,
+                }
+            }
+            None => {
+                let num_vars = (2_usize).pow(5 as u32);
+                let num_cons = num_vars;
+                let num_inputs = 10;
+                let (inst, vars, inputs) =
+                    Instance::<F>::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
+
+                SpartanPreprocessing {
+                    inst,
+                    vars,
+                    inputs,
+                    rx_ry: None,
+                }
+            }
         }
-        // }
     }
 }
 
@@ -245,16 +250,14 @@ where
 
     type Commitments = SpartanCommitments<PCS, ProofTranscript>;
     type MemoryTuple = (F, F, F);
-    type MemoryTuple = (F, F, F);
 
-    fn fingerprint(inputs: &(F, F), gamma: &F, tau: &F) -> F {
-        //TODO(Ritwik):-
-        todo!();
+    fn fingerprint(inputs: &(F, F, F), gamma: &F, tau: &F) -> F {
+        let (a, v, t) = *inputs;
+        t * gamma.square() + v * *gamma + a - *tau
     }
 
     #[tracing::instrument(skip_all, name = "SpartanPolynomials::compute_leaves")]
     fn compute_leaves(
-        _: &SpartanPreprocessing<F>,
         _: &SpartanPreprocessing<F>,
         polynomials: &Self::Polynomials,
         _: &JoltPolynomials<F>,
@@ -264,9 +267,6 @@ where
         <Self::ReadWriteGrandProduct as BatchedGrandProduct<F, PCS, ProofTranscript>>::Leaves,
         <Self::InitFinalGrandProduct as BatchedGrandProduct<F, PCS, ProofTranscript>>::Leaves,
     ) {
-        let read_write_batch_size = 12;
-        let init_final_batch_size = 8;
-
         //Assuming the sparsity of all the matrices are the same, their read_ts count will be the same for rows and columns.
         let n_reads = polynomials.rows[0].len();
         let read_cts_rows = &polynomials.read_cts_rows;
@@ -295,91 +295,107 @@ where
             assert_eq!(e_ry[idx].len(), n_reads);
         });
 
+        let gamma_squared = gamma.square();
+
         //Interleaved A_row_reads B_row_reads C_row_reads A_col_reads B_col_reads C_col_reads
-        let read_row: Vec<F> = (0..3)
+        let read_write_row: Vec<F> = (0..3)
             .into_par_iter()
             .flat_map(|i| {
-                (0..n_reads).into_par_iter().map(move |j| {
-                    Self::fingerprint(&(rows[i][j], e_rx[i][j], read_cts_rows[i][j]), gamma, tau)
-                })
-            }).collect();
-        
-        let read_col: Vec<F> = (0..3).into_par_iter().flat_map(|i| {
-                (0..n_reads).into_par_iter().map(move |j| {
-                    Self::fingerprint(&(cols[i][j], e_ry[i][j], read_cts_cols[i][j]), gamma, tau)
-                })
-            }).collect();
-        
-
-        //Write tuples are just read tuples with the timestamps incremented by one.
-        let write_row: Vec<F> = read_row.par_iter().map(|leaf| *leaf + gamma.square()).collect();
-
-        let write_col: Vec<F> = read_col
-            .par_iter()
-            .map(|leaf| *leaf + gamma.square())
-            .collect();
-        let init_row: Vec<F> = (0..eq_rx.len())
-            .into_par_iter()
-            .map(|i| {
-                Self::fingerprint(
-                    &(F::from_u64(i as u64).unwrap(), eq_rx[i], F::zero()),
-                    gamma,
-                    tau,
-                )
-            }).collect();
-            
-        let init_col:Vec<F> = (0..eq_rx.len()).into_par_iter().map(|i| {
-                Self::fingerprint(
-                    &(F::from_u64(i as u64).unwrap(), eq_ry[i], F::zero()),
-                    gamma,
-                    tau,
-                )
+                let read_fingerprints: Vec<F> = (0..n_reads)
+                    .map(|j| {
+                        let a = &rows[i][j];
+                        let v = &e_rx[i][j];
+                        let t = &read_cts_rows[i][j];
+                        mul_0_1_optimized(t, &gamma_squared) + mul_0_1_optimized(v, gamma) + *a
+                            - *tau
+                    })
+                    .collect();
+                let write_fingerprints = read_fingerprints
+                    .iter()
+                    .map(|read_fingerprint| *read_fingerprint + gamma_squared)
+                    .collect();
+                [read_fingerprints, write_fingerprints].concat()
             })
             .collect();
 
-        let final_row: Vec<F> = (0..3)
+        let read_write_col: Vec<F> = (0..3)
             .into_par_iter()
             .flat_map(|i| {
-                (0..eq_rx.len()).into_par_iter().map(move |j| {
-                    Self::fingerprint(
-                        &(
-                            F::from_u64(j as u64).unwrap(),
-                            eq_rx[j],
-                            final_cts_rows[i][j],
-                        ),
-                        gamma,
-                        tau,
-                    )
-                })
+                let read_fingerprints: Vec<F> = (0..n_reads)
+                    .into_par_iter()
+                    .map(|j| {
+                        let a = &cols[i][j];
+                        let v = &e_ry[i][j];
+                        let t = &read_cts_cols[i][j];
+                        mul_0_1_optimized(t, &gamma_squared) + mul_0_1_optimized(v, gamma) + *a
+                            - *tau
+                    })
+                    .collect();
+                let write_fingerprints = read_fingerprints
+                    .iter()
+                    .map(|read_fingerprint| *read_fingerprint + gamma_squared)
+                    .collect();
+                [read_fingerprints, write_fingerprints].concat()
             })
             .collect();
-        let final_col: Vec<F> = (0..3)
-            .into_par_iter()
-            .flat_map(|i| {
-                (0..eq_ry.len()).into_par_iter().map(move |j| {
-                    Self::fingerprint(
-                        &(
-                            F::from_u64(j as u64).unwrap(),
-                            eq_ry[j],
-                            final_cts_cols[i][j],
-                        ),
-                        gamma,
-                        tau,
-                    )
+
+        let init_final_row: Vec<F> = {
+            let init_fingerprints: Vec<F> = (0..eq_rx.len())
+                .into_par_iter()
+                .map(|i| {
+                    let a = &F::from_u64(i as u64).unwrap();
+                    let v = &eq_rx[i];
+                    mul_0_1_optimized(v, gamma) + *a - *tau
                 })
-            }).collect();
-        //Length of reads and thus writes in this case should be equal to the length of vals, which is the length of non-zero values in the sparse matrix being opened.
-        let read_write_leaves = vec![read_row, write_row, read_col, write_col].concat();
-        let init_final_leaves = vec![init_row, final_row, init_col, final_col].concat();
-        
-        (
-            (read_write_leaves, read_write_batch_size),
-            (init_final_leaves, init_final_batch_size),
-        )
+                .collect();
+            let final_fingerprits: Vec<F> = (0..3)
+                .into_par_iter()
+                .flat_map(|i| {
+                    init_fingerprints
+                        .iter()
+                        .enumerate()
+                        .map(|(j, init_fingerprint)| {
+                            let t = &final_cts_rows[i][j];
+                            *init_fingerprint + mul_0_1_optimized(t, &gamma_squared)
+                        })
+                        .collect::<Vec<F>>()
+                })
+                .collect();
+            [init_fingerprints, final_fingerprits].concat()
+        };
+
+        let init_final_col: Vec<F> = {
+            let init_fingerprints: Vec<F> = (0..eq_ry.len())
+                .into_par_iter()
+                .map(|i| {
+                    let a = &F::from_u64(i as u64).unwrap();
+                    let v = &eq_ry[i];
+                    mul_0_1_optimized(v, gamma) + *a - *tau
+                })
+                .collect();
+            let final_fingerprits: Vec<F> = (0..3)
+                .into_par_iter()
+                .flat_map(|i| {
+                    init_fingerprints
+                        .iter()
+                        .enumerate()
+                        .map(|(j, init_fingerprint)| {
+                            let t = &final_cts_cols[i][j];
+                            *init_fingerprint + mul_0_1_optimized(t, &gamma_squared)
+                        })
+                        .collect::<Vec<F>>()
+                })
+                .collect();
+            [init_fingerprints, final_fingerprits].concat()
+        };
+
+        let read_write_leaves = vec![read_write_row, read_write_col].concat();
+        let init_final_leaves = vec![init_final_row, init_final_col].concat();
+
+        ((read_write_leaves, 12), (init_final_leaves, 8))
     }
 
     fn interleave<T: Copy + Clone>(
-        _: &SpartanPreprocessing<F>,
         _: &SpartanPreprocessing<F>,
         read_values: &Vec<T>,
         write_values: &Vec<T>,
@@ -388,7 +404,6 @@ where
     ) -> (Vec<T>, Vec<T>) {
         let read_write_values = interleave(read_values, write_values).cloned().collect();
 
-        //eq_rx init, A_rx_final, B_rx_final, C_rx_final, eq_ry init, A_ry_final, B_ry_final, C_ry_final
         let init_final_values: Vec<T> = init_values
             .iter()
             .zip(final_values.chunks(3))
@@ -399,7 +414,6 @@ where
     }
 
     fn uninterleave_hashes(
-        _: &SpartanPreprocessing<F>,
         _: &SpartanPreprocessing<F>,
         read_write_hashes: Vec<F>,
         init_final_hashes: Vec<F>,
@@ -429,7 +443,6 @@ where
         }
     }
 
-    fn check_multiset_equality(_: &SpartanPreprocessing<F>, multiset_hashes: &MultisetHashes<F>) {
     fn check_multiset_equality(_: &SpartanPreprocessing<F>, multiset_hashes: &MultisetHashes<F>) {
         assert_eq!(multiset_hashes.final_hashes.len(), 6);
         assert_eq!(multiset_hashes.write_hashes.len(), 6);
@@ -475,13 +488,8 @@ where
         openings: &mut Self::Openings,
         preprocessing: &SpartanPreprocessing<F>,
         _: &[F],
-        preprocessing: &SpartanPreprocessing<F>,
-        _: &[F],
         r_init_final: &[F],
     ) {
-        let binding = preprocessing.rx_ry.clone().unwrap();
-        let (rx, ry) = binding.split_at(binding.len() / 2);
-
         let binding = preprocessing.rx_ry.clone().unwrap();
         let (rx, ry) = binding.split_at(binding.len() / 2);
 
@@ -499,9 +507,23 @@ where
         openings: &Self::Openings,
         _: &NoExogenousOpenings,
     ) -> Vec<Self::MemoryTuple> {
-        //TODO(Ritwik):-
+        let read_cts_rows_opening = &openings.read_cts_rows;
+        let read_cts_cols_opening = &openings.read_cts_cols;
+        let rows_opening = &openings.rows;
+        let cols_opening = &openings.cols;
+        let e_rx_opening = &openings.e_rx;
+        let e_ry_opening = &openings.e_ry;
 
-        todo!()
+        let mut read_tuples = Vec::new();
+
+        for i in 0..3 {
+            read_tuples.push((rows_opening[i], e_rx_opening[i], read_cts_rows_opening[i]))
+        }
+        for i in 0..3 {
+            read_tuples.push((cols_opening[i], e_ry_opening[i], read_cts_cols_opening[i]))
+        }
+
+        read_tuples
     }
 
     fn write_tuples(
@@ -509,9 +531,31 @@ where
         openings: &Self::Openings,
         _: &NoExogenousOpenings,
     ) -> Vec<Self::MemoryTuple> {
-        //TODO(Ritwik):-
+        let read_cts_rows_opening = &openings.read_cts_rows;
+        let read_cts_cols_opening = &openings.read_cts_cols;
+        let rows_opening = &openings.rows;
+        let cols_opening = &openings.cols;
+        let e_rx_opening = &openings.e_rx;
+        let e_ry_opening = &openings.e_ry;
 
-        todo!()
+        let mut write_tuples = Vec::new();
+
+        for i in 0..3 {
+            write_tuples.push((
+                rows_opening[i],
+                e_rx_opening[i],
+                read_cts_rows_opening[i] + F::one(),
+            ))
+        }
+        for i in 0..3 {
+            write_tuples.push((
+                cols_opening[i],
+                e_ry_opening[i],
+                read_cts_cols_opening[i] + F::one(),
+            ))
+        }
+
+        write_tuples
     }
 
     fn init_tuples(
@@ -519,9 +563,22 @@ where
         openings: &Self::Openings,
         _: &NoExogenousOpenings,
     ) -> Vec<Self::MemoryTuple> {
-        //TODO(Ritwik):-
-
-        todo!()
+        vec![
+            (
+                openings
+                    .identity
+                    .expect("Expected identity polynomial evaluation"),
+                openings.eq_rx.expect("Expected eq polynomial evaluation"),
+                F::zero(),
+            ),
+            (
+                openings
+                    .identity
+                    .expect("Expected identity polynomial evaluation"),
+                openings.eq_ry.expect("Expected eq polynomial evaluation"),
+                F::zero(),
+            ),
+        ]
     }
 
     fn final_tuples(
@@ -562,8 +619,10 @@ where
 {
     pub(crate) outer_sumcheck_proof: SumcheckInstanceProof<F, ProofTranscript>,
     pub(crate) inner_sumcheck_proof: SumcheckInstanceProof<F, ProofTranscript>,
+    pub(crate) spark_sumcheck_proof: SumcheckInstanceProof<F, ProofTranscript>,
     pub(crate) outer_sumcheck_claims: (F, F, F),
-
+    pub(crate) inner_sumcheck_claims: (F, F, F, F),
+    pub(crate) spark_sumcheck_claims: [F; 9],
     pub(crate) memory_checking:
         MemoryCheckingProof<F, PCS, SpartanOpenings<F>, NoExogenousOpenings, ProofTranscript>,
     pub(crate) opening_proof: ReducedOpeningProof<F, PCS, ProofTranscript>,
@@ -642,10 +701,18 @@ where
         polynomials: &mut SpartanPolynomials<F>,
         commitments: &mut SpartanCommitments<PCS, ProofTranscript>,
         preprocessing: &mut SpartanPreprocessing<F>,
-        preprocessing: &mut SpartanPreprocessing<F>,
     ) -> Self {
         let mut transcript = ProofTranscript::new(b"Spartan transcript");
-        //TODO(Ashish):- Reseed with commitments.
+
+        for idx in 0..3 {
+            commitments.rows[idx].append_to_transcript(&mut transcript);
+            commitments.cols[idx].append_to_transcript(&mut transcript);
+            commitments.vals[idx].append_to_transcript(&mut transcript);
+            commitments.read_cts_rows[idx].append_to_transcript(&mut transcript);
+            commitments.read_cts_cols[idx].append_to_transcript(&mut transcript);
+            commitments.final_cts_rows[idx].append_to_transcript(&mut transcript);
+            commitments.final_cts_cols[idx].append_to_transcript(&mut transcript);
+        }
 
         let mut opening_accumulator: ProverOpeningAccumulator<F, ProofTranscript> =
             ProverOpeningAccumulator::new();
@@ -671,10 +738,7 @@ where
         commitments.witness = PCS::commit(&var_poly, pcs_setup);
 
         // derive the verifier's challenge tau
-        let (num_rounds_x, num_rounds_y) = (
-            preprocessing.inst.inst.get_num_cons().log_2(),
-            z.len().log_2(),
-        );
+        let (num_rounds_x, num_rounds_y) = (z.len().log_2(), z.len().log_2());
 
         let tau = transcript.challenge_vector(num_rounds_x);
 
@@ -687,10 +751,6 @@ where
 
         let comb_func = |polys: &[F]| -> F { polys[0] * (polys[1] * polys[2] - polys[3]) };
 
-        println!("num of x rounds {:?}", num_rounds_x);
-        println!("num of y rounds {:?}", num_rounds_y);
-        println!("az size is {:?}", az.len());
-
         let (outer_sumcheck_proof, outer_sumcheck_r, outer_sumcheck_claims) =
             SumcheckInstanceProof::prove_arbitrary(
                 &F::zero(), // claim is zero
@@ -699,13 +759,9 @@ where
                 comb_func,
                 3,
                 &mut transcript,
-                &mut transcript,
             );
 
-        //TODO(Ashish):- Do we need to do reverse?
-        // let outer_sumcheck_r: Vec<F> = outer_sumcheck_r.into_iter().rev().collect();
-
-        transcript.append_scalars(&outer_sumcheck_claims);
+        transcript.append_scalars(&outer_sumcheck_claims[1..]);
 
         // claims from the end of sum-check
         // claim_Az is the (scalar) value v_A = \sum_y A(r_x, y) * z(r_x) where r_x is the sumcheck randomness
@@ -743,8 +799,8 @@ where
                     .collect::<Vec<F>>(),
             )
         };
-        println!("poly_ABC size is {:?}", poly_ABC.len());
         let comb_func = |polys: &[F]| -> F { polys[0] * polys[1] };
+
         let (inner_sumcheck_proof, inner_sumcheck_r, _claims_inner) =
             SumcheckInstanceProof::prove_arbitrary(
                 &claim_inner_joint,
@@ -753,7 +809,6 @@ where
                 comb_func,
                 2,
                 &mut transcript,
-                &mut transcript,
             );
 
         let (Ar, Br, Cr) = preprocessing
@@ -761,19 +816,21 @@ where
             .inst
             .evaluate(&outer_sumcheck_r, &inner_sumcheck_r);
 
-        let eval_vars_at_ry = DensePolynomial::new(preprocessing.vars.assignment.clone())
-            .evaluate(&inner_sumcheck_r[1..]);
+        let eval_vars_at_ry = var_poly.evaluate(&inner_sumcheck_r[1..]);
 
         transcript.append_scalars(&[Ar, Br, Cr, eval_vars_at_ry]);
 
-        //TODO: Add inner sum check openings to accumulator
+        let eq_inner_sumcheck = DensePolynomial::new(EqPolynomial::evals(&inner_sumcheck_r[1..]));
+        opening_accumulator.append(
+            &[&var_poly],
+            eq_inner_sumcheck,
+            inner_sumcheck_r[1..].to_vec(),
+            &[&eval_vars_at_ry],
+            &mut transcript,
+        );
 
         let eq_rx = EqPolynomial::evals(&outer_sumcheck_r);
         let eq_ry = EqPolynomial::evals(&inner_sumcheck_r);
-        let eq_rx = EqPolynomial::evals(&outer_sumcheck_r);
-        let eq_ry = EqPolynomial::evals(&inner_sumcheck_r);
-
-        let num_spark_sumcheck_rounds = outer_sumcheck_r.len();
 
         preprocessing.rx_ry = Some([outer_sumcheck_r, inner_sumcheck_r].concat());
 
@@ -807,8 +864,6 @@ where
 
         polynomials.eq_rx = Some(DensePolynomial::new(eq_rx));
         polynomials.eq_ry = Some(DensePolynomial::new(eq_ry));
-        polynomials.eq_rx = Some(DensePolynomial::new(eq_rx));
-        polynomials.eq_ry = Some(DensePolynomial::new(eq_ry));
 
         commitments.e_rx = PCS::batch_commit_polys(&polynomials.e_rx, pcs_setup, BatchType::Big);
         commitments.e_ry = PCS::batch_commit_polys(&polynomials.e_ry, pcs_setup, BatchType::Big);
@@ -817,21 +872,9 @@ where
         for i in 0..3 {
             commitments.e_rx[i].append_to_transcript(&mut transcript);
             commitments.e_ry[i].append_to_transcript(&mut transcript);
-            commitments.e_rx[i].append_to_transcript(&mut transcript);
-            commitments.e_ry[i].append_to_transcript(&mut transcript);
         }
 
         //batching scalar for the spark sum check
-        let batching_scalar = transcript.challenge_scalar_powers(3);
-
-        //Flattened vec of polynomials required for spark.
-        let mut spark_polys = polynomials
-            .e_rx
-            .iter()
-            .chain(polynomials.e_ry.iter())
-            .chain(polynomials.vals.iter())
-            .cloned()
-            .collect_vec();
         let batching_scalar = transcript.challenge_scalar_powers(3);
 
         //Flattened vec of polynomials required for spark.
@@ -849,33 +892,23 @@ where
                     .mul_01_optimized(batching_scalar[idx])
             })
         };
-            (0..3).fold(F::zero(), |acc, idx| {
-                acc + (polys[idx] * polys[idx + 3] * polys[idx + 6])
-                    .mul_01_optimized(batching_scalar[idx])
-            })
-        };
 
-        let (spark_sumcheck_proof, spark_r, spark_claims) = SumcheckInstanceProof::prove_arbitrary(
-            &F::zero(), //passsing zero since it is not required.
-            num_spark_sumcheck_rounds,
-            &mut spark_polys,
-            spark_func,
-            3,
-            &mut transcript,
-        );
+        let (spark_sumcheck_proof, spark_sumcheck_r, spark_claims) =
+            SumcheckInstanceProof::prove_arbitrary(
+                &F::zero(), //passsing zero since it is not required.
+                polynomials.e_rx[0].len().log_2(),
+                &mut spark_polys,
+                spark_func,
+                3,
+                &mut transcript,
+            );
 
         transcript.append_scalars(&spark_claims);
 
         let spark_claim_refs: Vec<&F> = spark_claims.iter().map(|claim| claim).collect();
-        let spark_eq = DensePolynomial::new(EqPolynomial::evals(&spark_r));
+        let spark_eq = DensePolynomial::new(EqPolynomial::evals(&spark_sumcheck_r));
 
         opening_accumulator.append(
-            &polynomials
-                .e_rx
-                .iter()
-                .chain(polynomials.e_ry.iter())
-                .chain(polynomials.vals.iter())
-                .collect_vec(),
             &polynomials
                 .e_rx
                 .iter()
@@ -886,7 +919,6 @@ where
             spark_sumcheck_r,
             &spark_claim_refs,
             &mut transcript,
-            &mut transcript,
         );
 
         let memory_checking = Self::prove_memory_checking(
@@ -896,22 +928,19 @@ where
             &JoltPolynomials::default(),
             &mut opening_accumulator,
             &mut transcript,
-            &mut transcript,
         );
 
-        let opening_proof = opening_accumulator.reduce_and_prove::<PCS>(pcs_setup, &mut transcript);
         let opening_proof = opening_accumulator.reduce_and_prove::<PCS>(pcs_setup, &mut transcript);
 
         SpartanProof {
             outer_sumcheck_proof,
             inner_sumcheck_proof,
+            spark_sumcheck_proof,
             outer_sumcheck_claims: (
                 outer_sumcheck_claims[1],
                 outer_sumcheck_claims[2],
                 outer_sumcheck_claims[3],
             ),
-            inner_sumcheck_claims: (Ar, Br, Cr, eval_vars_at_ry),
-            spark_sumcheck_claims: array::from_fn(|i| spark_claims[i]),
             inner_sumcheck_claims: (Ar, Br, Cr, eval_vars_at_ry),
             spark_sumcheck_claims: array::from_fn(|i| spark_claims[i]),
             memory_checking,
@@ -925,8 +954,18 @@ where
         commitments: &SpartanCommitments<PCS, ProofTranscript>,
         proof: SpartanProof<F, PCS, ProofTranscript>,
     ) -> Result<(), ProofVerifyError> {
+        let num_vars = preprocessing.vars.len();
         let mut transcript = ProofTranscript::new(b"Spartan transcript");
 
+        for idx in 0..3 {
+            commitments.rows[idx].append_to_transcript(&mut transcript);
+            commitments.cols[idx].append_to_transcript(&mut transcript);
+            commitments.vals[idx].append_to_transcript(&mut transcript);
+            commitments.read_cts_rows[idx].append_to_transcript(&mut transcript);
+            commitments.read_cts_cols[idx].append_to_transcript(&mut transcript);
+            commitments.final_cts_rows[idx].append_to_transcript(&mut transcript);
+            commitments.final_cts_cols[idx].append_to_transcript(&mut transcript);
+        }
         // input.append_to_transcript(b"input", transcript);
         let mut opening_accumulator: VerifierOpeningAccumulator<F, PCS, ProofTranscript> =
             VerifierOpeningAccumulator::new();
@@ -941,7 +980,6 @@ where
         let (claim_outer_final, r_x) = proof
             .outer_sumcheck_proof
             .verify(F::zero(), num_rounds_x, 3, &mut transcript)
-            .verify(F::zero(), num_rounds_x, 3, &mut transcript)
             .map_err(|e| e)?;
 
         let (claim_Az, claim_Bz, claim_Cz) = proof.outer_sumcheck_claims;
@@ -954,7 +992,6 @@ where
                 "Invalid Outer Sumcheck Claim".to_string(),
             ));
         }
-
 
         transcript.append_scalars(
             [
@@ -974,17 +1011,22 @@ where
         let (claim_inner_final, inner_sumcheck_r) = proof
             .inner_sumcheck_proof
             .verify(claim_inner_joint, num_rounds_y, 2, &mut transcript)
-            .verify(claim_inner_joint, num_rounds_y, 2, &mut transcript)
             .map_err(|e| e)?;
 
-        let num_spark_sumcheck_rounds = r_x.len();
+        let poly_input_eval = {
+            // constant term
+            let mut input_as_sparse_poly_entries = vec![(F::one(), 0)];
+            //remaining inputs
+            input_as_sparse_poly_entries.extend(
+                (0..preprocessing.inputs.len())
+                    .map(|i| (preprocessing.inputs[i], i + 1))
+                    .collect::<Vec<(F, usize)>>(),
+            );
+            SparsePolynomial::new(num_vars.log_2(), input_as_sparse_poly_entries)
+                .evaluate(&inner_sumcheck_r[1..])
+        };
 
-        assert_eq!(
-            preprocessing.rx_ry.clone().unwrap(),
-            [r_x, inner_sumcheck_r].concat(),
-        );
-
-        let (claim_A, claim_B, claim_C, claim_Z) = proof.inner_sumcheck_claims;
+        let (claim_A, claim_B, claim_C, claim_w) = proof.inner_sumcheck_claims;
 
         let eval_Z_at_ry =
             (F::one() - inner_sumcheck_r[0]) * poly_input_eval + inner_sumcheck_r[0] * claim_w;
@@ -1008,20 +1050,38 @@ where
             .as_slice(),
         );
 
+        opening_accumulator.append(
+            &[&commitments.witness],
+            inner_sumcheck_r[1..].to_vec(),
+            &[&claim_w],
+            &mut transcript,
+        );
+
+        assert_eq!(
+            preprocessing.rx_ry.clone().unwrap(),
+            [r_x, inner_sumcheck_r].concat(),
+        );
+
         for i in 0..3 {
-            commitments.e_rx[i].append_to_transcript(&mut transcript);
-            commitments.e_ry[i].append_to_transcript(&mut transcript);
             commitments.e_rx[i].append_to_transcript(&mut transcript);
             commitments.e_ry[i].append_to_transcript(&mut transcript);
         }
 
         let batching_scalar = transcript.challenge_scalar_powers(3);
+
         let spark_claim = claim_A + batching_scalar[1] * claim_B + batching_scalar[2] * claim_C;
 
         let (claim_spark_final, spark_sumcheck_r) = proof
             .spark_sumcheck_proof
-            .verify(spark_claim, num_spark_sumcheck_rounds, 3, &mut transcript)
+            .verify(
+                spark_claim,
+                preprocessing.inst.inst.get_num_cons().log_2(),
+                3,
+                &mut transcript,
+            )
             .map_err(|e| e)?;
+
+        transcript.append_scalars(&proof.spark_sumcheck_claims);
 
         let expected_spark_claim = (0..3).fold(F::zero(), |acc, idx| {
             acc + (proof.spark_sumcheck_claims[idx]
@@ -1055,7 +1115,6 @@ where
             &spark_claims_refs,
             &mut transcript,
         );
-
         Self::verify_memory_checking(
             preprocessing,
             pcs_setup,
@@ -1064,11 +1123,9 @@ where
             &JoltCommitments::<PCS, ProofTranscript>::default(),
             &mut opening_accumulator,
             &mut transcript,
-            &mut transcript,
         )?;
 
         // Batch-verify all openings
-        opening_accumulator.reduce_and_verify(pcs_setup, &proof.opening_proof, &mut transcript)?;
         opening_accumulator.reduce_and_verify(pcs_setup, &proof.opening_proof, &mut transcript)?;
         Ok(())
     }
@@ -1082,33 +1139,6 @@ where
 
     fn protocol_name() -> &'static [u8] {
         b"Spartan Proof"
-    }
-}
-#[cfg(test)]
-mod tests {
-    use crate::{poly::commitment::hyperkzg::HyperKZG, utils::transcript::KeccakTranscript};
-
-    use super::*;
-    use ark_bn254::{Bn254, Fr};
-
-    pub type ProofTranscript = KeccakTranscript;
-    pub type PCS = HyperKZG<Bn254, ProofTranscript>;
-    #[test]
-    fn spartan() {
-        let mut preprocessing = SpartanPreprocessing::<Fr>::preprocess();
-        let commitment_shapes = SpartanProof::<Fr, PCS, ProofTranscript>::commitment_shapes(
-            preprocessing.inputs.assignment.len() + preprocessing.vars.assignment.len(),
-        );
-        let pcs_setup = PCS::setup(&commitment_shapes);
-        let (mut spartan_polynomials, mut spartan_commitments) =
-            SpartanProof::<Fr, PCS, ProofTranscript>::generate_witness(&preprocessing, &pcs_setup);
-
-        SpartanProof::<Fr, PCS, ProofTranscript>::prove(
-            &pcs_setup,
-            &mut spartan_polynomials,
-            &mut spartan_commitments,
-            &mut preprocessing,
-        );
     }
 }
 #[cfg(test)]

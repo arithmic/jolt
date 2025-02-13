@@ -157,7 +157,7 @@ impl fmt::Debug for HyperKZGProofCircom {
     }
 }
 
-pub fn hyper_kzg_proof_to_hyper_kzg_circom(proof: HyperKZGProof<Bn254>) -> HyperKZGProofCircom {
+pub fn hyper_kzg_proof_to_hyper_kzg_circom(proof: &HyperKZGProof<Bn254>) -> HyperKZGProofCircom {
     let com: Vec<G1AffineCircom> = proof
         .com
         .iter()
@@ -185,7 +185,7 @@ pub fn hyper_kzg_proof_to_hyper_kzg_circom(proof: HyperKZGProof<Bn254>) -> Hyper
 }
 
 pub fn convert_hyperkzg_commitment_to_circom(
-    commitment: HyperKZGCommitment<Bn254>,
+    commitment: &HyperKZGCommitment<Bn254>,
 ) -> HyperKZGCommitmentCircom {
     HyperKZGCommitmentCircom {
         commitment: G1AffineCircom {

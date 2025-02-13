@@ -1,12 +1,12 @@
 use std::cmp::min;
 use std::fmt;
 use std::str::FromStr;
-use ark_bn254::Fr as Scalar;
-use ark_bn254::Fq as Fp;
 use ark_ff::BigInteger;
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use num_bigint::BigUint;
+use ark_bn254::Fr as Scalar;
+use ark_bn254::Fq as Fp;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Fqq{
@@ -35,6 +35,17 @@ pub fn convert_to_3_limbs(r: Scalar) -> [Fp; 3] {
     limbs
 }
 
+pub fn convert_to_fqq(r: &Scalar) -> Fqq {
+    Fqq{
+        element: *r,
+        limbs : convert_to_3_limbs(*r)
+    }
+}
+
+
+pub fn convert_vec_to_fqq(r: &Vec<Scalar>) -> Vec<Fqq> {
+    r.iter().map(|val| convert_to_fqq(val)).collect()
+}
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FqLimb{
     pub limbs: [Fp; 3],
