@@ -8,6 +8,7 @@ use crate::poly::commitment::hyperkzg::HyperKZGCommitment;
 use crate::poly::commitment::hyperkzg::HyperKZGProof;
 use crate::poly::commitment::hyperkzg::HyperKZGVerifierKey;
 
+use super::hyrax::HyraxEvalProofCircom;
 use super::non_native::convert_to_3_limbs;
 use super::non_native::Fqq;
 use super::sum_check::SumcheckInstanceProofCircom;
@@ -248,3 +249,29 @@ impl fmt::Debug for ReducedOpeningProofCircom {
         )
     }
 }
+
+
+
+
+#[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ReducedOpeningProofCircomHyrax{
+    pub sumcheck_proof: SumcheckInstanceProofCircom,
+    pub sumcheck_claims: Vec<Fqq>,
+    pub joint_opening_proof: HyraxEvalProofCircom
+}
+
+impl fmt::Debug for ReducedOpeningProofCircomHyrax {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            r#"{{
+            "sumcheck_proof": {:?},
+            "sumcheck_claims": {:?},
+            "joint_opening_proof": {:?}
+            }}"#,
+            self.sumcheck_proof, self.sumcheck_claims, self.joint_opening_proof
+        )
+    }
+}
+
+
