@@ -292,8 +292,8 @@ impl<F: JoltField> BytecodePreprocessing<F> {
             DensePolynomial::new(rs2),
             DensePolynomial::new(imm),
         ];
-        let mut poseidon_transcript = PoseidonTranscript::<ark_bn254::Fr>::new();
-       
+        let mut poseidon_transcript = PoseidonTranscript::<ark_bn254::Fr, ark_bn254::Fr>::new();
+
         v_init_final.iter().for_each(|poly| {
             let wrapped_poly: Vec<_> = poly
                 .Z
