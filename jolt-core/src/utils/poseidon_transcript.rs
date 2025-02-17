@@ -4,7 +4,7 @@ use ark_crypto_primitives::sponge::{
     Absorb, CryptographicSponge, DuplexSpongeMode, FieldBasedCryptographicSponge,
 };
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{AdditiveGroup, BigInt, BigInteger, BigInteger256, Field, PrimeField};
+use ark_ff::{BigInteger, PrimeField};
 use ark_serialize::CanonicalSerialize;
 
 use super::transcript::Transcript;
@@ -304,31 +304,85 @@ impl<K: PrimeField + Absorb> Transcript for GrumpkinPoseidonTranscript<K> {
     }
 }
 
+// impl<F: PrimeField + Absorb> PoseidonTranscript<F> {
+//     fn append_non_native_element<K: JoltField + Absorb + PrimeField>(
+//         &mut self,
+//         non_native_element: &K,
+//     ) {
+//         let mut buf = vec![];
+//         non_native_element.serialize_uncompressed(&mut buf).unwrap();
+
+//         let f_char = F::characteristic();
+//         let k_char = K::characteristic();
+
+//         if BigInt::<4>::new(f_char[0..4].try_into().unwrap())
+//             < BigInt::<4>::new(k_char[0..4].try_into().unwrap())
+//         {
+//             let wrapped_scalar_lo = F::from_le_bytes_mod_order(&buf[0..16]);
+//             let wrapped_scalar_hi = F::from_le_bytes_mod_order(&buf[16..32]);
+
+//             let to_absorb = [
+//                 F::from_bigint(self.n_rounds.into()).unwrap(),
+//                 wrapped_scalar_lo,
+//                 wrapped_scalar_hi,
+//             ]
+//             .to_vec();
+//             self.absorb(&to_absorb);
+
+//             let new_state = self.squeeze_field_element();
+
+//             self.update_state(new_state);
+//         } else {
+//             let wrapped_scalar = F::from_le_bytes_mod_order(&buf);
+
+//             let to_absorb = [
+//                 F::from_bigint(self.n_rounds.into()).unwrap(),
+//                 wrapped_scalar,
+//             ]
+//             .to_vec();
+//             self.absorb(&to_absorb);
+
+//             let new_state = self.squeeze_field_element();
+
+//             self.update_state(new_state);
+//         }
+//     }
+
+//     fn append_non_native_elements<K: JoltField + Absorb + PrimeField>(
+//         &mut self,
+//         non_native_elements: &[K],
+//     ) {
+//         for item in non_native_elements.iter() {
+//             self.append_non_native_element(item);
+//         }
+//     }
+// }
+
 /// Represents the current state of the protocol's Fiat-Shamir transcript.
 #[derive(Clone)]
-pub struct PoseidonTranscript<F: PrimeField> {
-    pub state: PoseidonSponge<F>,
+pub struct PoseidonTranscript<K: PrimeField> {
+    pub state: PoseidonSponge<K>,
     /// We append an ordinal to each invocation of the hash
-    pub n_rounds: u32,
+    n_rounds: u32,
     #[cfg(test)]
     /// A complete history of the transcript's `state`; used for testing.
-    state_history: Vec<F>,
+    state_history: Vec<K>,
     #[cfg(test)]
     /// For a proof to be valid, the verifier's `state_history` should always match
     /// the prover's. In testing, the Jolt verifier may be provided the prover's
     /// `state_history` so that we can detect any deviations and the backtrace can
     /// tell us where it happened.
-    expected_state_history: Option<Vec<F>>,
+    expected_state_history: Option<Vec<K>>,
 }
 
-impl<F: PrimeField> PoseidonTranscript<F> {
+impl<K: PrimeField> PoseidonTranscript<K> {
     /// Gives the hasher object with the running seed and index added
     /// To load hash you must call finalize, after appending u8 vectors
-    pub fn new() -> PoseidonSponge<F> {
+    pub fn new() -> PoseidonSponge<K> {
         let parameters =
-            get_poseidon_parameters::<F>(4, PoseidonDefaultConfigEntry::new(4, 5, 8, 56, 0))
+            get_poseidon_parameters::<K>(4, PoseidonDefaultConfigEntry::new(4, 5, 8, 56, 0))
                 .unwrap();
-        let state = vec![F::zero(); parameters.rate + parameters.capacity];
+        let state = vec![K::zero(); parameters.rate + parameters.capacity];
         let mode = DuplexSpongeMode::Absorbing {
             next_absorb_index: 0,
         };
@@ -341,7 +395,7 @@ impl<F: PrimeField> PoseidonTranscript<F> {
     }
 
     fn absorb(&mut self, input: &impl Absorb) {
-        let elems = input.to_sponge_field_elements_as_vec::<F>();
+        let elems = input.to_sponge_field_elements_as_vec::<K>();
         if elems.is_empty() {
             return;
         }
@@ -364,7 +418,7 @@ impl<F: PrimeField> PoseidonTranscript<F> {
     }
 
     fn squeeze_bytes(&mut self, num_bytes: usize) -> Vec<u8> {
-        let usable_bytes = ((F::MODULUS_BIT_SIZE - 1) / 8) as usize;
+        let usable_bytes = ((K::MODULUS_BIT_SIZE - 1) / 8) as usize;
 
         let num_elements = (num_bytes + usable_bytes - 1) / usable_bytes;
         let src_elements = self.state.squeeze_native_field_elements(num_elements);
@@ -380,7 +434,7 @@ impl<F: PrimeField> PoseidonTranscript<F> {
     }
 
     fn squeeze_bits(&mut self, num_bits: usize) -> Vec<bool> {
-        let usable_bits = (F::MODULUS_BIT_SIZE - 1) as usize;
+        let usable_bits = (K::MODULUS_BIT_SIZE - 1) as usize;
 
         let num_elements = (num_bits + usable_bits - 1) / usable_bits;
         let src_elements = self.state.squeeze_native_field_elements(num_elements);
@@ -395,13 +449,13 @@ impl<F: PrimeField> PoseidonTranscript<F> {
         bits
     }
 
-    fn squeeze_field_element(&mut self) -> F {
+    fn squeeze_field_element(&mut self) -> K {
         self.state.squeeze_native_field_elements(1)[0]
     }
 
-    fn update_state(&mut self, new_state: F) {
+    fn update_state(&mut self, new_state: K) {
         self.state.state =
-            vec![F::zero(); self.state.parameters.rate + self.state.parameters.capacity];
+            vec![K::zero(); self.state.parameters.rate + self.state.parameters.capacity];
         self.state.state[self.state.parameters.capacity] = new_state;
         self.state.mode = DuplexSpongeMode::Absorbing {
             next_absorb_index: 1,
@@ -418,7 +472,6 @@ impl<F: PrimeField> PoseidonTranscript<F> {
             self.state_history.push(new_state);
         }
     }
-
     // fn squeeze_field_elements_with_sizes<F2: PrimeField>(
     //     &mut self,
     //     sizes: &[FieldElementSize],
@@ -450,63 +503,9 @@ impl<F: PrimeField> PoseidonTranscript<F> {
     //     }
     // }
 }
-
-impl<F: PrimeField + Absorb> PoseidonTranscript<F> {
-    fn append_non_native_element<K: JoltField + Absorb + PrimeField>(
-        &mut self,
-        non_native_element: &K,
-    ) {
-        let mut buf = vec![];
-        non_native_element.serialize_uncompressed(&mut buf).unwrap();
-
-        let f_char = F::characteristic();
-        let k_char = K::characteristic();
-
-        if BigInt::<4>::new(f_char[0..4].try_into().unwrap())
-            < BigInt::<4>::new(k_char[0..4].try_into().unwrap())
-        {
-            let wrapped_scalar_lo = F::from_le_bytes_mod_order(&buf[0..16]);
-            let wrapped_scalar_hi = F::from_le_bytes_mod_order(&buf[16..32]);
-
-            let to_absorb = [
-                F::from_bigint(self.n_rounds.into()).unwrap(),
-                wrapped_scalar_lo,
-                wrapped_scalar_hi,
-            ]
-            .to_vec();
-            self.absorb(&to_absorb);
-
-            let new_state = self.squeeze_field_element();
-
-            self.update_state(new_state);
-        } else {
-            let wrapped_scalar = F::from_le_bytes_mod_order(&buf);
-
-            let to_absorb = [
-                F::from_bigint(self.n_rounds.into()).unwrap(),
-                wrapped_scalar,
-            ]
-            .to_vec();
-            self.absorb(&to_absorb);
-
-            let new_state = self.squeeze_field_element();
-
-            self.update_state(new_state);
-        }
-    }
-
-    fn append_non_native_elements<K: JoltField + Absorb + PrimeField>(
-        &mut self,
-        non_native_elements: &[K],
-    ) {
-        for item in non_native_elements.iter() {
-            self.append_non_native_element(item);
-        }
-    }
-}
 //TODO:- Optimize this.
 //TODO:- Convert label into scalar element
-impl<K: PrimeField + Absorb> Transcript for PoseidonTranscript<K> {
+impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
     fn new(label: &'static [u8]) -> Self {
         let mut hasher = Self::new();
         hasher.absorb(&label);
@@ -534,7 +533,7 @@ impl<K: PrimeField + Absorb> Transcript for PoseidonTranscript<K> {
     //TODO:-
     fn append_message(&mut self, msg: &'static [u8]) {
         assert!(msg.len() < 32);
-        let scalar = K::from_le_bytes_mod_order(&msg);
+        let scalar = <ark_bn254::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&msg);
         let n_rounds = self.n_rounds;
         self.absorb(&n_rounds);
         self.absorb(&scalar);
@@ -552,8 +551,9 @@ impl<K: PrimeField + Absorb> Transcript for PoseidonTranscript<K> {
     }
 
     fn append_u64(&mut self, x: u64) {
-        let n_rounds = self.n_rounds as u64;
-        self.absorb(&[n_rounds, x].to_vec());
+        let n_rounds = self.n_rounds;
+        self.absorb(&n_rounds);
+        self.absorb(&x);
         let new_state = self.squeeze_field_element();
         self.update_state(new_state);
     }
@@ -561,10 +561,10 @@ impl<K: PrimeField + Absorb> Transcript for PoseidonTranscript<K> {
     fn append_scalar<F: JoltField>(&mut self, scalar: &F) {
         let mut buf = vec![];
         scalar.serialize_uncompressed(&mut buf).unwrap();
-        let wrapped_scalar = K::from_le_bytes_mod_order(&buf);
+        let wrapped_scalar = ark_bn254::Fq::from_le_bytes_mod_order(&buf);
 
         let to_absorb = [
-            K::from_bigint(self.n_rounds.into()).unwrap(),
+            ark_bn254::Fq::from_bigint(self.n_rounds.into()).unwrap(),
             wrapped_scalar,
         ]
         .to_vec();
@@ -648,12 +648,4 @@ impl<K: PrimeField + Absorb> Transcript for PoseidonTranscript<K> {
         }
         q_powers
     }
-}
-
-
-#[test]
-fn montgomery_test(){
-    let one = -ark_grumpkin::Fr::ONE;
-
-    println!("{:?}",one.into_bigint());
 }

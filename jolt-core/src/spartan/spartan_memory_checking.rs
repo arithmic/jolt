@@ -1178,17 +1178,21 @@ where
 }
 #[cfg(test)]
 mod tests {
-    use crate::{poly::commitment::hyperkzg::HyperKZG, utils::transcript::KeccakTranscript};
+    use crate::{
+        poly::commitment::{hyperkzg::HyperKZG, hyrax::HyraxScheme},
+        utils::{poseidon_transcript::GrumpkinPoseidonTranscript, transcript::KeccakTranscript},
+    };
 
     use super::*;
-    use ark_bn254::{Bn254, Fr};
+    // use ark_bn254::{Bn254, Fr};
+    use ark_grumpkin::{Fr, Fq, Projective};
 
-    pub type ProofTranscript = KeccakTranscript;
-    pub type PCS = HyperKZG<Bn254, ProofTranscript>;
+    pub type ProofTranscript = GrumpkinPoseidonTranscript<Fq>;
+    pub type PCS = HyraxScheme<Projective, ProofTranscript>;
+    // pub type PCS = HyperKZG<Bn254, ProofTranscript>;
     #[test]
     fn spartan() {
-        let constraint_path =
-            Some("src/spartan/verifier_constraints.json");
+        let constraint_path = Some("src/spartan/verifier_constraints.json");
         let witness_path = Some("src/spartan/witness.json");
 
         println!("----------------------------------------------------TESTING----------------------------------------------------");

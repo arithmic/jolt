@@ -250,19 +250,16 @@ pub mod tests {
     use crate::host;
     use crate::jolt::instruction::JoltInstruction;
     use crate::jolt::vm::rv32i_vm::{Jolt, RV32IJoltVM, C, M};
-    use crate::jolt::vm::{JoltProof, JoltStuff};
     use crate::poly::commitment::commitment_scheme::CommitmentScheme;
     use crate::poly::commitment::hyperkzg::HyperKZG;
     use crate::poly::commitment::hyrax::HyraxScheme;
     use crate::poly::commitment::mock::MockCommitScheme;
     use crate::poly::commitment::zeromorph::Zeromorph;
-    use crate::r1cs::inputs::JoltR1CSInputs;
     use crate::utils::poseidon_transcript::PoseidonTranscript;
     use crate::utils::transcript::{KeccakTranscript, Transcript};
     use std::sync::{LazyLock, Mutex};
     use strum::{EnumCount, IntoEnumIterator};
 
-    use super::{RV32ISubtables, RV32I};
 
     // If multiple tests try to read the same trace artifacts simultaneously, they will fail
     static FIB_FILE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
