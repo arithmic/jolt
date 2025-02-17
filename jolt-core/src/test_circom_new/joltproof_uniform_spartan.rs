@@ -4,7 +4,7 @@ use super::{struct_fq::FqCircom, sum_check_gkr::{convert_sum_check_proof_to_circ
 use ark_bn254::{Bn254, Fq as Fp, Fr as Scalar};
 use crate::{r1cs::{inputs::JoltR1CSInputs, spartan::UniformSpartanProof}, utils::poseidon_transcript::PoseidonTranscript};
 use crate::jolt::vm::rv32i_vm::{C, M};
-use ark_ff::Field;
+use ark_ff::{AdditiveGroup, Field};
 
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UniformSpartanProofCircom{

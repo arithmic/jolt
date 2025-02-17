@@ -3,6 +3,7 @@ use std::fmt;
 use std::str::FromStr;
 use ark_bn254::Fr as Scalar;
 use ark_bn254::Fq as Fp;
+use ark_ff::AdditiveGroup;
 use ark_ff::BigInteger;
 use ark_ff::Field;
 use ark_ff::PrimeField;

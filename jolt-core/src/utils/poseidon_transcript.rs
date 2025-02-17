@@ -5,7 +5,7 @@ use ark_crypto_primitives::sponge::{
     Absorb, CryptographicSponge, DuplexSpongeMode, FieldBasedCryptographicSponge,
 };
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInteger, BigInteger256, Field, PrimeField};
+use ark_ff::{AdditiveGroup, BigInteger, BigInteger256, Field, PrimeField};
 use ark_serialize::CanonicalSerialize;
 use num_bigint::BigUint;
 use std::str::FromStr;
