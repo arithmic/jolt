@@ -36,7 +36,7 @@ impl fmt::Debug for SumcheckInstanceProofCircom {
 }
 
 pub fn convert_sum_check_proof_to_circom(
-    sum_check_proof: &SumcheckInstanceProof<Scalar, PoseidonTranscript<Scalar, Fp>>,
+    sum_check_proof: &SumcheckInstanceProof<Scalar, PoseidonTranscript<Fp, Scalar>>,
 ) -> SumcheckInstanceProofCircom {
     let mut uni_polys_circom = Vec::new();
     for poly in &sum_check_proof.uni_polys {
@@ -96,7 +96,7 @@ impl fmt::Debug for BatchedGrandProductProofCircom {
 use crate::{poly::commitment::hyperkzg::HyperKZG, subprotocols::grand_product::BatchedGrandProductProof};
 
 
-pub fn convert_from_batched_GKRProof_to_circom(proof: &BatchedGrandProductProof<HyperKZG<Bn254, PoseidonTranscript<Scalar, Fp>>, PoseidonTranscript<Scalar, Fp>>) -> BatchedGrandProductProofCircom
+pub fn convert_from_batched_GKRProof_to_circom(proof: &BatchedGrandProductProof<HyperKZG<Bn254, PoseidonTranscript<Fp, Scalar>>, PoseidonTranscript<Fp, Scalar>>) -> BatchedGrandProductProofCircom
 {
     let num_gkr_layers = proof.gkr_layers.len();
 

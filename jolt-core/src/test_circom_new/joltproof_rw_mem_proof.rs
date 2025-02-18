@@ -126,7 +126,7 @@ impl fmt::Debug for ReadWriteMemoryProofCircom {
     }
 }
 
-pub fn convert_from_read_write_mem_proof_to_circom(rw_mem_proof: ReadWriteMemoryProof<Scalar, HyperKZG<Bn254, PoseidonTranscript<Scalar, Fp>>, PoseidonTranscript<Scalar, Fp>>) -> ReadWriteMemoryProofCircom
+pub fn convert_from_read_write_mem_proof_to_circom(rw_mem_proof: ReadWriteMemoryProof<Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp, Scalar>>, PoseidonTranscript<Fp, Scalar>>) -> ReadWriteMemoryProofCircom
 {
     let mut openings = Vec::new();
     // confirm the 9 required values

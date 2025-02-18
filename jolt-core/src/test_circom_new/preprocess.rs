@@ -78,7 +78,7 @@ use crate::jolt::vm::rv32i_vm::{C, M};
 use crate::jolt::vm::JoltPreprocessing;
 use crate::poly::commitment::hyperkzg::HyperKZG;
 
-pub fn convert_joltpreprocessing_to_circom(jolt_preprocessing: JoltPreprocessing<C, Scalar, HyperKZG<Bn254, PoseidonTranscript<Scalar, Fp>>,PoseidonTranscript<Scalar, Fp>>) -> JoltPreprocessingCircom{
+pub fn convert_joltpreprocessing_to_circom(jolt_preprocessing: JoltPreprocessing<C, Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp, Scalar>>,PoseidonTranscript<Fp, Scalar>>) -> JoltPreprocessingCircom{
     JoltPreprocessingCircom{
         // generators: convert_hyperkzg_verifier_key_to_hyperkzg_verifier_key_circom(jolt_preprocessing.generators.1),
         bytecode: convert_byte_code_preprocessing_to_circom(jolt_preprocessing.bytecode),

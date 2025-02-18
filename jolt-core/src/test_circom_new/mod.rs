@@ -28,14 +28,14 @@ fn fib_e2e_hyperkzg() {
     println!("Running Fib");
    fib_e2everify::<
         Scalar,
-        HyperKZG<Bn254, PoseidonTranscript<Scalar, Fp>>,
-        PoseidonTranscript<Scalar, Fp>,
+        HyperKZG<Bn254, PoseidonTranscript<Fp, Scalar>>,
+        PoseidonTranscript<Fp, Scalar>,
     >();
     println!("verfied");
     let (preprocessing, proof_from_rust, commitments) = fib_e2e::<
     Scalar,
-    HyperKZG<Bn254, PoseidonTranscript<Scalar, Fp>>,
-    PoseidonTranscript<Scalar, Fp>,
+    HyperKZG<Bn254, PoseidonTranscript<Fp, Scalar>>,
+    PoseidonTranscript<Fp, Scalar>,
     >();
 
     let circom_linking_hyperkzg_proof = hyper_kzg_proof_to_hyper_kzg_circomfor_linking(&proof_from_rust.opening_proof.joint_opening_proof);
@@ -46,7 +46,7 @@ fn fib_e2e_hyperkzg() {
 
     
       
-    let mut transcipt_init = <PoseidonTranscript<Scalar, Fp> as Transcript>::new(b"Jolt transcript");
+    let mut transcipt_init = <PoseidonTranscript<Fp, Scalar> as Transcript>::new(b"Jolt transcript");
 
     let input_json = format!(
         r#"{{
@@ -176,8 +176,8 @@ where
 
 
 pub fn convert_full_proof_to_circom(
-    jolt_preprocessing: JoltPreprocessing<C, Scalar, HyperKZG<Bn254, PoseidonTranscript<Scalar, Fp>>,PoseidonTranscript<Scalar, Fp>>,
-    jolt_proof: JoltProof<{C}, {M}, JoltR1CSInputs, Scalar, HyperKZG<Bn254, PoseidonTranscript<Scalar, Fp>>, RV32I, RV32ISubtables<Scalar>, PoseidonTranscript<Scalar, Fp>>,
+    jolt_preprocessing: JoltPreprocessing<C, Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp, Scalar>>,PoseidonTranscript<Fp, Scalar>>,
+    jolt_proof: JoltProof<{C}, {M}, JoltR1CSInputs, Scalar, HyperKZG<Bn254, PoseidonTranscript<Fp, Scalar>>, RV32I, RV32ISubtables<Scalar>, PoseidonTranscript<Fp, Scalar>>,
     jolt_stuff: &JoltStuff<HyperKZGCommitment<Bn254>>
 ) -> (JoltPreprocessingCircom, JoltproofCircom, JoltStuffCircom
 ) {
