@@ -26,6 +26,7 @@ pub mod poly;
 pub mod r1cs;
 pub mod subprotocols;
 pub mod utils;
+pub mod spartan;
 pub mod test_circom_new;
 pub mod test_circom_link;
 

@@ -89,7 +89,7 @@ impl fmt::Debug for BytecodeProofCircom {
 
 use crate::lasso::memory_checking::StructuredPolynomialData;
 
-pub fn convert_from_bytecode_proof_to_circom(bytecode_proof: BytecodeProof<Scalar, HyperKZG<Bn254, PoseidonTranscript<Scalar>>, PoseidonTranscript<Scalar>>) -> BytecodeProofCircom{
+pub fn convert_from_bytecode_proof_to_circom(bytecode_proof: BytecodeProof<Scalar, HyperKZG<Bn254, PoseidonTranscript<Scalar, Fp>>, PoseidonTranscript<Scalar, Fp>>) -> BytecodeProofCircom{
     let mut openings = Vec::new();
     let previous_openings = bytecode_proof.openings;
     // 8

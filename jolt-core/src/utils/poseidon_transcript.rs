@@ -1,3 +1,6 @@
+use std::marker::PhantomData;
+
+use super::transcript::Transcript;
 use crate::field::JoltField;
 use ark_bn254::{Fq, Fr};
 use ark_crypto_primitives::sponge::{
@@ -5,36 +8,36 @@ use ark_crypto_primitives::sponge::{
     Absorb, CryptographicSponge, DuplexSpongeMode, FieldBasedCryptographicSponge,
 };
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{AdditiveGroup, BigInteger, BigInteger256, Field, PrimeField};
+use ark_ff::{AdditiveGroup, BigInteger, PrimeField};
 use ark_serialize::CanonicalSerialize;
 use num_bigint::BigUint;
-use std::str::FromStr;
-use super::transcript::Transcript;
+
 /// Represents the current state of the protocol's Fiat-Shamir transcript.
 #[derive(Clone)]
-pub struct PoseidonTranscript<F: PrimeField> {
-    pub state: PoseidonSponge<F>,
+pub struct PoseidonTranscript<J: PrimeField, K: PrimeField> {
+    pub state: PoseidonSponge<K>,
     /// We append an ordinal to each invocation of the hash
     pub n_rounds: u32,
     #[cfg(test)]
     /// A complete history of the transcript's `state`; used for testing.
-    state_history: Vec<F>,
+    state_history: Vec<K>,
     #[cfg(test)]
     /// For a proof to be valid, the verifier's `state_history` should always match
     /// the prover's. In testing, the Jolt verifier may be provided the prover's
     /// `state_history` so that we can detect any deviations and the backtrace can
     /// tell us where it happened.
-    expected_state_history: Option<Vec<F>>,
+    expected_state_history: Option<Vec<K>>,
+    _marker_j: PhantomData<J>,
 }
 
-impl<F: PrimeField> PoseidonTranscript<F> {
+impl<J: PrimeField, K: PrimeField> PoseidonTranscript<J, K> {
     /// Gives the hasher object with the running seed and index added
     /// To load hash you must call finalize, after appending u8 vectors
-    pub fn new() -> PoseidonSponge<F> {
+    pub fn new() -> PoseidonSponge<K> {
         let parameters =
-            get_poseidon_parameters::<F>(4, PoseidonDefaultConfigEntry::new(4, 5, 8, 56, 0))
+            get_poseidon_parameters::<K>(4, PoseidonDefaultConfigEntry::new(4, 5, 8, 56, 0))
                 .unwrap();
-        let state = vec![F::zero(); parameters.rate + parameters.capacity];
+        let state = vec![K::zero(); parameters.rate + parameters.capacity];
         let mode = DuplexSpongeMode::Absorbing {
             next_absorb_index: 0,
         };
@@ -47,7 +50,7 @@ impl<F: PrimeField> PoseidonTranscript<F> {
     }
 
     fn absorb(&mut self, input: &impl Absorb) {
-        let elems = input.to_sponge_field_elements_as_vec::<F>();
+        let elems = input.to_sponge_field_elements_as_vec::<K>();
         if elems.is_empty() {
             return;
         }
@@ -70,7 +73,7 @@ impl<F: PrimeField> PoseidonTranscript<F> {
     }
 
     fn squeeze_bytes(&mut self, num_bytes: usize) -> Vec<u8> {
-        let usable_bytes = ((F::MODULUS_BIT_SIZE - 1) / 8) as usize;
+        let usable_bytes = ((K::MODULUS_BIT_SIZE - 1) / 8) as usize;
 
         let num_elements = (num_bytes + usable_bytes - 1) / usable_bytes;
         let src_elements = self.state.squeeze_native_field_elements(num_elements);
@@ -86,7 +89,7 @@ impl<F: PrimeField> PoseidonTranscript<F> {
     }
 
     fn squeeze_bits(&mut self, num_bits: usize) -> Vec<bool> {
-        let usable_bits = (F::MODULUS_BIT_SIZE - 1) as usize;
+        let usable_bits = (K::MODULUS_BIT_SIZE - 1) as usize;
 
         let num_elements = (num_bits + usable_bits - 1) / usable_bits;
         let src_elements = self.state.squeeze_native_field_elements(num_elements);
@@ -101,13 +104,13 @@ impl<F: PrimeField> PoseidonTranscript<F> {
         bits
     }
 
-    fn squeeze_field_element(&mut self) -> F {
+    fn squeeze_field_element(&mut self) -> K {
         self.state.squeeze_native_field_elements(1)[0]
     }
 
-    fn update_state(&mut self, new_state: F) {
+    fn update_state(&mut self, new_state: K) {
         self.state.state =
-            vec![F::zero(); self.state.parameters.rate + self.state.parameters.capacity];
+            vec![K::zero(); self.state.parameters.rate + self.state.parameters.capacity];
         self.state.state[self.state.parameters.capacity] = new_state;
         self.state.mode = DuplexSpongeMode::Absorbing {
             next_absorb_index: 1,
@@ -124,40 +127,10 @@ impl<F: PrimeField> PoseidonTranscript<F> {
             self.state_history.push(new_state);
         }
     }
-    // fn squeeze_field_elements_with_sizes<F2: PrimeField>(
-    //     &mut self,
-    //     sizes: &[FieldElementSize],
-    // ) -> Vec<F2> {
-    //     if F::characteristic() == F2::characteristic() {
-    //         // native case
-    //         let mut buf = Vec::with_capacity(sizes.len());
-    //         field_cast(
-    //             &self.squeeze_native_field_elements_with_sizes(sizes),
-    //             &mut buf,
-    //         )
-    //         .unwrap();
-    //         buf
-    //     } else {
-    //         squeeze_field_elements_with_sizes_default_impl(self, sizes)
-    //     }
-    // }
-
-    // fn squeeze_field_elements<F2: PrimeField>(&mut self, num_elements: usize) -> Vec<F2> {
-    //     if TypeId::of::<F>() == TypeId::of::<F2>() {
-    //         let result = self.state.squeeze_native_field_elements(num_elements);
-    //         let mut cast = Vec::with_capacity(result.len());
-    //         field_cast(&result, &mut cast).unwrap();
-    //         cast
-    //     } else {
-    //         self.squeeze_field_elements_with_sizes::<F2>(
-    //             vec![FieldElementSize::Full; num_elements].as_slice(),
-    //         )
-    //     }
-    // }
 }
-//TODO:- Optimize this.
+
 //TODO:- Convert label into scalar element
-impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
+impl<J: PrimeField, K: PrimeField> Transcript for PoseidonTranscript<J, K> {
     fn new(label: &'static [u8]) -> Self {
         let mut hasher = Self::new();
         hasher.absorb(&label);
@@ -174,6 +147,7 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
             state_history: vec![new_state],
             #[cfg(test)]
             expected_state_history: None,
+            _marker_j: PhantomData,
         }
     }
 
@@ -183,14 +157,15 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
     }
 
     //TODO:-
-    fn append_message(&mut self, msg: &'static [u8]) {
-        assert!(msg.len() < 32);
-        let scalar = <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&msg);
-        let n_rounds = self.n_rounds;
-        self.absorb(&n_rounds);
-        self.absorb(&scalar);
-        let new_state = self.squeeze_field_element();
-        self.update_state(new_state);
+    fn append_message(&mut self, _msg: &'static [u8]) {
+        panic!("In circom code we don't append messages")
+        // assert!(msg.len() < 32);
+        // let scalar = <ark_bn254::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&msg);
+        // let n_rounds = self.n_rounds;
+        // self.absorb(&n_rounds);
+        // self.absorb(&scalar);
+        // let new_state = self.squeeze_field_element();
+        // self.update_state(new_state);
     }
 
     //TODO:- Convert bytes into scalar
@@ -203,26 +178,51 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
     }
 
     fn append_u64(&mut self, x: u64) {
-        let n_rounds = self.n_rounds as u64;
-        self.absorb(&[n_rounds, x].to_vec());
+        let n_rounds = self.n_rounds;
+        self.absorb(&n_rounds);
+        self.absorb(&x);
         let new_state = self.squeeze_field_element();
         self.update_state(new_state);
     }
 
     fn append_scalar<F: JoltField>(&mut self, scalar: &F) {
-        let mut buf = vec![];
-        scalar.serialize_uncompressed(&mut buf).unwrap();
-        let wrapped_scalar = <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&buf);
+        if J::MODULUS.to_string() == K::MODULUS.to_string() {
+            let mut buf = vec![];
+            scalar.serialize_uncompressed(&mut buf).unwrap();
+            let wrapped_scalar = ark_bn254::Fr::from_le_bytes_mod_order(&buf);
 
-        let to_absorb = [
-            <ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
-            wrapped_scalar,
-        ]
-        .to_vec();
-        self.absorb(&to_absorb);
+            let to_absorb = [
+                ark_bn254::Fr::from_bigint(self.n_rounds.into()).unwrap(),
+                wrapped_scalar,
+            ]
+            .to_vec();
+            self.absorb(&to_absorb);
+        } else if J::MODULUS.to_string() < K::MODULUS.to_string() {
+            let mut buf = vec![];
+            scalar.serialize_uncompressed(&mut buf).unwrap();
+            let wrapped_scalar = ark_bn254::Fq::from_le_bytes_mod_order(&buf);
 
+            let to_absorb = [
+                ark_bn254::Fq::from_bigint(self.n_rounds.into()).unwrap(),
+                wrapped_scalar,
+            ]
+            .to_vec();
+            self.absorb(&to_absorb);
+        } else if J::MODULUS.to_string() > K::MODULUS.to_string() {
+            let mut buf = vec![];
+            scalar.serialize_uncompressed(&mut buf).unwrap();
+            let wrapped_scalar_lo = ark_grumpkin::Fq::from_le_bytes_mod_order(&buf[0..16]);
+            let wrapped_scalar_hi = ark_grumpkin::Fq::from_le_bytes_mod_order(&buf[16..32]);
+
+            let to_absorb = [
+                ark_grumpkin::Fq::from_bigint(self.n_rounds.into()).unwrap(),
+                wrapped_scalar_lo,
+                wrapped_scalar_hi,
+            ]
+            .to_vec();
+            self.absorb(&to_absorb);
+        }
         let new_state = self.squeeze_field_element();
-
         self.update_state(new_state);
     }
 
@@ -235,58 +235,103 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
     }
 
     fn append_point<G: CurveGroup>(&mut self, point: &G) {
-        if point.is_zero() {
+        if J::MODULUS.to_string() == K::MODULUS.to_string() {
+            if point.is_zero() {
+                let to_absorb = [
+                    <ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into())
+                        .unwrap(),
+                    <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                    <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                    <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                    <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                    <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                    <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                ]
+                .to_vec();
+                self.absorb(&to_absorb);
+
+                let new_state = self.squeeze_field_element();
+                self.update_state(new_state);
+                return;
+            }
+            // If we add the point at infinity then we hash over a region of zeros
+            let aff = point.into_affine();
+
+            let x = aff.x().unwrap();
+            let y = aff.y().unwrap();
+            let mut x_bytes = vec![];
+            let mut y_bytes = vec![];
+            x.serialize_compressed(&mut x_bytes).unwrap();
+            y.serialize_compressed(&mut y_bytes).unwrap();
+
+            let x_limbs = three_limb_repr(&x_bytes);
+            let y_limbs = three_limb_repr(&x_bytes);
+            let mut to_absorb = vec![<ark_bn254::Fr>::from_bigint(self.n_rounds.into()).unwrap()];
+            let limbs: Vec<_> = x_limbs.iter().chain(y_limbs.iter()).collect();
+            to_absorb.extend(limbs);
+            self.absorb(&to_absorb);
+        } else if J::MODULUS.to_string() < K::MODULUS.to_string() {
+            if point.is_zero() {
+                let to_absorb = [
+                    <ark_bn254::Fq as ark_ff::PrimeField>::from_bigint(self.n_rounds.into())
+                        .unwrap(),
+                    <ark_bn254::Fq as ark_ff::Zero>::zero(),
+                    <ark_bn254::Fq as ark_ff::Zero>::zero(),
+                ]
+                .to_vec();
+                self.absorb(&to_absorb);
+
+                let new_state = self.squeeze_field_element();
+                self.update_state(new_state);
+                return;
+            }
+            // If we add the point at infinity then we hash over a region of zeros
+            let aff = point.into_affine();
+            let mut x_bytes = vec![];
+            let mut y_bytes = vec![];
+            let x = aff.x().unwrap();
+            x.serialize_compressed(&mut x_bytes).unwrap();
+            let y = aff.y().unwrap();
+            y.serialize_compressed(&mut y_bytes).unwrap();
             let to_absorb = [
-                <ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
-                
-                <ark_bn254::Fr as ark_ff::Zero>::zero(),
-                <ark_bn254::Fr as ark_ff::Zero>::zero(),
-                <ark_bn254::Fr as ark_ff::Zero>::zero(),
-                
-                <ark_bn254::Fr as ark_ff::Zero>::zero(),
-                <ark_bn254::Fr as ark_ff::Zero>::zero(),
-                <ark_bn254::Fr as ark_ff::Zero>::zero(),
+                <ark_bn254::Fq as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap(),
+                <ark_bn254::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&x_bytes),
+                <ark_bn254::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&y_bytes),
             ]
             .to_vec();
             self.absorb(&to_absorb);
+        } else if J::MODULUS.to_string() > K::MODULUS.to_string() {
+            if point.is_zero() {
+                let to_absorb = [
+                    <ark_grumpkin::Fq as ark_ff::PrimeField>::from_bigint(self.n_rounds.into())
+                        .unwrap(),
+                    <ark_grumpkin::Fq as ark_ff::Zero>::zero(),
+                    <ark_grumpkin::Fq as ark_ff::Zero>::zero(),
+                ]
+                .to_vec();
+                self.absorb(&to_absorb);
 
-            let new_state = self.squeeze_field_element();
-            self.update_state(new_state);
-            return;
+                let new_state = self.squeeze_field_element();
+                self.update_state(new_state);
+                return;
+            }
+            // If we add the point at infinity then we hash over a region of zeros
+            let aff = point.into_affine();
+            let mut x_bytes = vec![];
+            let mut y_bytes = vec![];
+            let x = aff.x().unwrap();
+            x.serialize_compressed(&mut x_bytes).unwrap();
+            let y = aff.y().unwrap();
+            y.serialize_compressed(&mut y_bytes).unwrap();
+            let to_absorb = [
+                <ark_grumpkin::Fq as ark_ff::PrimeField>::from_bigint(self.n_rounds.into())
+                    .unwrap(),
+                <ark_grumpkin::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&x_bytes),
+                <ark_grumpkin::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&y_bytes),
+            ]
+            .to_vec();
+            self.absorb(&to_absorb);
         }
-        // If we add the point at infinity then we hash over a region of zeros
-        let aff = point.into_affine();
-
-        let x = aff.x().unwrap();
-        let x = x.to_string();
-        let x = Fq::from_str(&x).unwrap();
-        
-        let x_limbs = convert_fp_to_3_limbs_of_scalar(&x);
-
-        let y = aff.y().unwrap();
-        let y = y.to_string();
-        let y = Fq::from_str(&y).unwrap();
-
-        let y_limbs = convert_fp_to_3_limbs_of_scalar(&y);
-
-        let mut to_absorb = Vec::new();
-
-        to_absorb.push(<ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into()).unwrap());
-
-        for i in x_limbs{
-            let mut x_limbs_bytes = vec![];
-            i.serialize_compressed(&mut x_limbs_bytes).unwrap();
-            to_absorb.push(<ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&x_limbs_bytes));
-        }
-
-        for i in y_limbs{
-            let mut y_limbs_bytes = vec![];
-            i.serialize_compressed(&mut y_limbs_bytes).unwrap();
-            to_absorb.push(<ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(&y_limbs_bytes));
-        }
-
-        self.absorb(&to_absorb);
-
         let new_state = self.squeeze_field_element();
 
         self.update_state(new_state);
@@ -322,6 +367,24 @@ impl<K: PrimeField> Transcript for PoseidonTranscript<K> {
         }
         q_powers
     }
+}
+
+fn three_limb_repr(bytes: &Vec<u8>) -> Vec<ark_bn254::Fr> {
+    let mut limbs = [ark_bn254::Fr::ZERO; 3];
+    let elem = <ark_bn254::Fq as ark_ff::PrimeField>::from_le_bytes_mod_order(&bytes);
+
+    let mask = BigUint::from((1u128 << 125) - 1);
+    limbs[0] = <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(
+        &(BigUint::from(elem.into_bigint()) & mask.clone()).to_bytes_le(),
+    );
+    limbs[1] = <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(
+        &BigUint::from(BigUint::from(elem.into_bigint()) >> 125 & mask.clone()).to_bytes_le(),
+    );
+    limbs[2] = <ark_bn254::Fr as ark_ff::PrimeField>::from_le_bytes_mod_order(
+        &BigUint::from((BigUint::from(elem.into_bigint()) >> 250) & mask.clone()).to_bytes_le(),
+    );
+
+    limbs.to_vec()
 }
 
 

@@ -227,7 +227,7 @@ pub trait Serializable: CanonicalSerialize + CanonicalDeserialize + Sized {
     }
 }
 
-pub type ProofTranscript = PoseidonTranscript<ark_bn254::Fr>;
+pub type ProofTranscript = PoseidonTranscript<ark_bn254::Fr, ark_bn254::Fr>;
 // pub type ProofTranscript = KeccakTranscript;
 pub type PCS = HyperKZG<Bn254, ProofTranscript>;
 #[derive(CanonicalSerialize, CanonicalDeserialize)]
@@ -356,22 +356,22 @@ pub mod tests {
 
     #[test]
     fn fib_e2e_zeromorph() {
-        fib_e2e::<Fr, Zeromorph<Bn254, PoseidonTranscript<ark_bn254::Fr>>, PoseidonTranscript<ark_bn254::Fr>>();
+        fib_e2e::<
+            Fr,
+            Zeromorph<Bn254, PoseidonTranscript<ark_bn254::Fr, ark_bn254::Fr>>,
+            PoseidonTranscript<ark_bn254::Fr, ark_bn254::Fr>,
+        >();
     }
-    
+
     #[test]
     fn fib_e2e_hyperkzg() {
         println!("Running Fib");
         fib_e2e::<
             Fr,
-            HyperKZG<Bn254, PoseidonTranscript<ark_bn254::Fr>>,
-            PoseidonTranscript<ark_bn254::Fr>,
+            HyperKZG<Bn254, PoseidonTranscript<ark_bn254::Fr, ark_bn254::Fq>>,
+            PoseidonTranscript<ark_bn254::Fr, ark_bn254::Fq>,
         >();
     }
-    // #[test]
-    // fn fib_e2e_hyperkzg() {
-    //     fib_e2e::<Fr, HyperKZG<Bn254, KeccakTranscript>, KeccakTranscript>();
-    // }
 
     // TODO(sragss): Finish Binius.
     // #[test]
