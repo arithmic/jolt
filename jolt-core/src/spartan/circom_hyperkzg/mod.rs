@@ -55,14 +55,13 @@ fn parse_spartan() {
         "pub_inp": {:?},
         "vk": {:?},
         "proof": {:?},
-        "w_commitment": {:?},
-        "transcript": {:?}
+        "w_commitment": {:?}
     }}"#,
         pi,
         convert_hyperkzg_verifier_key_to_hyperkzg_verifier_key_circom(pcs_setup.1),
         SpartanProofCircom::parse_spartan_proof(&proof),
         convert_hyperkzg_commitment_to_circom(&proof.witness_commit),
-        convert_transcript_to_circom(transcipt_init)
+        // convert_transcript_to_circom(transcipt_init)
     );
 
     println!("public input length: {:?}", pi.len());

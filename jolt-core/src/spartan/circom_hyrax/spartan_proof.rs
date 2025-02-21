@@ -88,39 +88,39 @@ pub fn parse_spartan_proof_hyrax(
     let inner_sumcheck_proof = convert_sum_check_proof_to_circom(&proof.inner_sumcheck_proof);
     let outer_sumcheck_claims = [
         Fqq {
-            element: proof.outer_sumcheck_claims.0,
+            // element: proof.outer_sumcheck_claims.0,
             limbs: convert_to_3_limbs(proof.outer_sumcheck_claims.0),
         },
         Fqq {
-            element: proof.outer_sumcheck_claims.1,
+            // element: proof.outer_sumcheck_claims.1,
             limbs: convert_to_3_limbs(proof.outer_sumcheck_claims.1),
         },
         Fqq {
-            element: proof.outer_sumcheck_claims.2,
+            // element: proof.outer_sumcheck_claims.2,
             limbs: convert_to_3_limbs(proof.outer_sumcheck_claims.2),
         },
     ];
     let inner_sumcheck_claims = [
         Fqq {
-            element: proof.inner_sumcheck_claims.0,
+            // element: proof.inner_sumcheck_claims.0,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.0),
         },
         Fqq {
-            element: proof.inner_sumcheck_claims.1,
+            // element: proof.inner_sumcheck_claims.1,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.1),
         },
         Fqq {
-            element: proof.inner_sumcheck_claims.2,
+            // element: proof.inner_sumcheck_claims.2,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.2),
         },
         Fqq {
-            element: proof.inner_sumcheck_claims.3,
+            // element: proof.inner_sumcheck_claims.3,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.3),
         },
     ];
 
     let pi_eval = Fqq {
-        element: proof.pi_eval,
+        // element: proof.pi_eval,
         limbs: convert_to_3_limbs(proof.pi_eval),
     };
     SpartanProofHyraxCircom::new(

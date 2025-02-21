@@ -92,11 +92,11 @@ pub fn convert_from_batched_GKRProof_to_circom_hyrax(
         updated_gkr_layers.push(BatchedGrandProductLayerProofCircom {
             proof: convert_uni_polys_to_circom(updated_uni_poly),
             left_claim: Fqq {
-                element: proof.gkr_layers[idx].left_claim,
+                // element: proof.gkr_layers[idx].left_claim,
                 limbs: convert_to_3_limbs(proof.gkr_layers[idx].left_claim),
             },
             right_claim: Fqq {
-                element: proof.gkr_layers[idx].right_claim,
+                // element: proof.gkr_layers[idx].right_claim,
                 limbs: convert_to_3_limbs(proof.gkr_layers[idx].right_claim),
             },
         });

@@ -1,3 +1,4 @@
+use ark_ec::AffineRepr;
 use ark_grumpkin::{Affine, Fq as Fp, Fr as Scalar, Projective};
 use std::fmt;
 
@@ -16,7 +17,7 @@ use super::non_native::Fqq;
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct HyraxGensCircom(pub Vec<G1Circom>);
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct HyraxCommitmentCircom(pub Vec<G1AffineCircom>);
+pub struct HyraxCommitmentCircom(pub Vec<G1ProjectiveCircom>);
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct HyraxEvalProofCircom(pub Vec<Fqq>);
 
@@ -89,12 +90,43 @@ impl fmt::Debug for G1AffineCircom {
     }
 }
 
+
+#[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct G1ProjectiveCircom {
+    pub x: Fp,
+    pub y: Fp,
+    pub z: Fp,
+}
+
+impl G1ProjectiveCircom {
+    pub fn from_g1(elem: &Projective) -> G1ProjectiveCircom {
+        G1ProjectiveCircom {
+            x: elem.x,
+            y: elem.y,
+            z: elem.z,
+        }
+    }
+}
+impl fmt::Debug for G1ProjectiveCircom {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            r#"{{
+                "x": "{:}",
+                "y": "{:}",
+                "z": "{:}"
+            }}"#,
+            self.x, self.y, self.z
+        )
+    }
+}
+
 impl fmt::Debug for HyraxCommitmentCircom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             r#"{{
-                "commitments": {:?}
+                "row_commitments": {:?}
             }}"#,
             self.0
         )
@@ -135,7 +167,7 @@ pub fn hyrax_commitment_to_circom(commit: &HyraxCommitment<Projective>) -> Hyrax
         commit
             .row_commitments
             .iter()
-            .map(|g| G1AffineCircom::from_g1(&Projective::from(*g).into_affine()))
+            .map(|g| G1ProjectiveCircom::from_g1(&Projective::from(*g).into_affine().into_group()))
             .collect(),
     )
 }

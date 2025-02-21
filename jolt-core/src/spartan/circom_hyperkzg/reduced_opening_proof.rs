@@ -163,7 +163,7 @@ pub fn hyper_kzg_proof_to_hyper_kzg_circom(proof: &HyperKZGProof<Bn254>) -> Hype
     for i in 0..proof.v.len() {
         for j in 0..proof.v[i].len() {
             v[i].push(Fqq {
-                element: proof.v[i][j],
+                // element: proof.v[i][j],
                 limbs: convert_to_3_limbs(proof.v[i][j]),
             })
         }

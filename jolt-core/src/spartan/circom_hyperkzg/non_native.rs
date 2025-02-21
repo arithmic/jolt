@@ -9,7 +9,7 @@ use num_bigint::BigUint;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Fqq {
-    pub element: Scalar,
+    // pub element: Scalar,
     pub limbs: [Fp; 3],
 }
 
@@ -36,7 +36,7 @@ pub fn convert_to_3_limbs(r: Scalar) -> [Fp; 3] {
 
 pub fn convert_to_fqq(r: &Scalar) -> Fqq {
     Fqq {
-        element: *r,
+        // element: *r,
         limbs: convert_to_3_limbs(*r),
     }
 }
@@ -54,11 +54,10 @@ impl fmt::Debug for Fqq {
         write!(
             f,
             r#"{{
-                              "element": "{}",
                               "limbs": ["{}", "{}", "{}"]
                               
                               }}"#,
-            self.element,
+            // self.element,
             &self.limbs[0],
             &self.limbs[1].to_string(),
             &self.limbs[2].to_string()

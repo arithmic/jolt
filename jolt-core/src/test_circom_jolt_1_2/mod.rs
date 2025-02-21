@@ -66,13 +66,11 @@ fn fib_e2e_hyperkzg() {
 
     let input_json = format!(
         r#"{{
-        "transcript_init": {:?},
         "preprocessing": {:?},
         "proof": {:?},
         "commitments": {:?},
         "pi_proof": {:?}
     }}"#,
-        convert_transcript_to_circom(transcipt_init),
         circom_preprocessing,
         circom_proof,
         circom_stuff,

@@ -98,39 +98,39 @@ pub fn parse_spartan_proof(
     let inner_sumcheck_proof = convert_sum_check_proof_to_circom(&proof.inner_sumcheck_proof);
     let outer_sumcheck_claims = [
         Fqq {
-            element: proof.outer_sumcheck_claims.0,
+            // element: proof.outer_sumcheck_claims.0,
             limbs: convert_to_3_limbs(proof.outer_sumcheck_claims.0),
         },
         Fqq {
-            element: proof.outer_sumcheck_claims.1,
+            // element: proof.outer_sumcheck_claims.1,
             limbs: convert_to_3_limbs(proof.outer_sumcheck_claims.1),
         },
         Fqq {
-            element: proof.outer_sumcheck_claims.2,
+            // element: proof.outer_sumcheck_claims.2,
             limbs: convert_to_3_limbs(proof.outer_sumcheck_claims.2),
         },
     ];
     let inner_sumcheck_claims = [
         Fqq {
-            element: proof.inner_sumcheck_claims.0,
+            // element: proof.inner_sumcheck_claims.0,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.0),
         },
         Fqq {
-            element: proof.inner_sumcheck_claims.1,
+            // element: proof.inner_sumcheck_claims.1,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.1),
         },
         Fqq {
-            element: proof.inner_sumcheck_claims.2,
+            // element: proof.inner_sumcheck_claims.2,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.2),
         },
         Fqq {
-            element: proof.inner_sumcheck_claims.3,
+            // element: proof.inner_sumcheck_claims.3,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.3),
         },
     ];
 
     let pi_eval = Fqq {
-        element: proof.pi_eval,
+        // element: proof.pi_eval,
         limbs: convert_to_3_limbs(proof.pi_eval),
     };
 
@@ -209,33 +209,33 @@ pub fn parse_spartan_proof_hyrax(
     // let spark_sumcheck_proof = convert_sum_check_proof_to_circom(&proof.spark_sumcheck_proof);
     let outer_sumcheck_claims = [
         Fqq {
-            element: proof.outer_sumcheck_claims.0,
+            // element: proof.outer_sumcheck_claims.0,
             limbs: convert_to_3_limbs(proof.outer_sumcheck_claims.0),
         },
         Fqq {
-            element: proof.outer_sumcheck_claims.1,
+            // element: proof.outer_sumcheck_claims.1,
             limbs: convert_to_3_limbs(proof.outer_sumcheck_claims.1),
         },
         Fqq {
-            element: proof.outer_sumcheck_claims.2,
+            // element: proof.outer_sumcheck_claims.2,
             limbs: convert_to_3_limbs(proof.outer_sumcheck_claims.2),
         },
     ];
     let inner_sumcheck_claims = [
         Fqq {
-            element: proof.inner_sumcheck_claims.0,
+            // element: proof.inner_sumcheck_claims.0,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.0),
         },
         Fqq {
-            element: proof.inner_sumcheck_claims.1,
+            // element: proof.inner_sumcheck_claims.1,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.1),
         },
         Fqq {
-            element: proof.inner_sumcheck_claims.2,
+            // element: proof.inner_sumcheck_claims.2,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.2),
         },
         Fqq {
-            element: proof.inner_sumcheck_claims.3,
+            // element: proof.inner_sumcheck_claims.3,
             limbs: convert_to_3_limbs(proof.inner_sumcheck_claims.3),
         },
     ];
@@ -250,14 +250,14 @@ pub fn parse_spartan_proof_hyrax(
 
 pub fn convert_and_flatten_spark_openings(openings: &SpartanOpenings<Scalar>) -> [Fqq; 24] {
     let mut flattened_opening = [Fqq {
-        element: Scalar::zero(),
+        // element: Scalar::zero(),
         limbs: [Fp::zero(); 3],
     }; 24];
 
     let read_write_opening = openings.read_write_values();
     for i in 0..18 {
         flattened_opening[i] = Fqq {
-            element: *read_write_opening[i],
+            // element: *read_write_opening[i],
             limbs: convert_to_3_limbs(*read_write_opening[i]),
         };
     }
@@ -265,7 +265,7 @@ pub fn convert_and_flatten_spark_openings(openings: &SpartanOpenings<Scalar>) ->
 
     for i in 0..6 {
         flattened_opening[18 + i] = Fqq {
-            element: *init_final_opening[i],
+            // element: *init_final_opening[i],
             limbs: convert_to_3_limbs(*init_final_opening[i]),
         };
     }

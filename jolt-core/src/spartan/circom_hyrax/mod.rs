@@ -43,21 +43,18 @@ fn parse_spartan_hyrax() {
 
     let proof = SpartanProof::<Scalar, PCS, ProofTranscript>::prove(&pcs_setup, &mut preprocessing);
 
-    let transcipt_init = <PoseidonTranscript<Scalar, Fp> as Transcript>::new(b"Spartan transcript");
-
     let input_json = format!(
         r#"{{
-        "pub_inp": {:?},
-        "setup": {:?},
-        "proof": {:?},
-        "w_commitment": {:?},
-        "transcript": {:?}
+            "pub_inp": {:?},
+            "setup": {:?},
+            "proof": {:?},
+            "w_commitment": {:?}
     }}"#,
         preprocessing_to_pi_circom(&preprocessing),
         hyrax_gens_to_circom(&pcs_setup, &proof),
         SpartanProofHyraxCircom::parse_spartan_proof(&proof),
         hyrax_commitment_to_circom(&proof.witness_commit),
-        convert_transcript_to_circom(transcipt_init)
+        // convert_transcript_to_circom(transcipt_init)
     );
 
     let input_file_path = "input.json";

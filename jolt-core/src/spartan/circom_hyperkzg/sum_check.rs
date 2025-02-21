@@ -36,7 +36,7 @@ pub fn convert_sum_check_proof_to_circom(
         let mut temp_coeffs = Vec::new();
         for coeff in &poly.coeffs {
             temp_coeffs.push(Fqq {
-                element: *coeff,
+                // element: *coeff,
                 limbs: convert_to_3_limbs(*coeff),
             });
         }
@@ -55,7 +55,7 @@ pub fn convert_uni_polys_to_circom(uni_polys: Vec<UniPoly<Scalar>>) -> SumcheckI
         let mut temp_coeffs = Vec::new();
         for coeff in poly.coeffs {
             temp_coeffs.push(Fqq {
-                element: coeff,
+                // element: coeff,
                 limbs: convert_to_3_limbs(coeff),
             });
         }

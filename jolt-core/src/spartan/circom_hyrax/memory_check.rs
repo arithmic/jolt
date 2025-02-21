@@ -60,28 +60,28 @@ pub fn convert_multiset_hashes_to_circom(
 
     for i in 0..multiset_hash.read_hashes.len() {
         read_hashes.push(Fqq {
-            element: multiset_hash.read_hashes[i].clone(),
+            // element: multiset_hash.read_hashes[i].clone(),
             limbs: convert_to_3_limbs(multiset_hash.read_hashes[i].clone()),
         });
     }
     let mut write_hashes = Vec::new();
     for i in 0..multiset_hash.write_hashes.len() {
         write_hashes.push(Fqq {
-            element: multiset_hash.write_hashes[i].clone(),
+            // element: multiset_hash.write_hashes[i].clone(),
             limbs: convert_to_3_limbs(multiset_hash.write_hashes[i].clone()),
         });
     }
     let mut init_hashes = Vec::new();
     for i in 0..multiset_hash.init_hashes.len() {
         init_hashes.push(Fqq {
-            element: multiset_hash.init_hashes[i].clone(),
+            // element: multiset_hash.init_hashes[i].clone(),
             limbs: convert_to_3_limbs(multiset_hash.init_hashes[i].clone()),
         });
     }
     let mut final_hashes = Vec::new();
     for i in 0..multiset_hash.final_hashes.len() {
         final_hashes.push(Fqq {
-            element: multiset_hash.final_hashes[i].clone(),
+            // element: multiset_hash.final_hashes[i].clone(),
             limbs: convert_to_3_limbs(multiset_hash.final_hashes[i].clone()),
         });
     }
