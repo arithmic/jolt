@@ -238,7 +238,6 @@ where
     let d0_str = d_0.to_string();
     let d0_scalar = Fr::from_str(&d0_str).unwrap();
     let d0_circom = Fqq{
-        element: d0_scalar,
         limbs: convert_to_3_limbs(d0_scalar),
     };
 
@@ -289,7 +288,6 @@ where
         let v_circom_str = v_circom.to_string();
         let v_circom_scalar = Fr::from_str(&v_circom_str).unwrap();
         let v_circom = Fqq{
-            element: v_circom_scalar,
             limbs: convert_to_3_limbs(v_circom_scalar),
             };
 
@@ -298,7 +296,6 @@ where
         let q_power_str = q_powers[1].to_string();
         let q_power_scalar = Fr::from_str(&q_power_str).unwrap();
         let q_power_circom = Fqq{
-            element: q_power_scalar,
             limbs: convert_to_3_limbs(q_power_scalar),
         };
         open_hyperkzg_components_in_file("q_power", q_power_circom);
@@ -436,7 +433,6 @@ where
         let r_str = r.to_string();
         let r_scalar = Fr::from_str(&r_str).unwrap();
         let r_circom = Fqq{
-            element: r_scalar,
             limbs: convert_to_3_limbs(r_scalar),
         };
 

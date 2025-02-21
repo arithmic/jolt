@@ -24,9 +24,9 @@ pub mod lasso;
 pub mod msm;
 pub mod poly;
 pub mod r1cs;
-pub mod subprotocols;
-pub mod utils;
 pub mod spartan;
-pub mod test_circom_new;
+pub mod subprotocols;
+pub mod test_circom_jolt_1_2;
+pub mod utils;
 pub mod test_circom_link;
 

@@ -369,7 +369,6 @@ pub fn hyper_kzg_proof_to_hyper_kzg_circomfor_linking(proof: &HyperKZGProof<Bn25
     for i in 0..proof.v.len() {
         for j in 0..proof.v[i].len() {
             v[i].push(Fqq {
-                element: proof.v[i][j],
                 limbs: convert_to_3_limbs(proof.v[i][j]),
             })
         }

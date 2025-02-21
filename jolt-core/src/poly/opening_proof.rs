@@ -542,7 +542,6 @@ where
         let rho_scalar = Fr::from_str(&rho_str).unwrap();
 
         let rho_circom = Fqq{
-            element: rho_scalar,
             limbs: convert_to_3_limbs(rho_scalar),
         };
 
@@ -678,7 +677,6 @@ where
         let gamma_scalar = Fr::from_str(&gamma_str).unwrap();
 
         let gamma_circom = Fqq{
-            element: gamma_scalar,
             limbs: convert_to_3_limbs(gamma_scalar),
         };
 

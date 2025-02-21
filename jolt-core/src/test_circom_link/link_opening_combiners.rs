@@ -11,7 +11,7 @@ use num_bigint::BigUint;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Fqq{
-    pub element: Scalar,
+    // pub element: Scalar,
     pub limbs: [Fp; 3],
 }
 
@@ -46,11 +46,9 @@ impl fmt::Debug for Fqq {
         write!(
             f,
             r#"{{
-                              "element": "{}",
-                              "limbs": ["{}", "{}", "{}"]
-                              
-                              }}"#,
-            self.element, &self.limbs[0], &self.limbs[1].to_string(), &self.limbs[2].to_string()
+                            "limbs": ["{}", "{}", "{}"]
+                        }}"#,
+            &self.limbs[0], &self.limbs[1].to_string(), &self.limbs[2].to_string()
         )
     }
 }

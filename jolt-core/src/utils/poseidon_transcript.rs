@@ -37,6 +37,7 @@ impl<J: PrimeField, K: PrimeField> PoseidonTranscript<J, K> {
         let parameters =
             get_poseidon_parameters::<K>(4, PoseidonDefaultConfigEntry::new(4, 5, 8, 56, 0))
                 .unwrap();
+
         let state = vec![K::zero(); parameters.rate + parameters.capacity];
         let mode = DuplexSpongeMode::Absorbing {
             next_absorb_index: 0,
