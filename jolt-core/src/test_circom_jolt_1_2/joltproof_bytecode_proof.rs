@@ -107,10 +107,13 @@ pub fn convert_from_bytecode_proof_to_circom(
         openings.push(FqCircom(opening.clone()));
     }
 
-    // Last 7 init_final values will be update inside verifier
-    for i in 0..7 {
-        openings.push(FqCircom(Scalar::from(0u8)));
-    }
+    // println!("openings len is {}", openings.len());
+
+    // // Last 7 init_final values will be update inside verifier
+    // for i in 0..7 {
+    //     openings.push(FqCircom(Scalar::from(0u8)));
+    // }
+    // println!("openings len is {}", openings.len());
 
     return BytecodeProofCircom {
         multiset_hashes: convert_multiset_hashes_to_circom(&bytecode_proof.multiset_hashes),

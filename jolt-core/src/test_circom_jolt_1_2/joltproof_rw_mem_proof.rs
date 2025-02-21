@@ -51,7 +51,7 @@ pub struct TimestampRangeCheckOpenings {
     read_cts_global_minus_read: Vec<FqCircom>,
     final_cts_read_timestamp: Vec<FqCircom>,
     final_cts_global_minus_read: Vec<FqCircom>,
-    identity: FqCircom,
+    // identity: FqCircom,
 }
 
 impl fmt::Debug for TimestampRangeCheckOpenings {
@@ -62,14 +62,13 @@ impl fmt::Debug for TimestampRangeCheckOpenings {
                     "read_cts_read_timestamp": {:?},
                     "read_cts_global_minus_read": {:?},
                     "final_cts_read_timestamp": {:?},
-                    "final_cts_global_minus_read": {:?},
-                    "identity": {:?}
+                    "final_cts_global_minus_read": {:?}
             }}"#,
             self.read_cts_read_timestamp,
             self.read_cts_global_minus_read,
             self.final_cts_read_timestamp,
             self.final_cts_global_minus_read,
-            self.identity
+            // self.identity
         )
     }
 }
@@ -165,9 +164,9 @@ pub fn convert_from_read_write_mem_proof_to_circom(
     openings.push(FqCircom(rw_openings.t_read_rs2));
     openings.push(FqCircom(rw_openings.t_read_ram));
     openings.push(FqCircom(rw_openings.t_final));
-    for i in 0..3 {
-        openings.push(FqCircom(Scalar::from(0u8)));
-    }
+    // for i in 0..3 {
+    //     openings.push(FqCircom(Scalar::from(0u8)));
+    // }
 
     let exogenous_openings_from_rust = rw_mem_proof.memory_checking_proof.exogenous_openings;
     let mut exogenous_openings = Vec::new();
@@ -216,7 +215,7 @@ pub fn convert_from_read_write_mem_proof_to_circom(
             final_cts_global_minus_read: openings
                 [3 * MEMORY_OPS_PER_INSTRUCTION..4 * MEMORY_OPS_PER_INSTRUCTION]
                 .to_vec(),
-            identity: FqCircom(Scalar::from(0u8)),
+            // identity: FqCircom(Scalar::from(0u8)),
         },
         exogenous_openings: exo_openings,
         batched_grand_product: convert_from_batched_GKRProof_to_circom(
