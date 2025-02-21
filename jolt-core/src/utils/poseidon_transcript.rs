@@ -146,6 +146,8 @@ impl<J: PrimeField, K: PrimeField> Transcript for PoseidonTranscript<J, K> {
 
         if J::MODULUS.to_string() == K::MODULUS.to_string() {
             let scalar = ark_bn254::Fr::from_le_bytes_mod_order(label);
+
+            // println!("scalar is {:?}", scalar.into_bigint());
             hasher.absorb(&scalar);
         } else if J::MODULUS.to_string() < K::MODULUS.to_string() {
             let scalar = ark_bn254::Fq::from_le_bytes_mod_order(label);

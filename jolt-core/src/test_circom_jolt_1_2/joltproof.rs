@@ -26,11 +26,13 @@ pub struct JoltproofCircom {
     pub instruction_lookups: InstructionLookupsProofCircom,
     pub r1cs: UniformSpartanProofCircom,
     pub opening_proof: ReducedOpeningProofCircom,
-    pub pi_proof: PIProofCircom,
+    // pub pi_proof: PIProofCircom,
 }
 
 impl fmt::Debug for JoltproofCircom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // ,
+        //     "pi_proof": {:?}
         write!(
             f,
             r#"{{
@@ -40,8 +42,7 @@ impl fmt::Debug for JoltproofCircom {
             "read_write_memory": {:?},
             "instruction_lookups": {:?},
             "r1cs": {:?},
-            "opening_proof": {:?},
-            "pi_proof": {:?}
+            "opening_proof": {:?}
             }}"#,
             self.trace_length,
             self.program_io,
@@ -49,8 +50,8 @@ impl fmt::Debug for JoltproofCircom {
             self.read_write_memory,
             self.instruction_lookups,
             self.r1cs,
-            self.opening_proof,
-            self.pi_proof
+            self.opening_proof
+            // self.pi_proof
         )
     }
 }
@@ -76,12 +77,12 @@ pub fn convert_jolt_proof_to_circom(
         RV32ISubtables<Scalar>,
         PoseidonTranscript<Scalar, Scalar>,
     >,
-    jolt_preprocessing: JoltPreprocessing<
-        C,
-        Scalar,
-        HyperKZG<Bn254, PoseidonTranscript<Scalar, Scalar>>,
-        PoseidonTranscript<Scalar, Scalar>,
-    >,
+    // jolt_preprocessing: JoltPreprocessing<
+    //     C,
+    //     Scalar,
+    //     HyperKZG<Bn254, PoseidonTranscript<Scalar, Scalar>>,
+    //     PoseidonTranscript<Scalar, Scalar>,
+    // >,
 ) -> JoltproofCircom {
     let bytecode = convert_from_bytecode_proof_to_circom(proof.bytecode);
     JoltproofCircom {
@@ -92,6 +93,6 @@ pub fn convert_jolt_proof_to_circom(
         instruction_lookups: convert_from_inst_lookups_proof_to_circom(proof.instruction_lookups),
         r1cs: compute_uniform_spartan_to_circom(proof.r1cs),
         opening_proof: convert_reduced_opening_proof_to_circom(proof.opening_proof),
-        pi_proof: convert_piproof_to_circom(jolt_preprocessing),
+        // pi_proof: convert_piproof_to_circom(jolt_preprocessing),
     }
 }

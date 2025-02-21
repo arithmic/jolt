@@ -37,6 +37,7 @@ use ark_ff::{AdditiveGroup, PrimeField};
 use helper_commitms::{convert_from_jolt_stuff_to_circom, JoltStuffCircom};
 use joltproof::{convert_jolt_proof_to_circom, JoltproofCircom};
 use num_bigint::BigUint;
+use pi_proof::{convert_piproof_to_circom, PIProofCircom};
 use preprocess::{convert_joltpreprocessing_to_circom, JoltPreprocessingCircom};
 use transcript::convert_transcript_to_circom;
 
@@ -56,7 +57,7 @@ fn fib_e2e_hyperkzg() {
 
     let circom_linking_hyperkzg_proof = hyper_kzg_proof_to_hyper_kzg_circomfor_linking(&proof_from_rust.opening_proof.joint_opening_proof);
     let circom_linking_vk = convert_hyperkzg_verifier_key_to_hyperkzg_verifier_key_circom_for_linking(preprocessing.generators.1);
-    let (circom_preprocessing, circom_proof, circom_stuff) =
+    let (circom_preprocessing, circom_proof, circom_stuff, pi_proof) =
         convert_full_proof_to_circom(preprocessing, proof_from_rust, &commitments);
     let circom_linking_stuff = convert_from_jolt_stuff_to_circom_for_linking(&commitments);
 
@@ -68,12 +69,14 @@ fn fib_e2e_hyperkzg() {
         "transcript_init": {:?},
         "preprocessing": {:?},
         "proof": {:?},
-        "commitments": {:?}
+        "commitments": {:?},
+        "pi_proof": {:?}
     }}"#,
         convert_transcript_to_circom(transcipt_init),
         circom_preprocessing,
         circom_proof,
-        circom_stuff
+        circom_stuff,
+        pi_proof
     );
 
     let input_file_path = "input.json";
@@ -203,11 +206,12 @@ pub fn convert_full_proof_to_circom(
         PoseidonTranscript<Scalar, Scalar>,
     >,
     jolt_stuff: &JoltStuff<HyperKZGCommitment<Bn254>>,
-) -> (JoltPreprocessingCircom, JoltproofCircom, JoltStuffCircom) {
+) -> (JoltPreprocessingCircom, JoltproofCircom, JoltStuffCircom, PIProofCircom) {
     (
         convert_joltpreprocessing_to_circom(&jolt_preprocessing),
-        convert_jolt_proof_to_circom(jolt_proof, jolt_preprocessing),
+        convert_jolt_proof_to_circom(jolt_proof),
         convert_from_jolt_stuff_to_circom(jolt_stuff),
+        convert_piproof_to_circom(jolt_preprocessing)
     )
 }
 
