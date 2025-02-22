@@ -1878,6 +1878,27 @@ pub mod tests {
         SpartanProof::<Fr, PCS, ProofTranscript>::verify(&pcs_setup, &preprocessing, &proof)
             .unwrap();
 
+        let (
+            // pub_inp_len,
+            outer_num_rounds, 
+            inner_num_rounds, 
+            num_vars,
+            
+            // C, 
+            // NUM_MEMORIES, 
+            // NUM_INSTRUCTIONS, 
+            // MEMORY_OPS_PER_INSTRUCTION,
+            // chunks_x_size, 
+            // chunks_y_size, 
+            // NUM_CIRCUIT_FLAGS, 
+            // relevant_y_chunks_len,
+            // rounds_reduced_opening_proof
+        ) = (
+            proof.outer_sumcheck_proof.uni_polys.len(),
+            proof.inner_sumcheck_proof.uni_polys.len(),
+            preprocessing.inst.inst.get_num_vars(),
+        );
+
         let pi = preprocessing.inputs;
         let formatted_pub_inp: Vec<serde_json::Value> =
             pi.iter().map(|elem| elem.format()).collect();

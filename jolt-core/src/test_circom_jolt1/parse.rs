@@ -1202,17 +1202,18 @@ fn fib_e2e_hyperkzg() {
 
     // ) // 18
 
-    // let (
-    //     WORD_SIZE,
-    //     C,
-    //     chunks_y_size,
-    //     chunks_x_size,
-    //     NUM_CIRCUIT_FLAGS,
-    //     relevant_y_chunks_len,
-    //     M,
-    // ) = (
-
-    // ) // 20
+    let (
+        // WORD_SIZE,
+        c,
+        // chunks_y_size,
+        // chunks_x_size,
+        // NUM_CIRCUIT_FLAGS,
+        // relevant_y_chunks_len,
+        m,
+    ) = (
+        4,
+        (1 << 16),
+    ); // 20
 
     let (
         // REGISTER_COUNT,
