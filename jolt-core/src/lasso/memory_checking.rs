@@ -57,7 +57,7 @@ where
     /// Read/write/init/final multiset hashes for each memory
     pub multiset_hashes: MultisetHashes<F>,
     /// The read and write grand products for every memory has the same size,
-    /// so they can be batched.
+    /// so they can be batched. 
     pub read_write_grand_product: BatchedGrandProductProof<PCS, ProofTranscript>,
     /// The init and final grand products for every memory has the same size,
     /// so they can be batched.

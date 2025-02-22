@@ -1111,6 +1111,142 @@ fn fib_e2e_hyperkzg() {
 
     let (preprocessing, proof, commitments) = fib_e2e::<Fr, PCS, ProofTranscript>();
 
+    let (
+        // num_evals,
+        bytecode_words_size,
+        // input_size,
+        // output_size,
+        num_read_write_hashes_bytecode,
+        num_init_final_hashes_bytecode,
+        read_write_grand_product_layers_bytecode,
+        init_final_grand_product_layers_bytecode,
+        // max_rounds_bytecode
+    ) = (
+        preprocessing.read_write_memory.bytecode_words.len(),
+        proof.bytecode.multiset_hashes.read_hashes.len(),
+        proof.bytecode.multiset_hashes.init_hashes.len(),
+        proof.bytecode.read_write_grand_product.gkr_layers.len(),
+        proof.bytecode.init_final_grand_product.gkr_layers.len(),
+    ); // 12
+
+    let (
+        // max_rounds_read_write,
+        num_read_write_hashes_read_write_memory_checking,
+        num_init_final_hashes_read_write_memory_checking,
+        read_write_grand_product_layers_read_write_memory_checking,
+        init_final_grand_product_layers_read_write_memory_checking
+    ) = (
+        proof.read_write_memory.memory_checking_proof.multiset_hashes.read_hashes.len(),
+        proof.read_write_memory.memory_checking_proof.multiset_hashes.init_hashes.len(),
+        proof.read_write_memory.memory_checking_proof.read_write_grand_product.gkr_layers.len(),
+        proof.read_write_memory.memory_checking_proof.init_final_grand_product.gkr_layers.len(),
+    ); // 13
+
+    let (
+        // max_rounds_timestamp,
+        ts_validity_grand_product_layers_timestamp,
+        num_read_write_hashes_timestamp,
+        num_init_hashes_timestamp,
+        // MEMORY_OPS_PER_INSTRUCTION
+        max_rounds_outputsumcheck,
+    ) = (
+        proof
+            .read_write_memory
+            .timestamp_validity_proof
+            .batched_grand_product
+            .gkr_layers
+            .len(),
+        proof
+            .read_write_memory
+            .timestamp_validity_proof
+            .multiset_hashes
+            .read_hashes
+            .len(),
+        proof
+            .read_write_memory
+            .timestamp_validity_proof
+            .multiset_hashes
+            .init_hashes
+            .len(),
+        proof.read_write_memory.output_proof.num_rounds,
+    ); // 15
+
+    let (
+        // max_rounds_instruction_lookups,
+        // primary_sumcheck_degree_instruction_lookups,
+        primary_sumcheck_num_rounds_instruction_lookups,
+        num_memories,
+        // NUM_INSTRUCTIONS,
+        // NUM_SUBTABLES,
+        read_write_grand_product_layers_instruction_lookups,
+        init_final_grand_product_layers_instruction_lookups,
+    ) = (
+        proof.instruction_lookups.primary_sumcheck.num_rounds,
+        preprocessing.instruction_lookups.num_memories,
+        proof.instruction_lookups.memory_checking.read_write_grand_product.gkr_layers.len(),
+        proof.instruction_lookups.memory_checking.init_final_grand_product.gkr_layers.len(),
+    ); // 16
+
+    // let (
+    //     outer_num_rounds_uniform_spartan_proof,
+    //     inner_num_rounds_uniform_spartan_proof,
+    // ) = (
+
+    // ) // 17
+
+    // let (
+    //     rounds_reduced_opening_proof,
+    //     num_spartan_witness_evals,
+    //     num_sumcheck_claims,
+    // ) = (
+
+    // ) // 18
+
+    // let (
+    //     WORD_SIZE,
+    //     C,
+    //     chunks_y_size,
+    //     chunks_x_size,
+    //     NUM_CIRCUIT_FLAGS,
+    //     relevant_y_chunks_len,
+    //     M,
+    // ) = (
+
+    // ) // 20
+
+    let (
+        // REGISTER_COUNT,
+        // min_bytecode_address,
+        // RAM_START_ADDRESS
+        memory_layout_input_start,
+        memory_layout_output_start,
+        memory_layout_panic,
+        memory_layout_termination,
+        program_io_panic,
+    ) = (
+        preprocessing.memory_layout.input_start as usize,
+        preprocessing.memory_layout.output_start as usize,
+        preprocessing.memory_layout.panic as usize,
+        preprocessing.memory_layout.termination as usize,
+        // Not sure where to take program_io_panic from
+        preprocessing
+            .read_write_memory
+            .program_io
+            .clone()
+            .unwrap()
+            .panic as usize,
+    ); // 23
+
+    // let (
+    //     num_steps,
+    //     num_cons_total,
+    //     num_vars,
+    //     num_rows
+    // ) = (
+
+    // ) // 25
+
+
     let transcipt_init = <PoseidonTranscript<Fr, Fr> as Transcript>::new(b"Jolt transcript");
 
     let jolt1_input = json!(
