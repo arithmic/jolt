@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write};
+use std::{fs::File, io::Write, usize};
 
 use ark_bn254::Bn254;
 use ark_ec::AffineRepr;
@@ -9,17 +9,17 @@ use serde_json::json;
 use tracer::JoltDevice;
 
 use crate::{
-    jolt::vm::{
+    jolt::{subtable::JoltSubtableSet, vm::{
         bytecode::{BytecodeProof, BytecodeStuff},
         instruction_lookups::{
             InstructionLookupStuff, InstructionLookupsProof, PrimarySumcheck,
             PrimarySumcheckOpenings,
         },
         read_write_memory::{OutputSumcheckProof, ReadWriteMemoryProof, ReadWriteMemoryStuff},
-        rv32i_vm::{RV32ISubtables, C, M, RV32I},
+        rv32i_vm::{RV32ISubtables, C, M, RV32I, WORD_SIZE},
         timestamp_range_check::{TimestampRangeCheckStuff, TimestampValidityProof},
         JoltCommitments, JoltPreprocessing, JoltProof, JoltStuff,
-    },
+    }},
     lasso::memory_checking::{MultisetHashes, StructuredPolynomialData},
     poly::{
         commitment::{
@@ -362,7 +362,7 @@ impl ParseJolt for HyperKzgVerifierAdvice {
 
 const NUM_MEMORIES: usize = 54;
 const NUM_INSTRUCTIONS: usize = 26;
-const MEMORY_OPS_PER_INSTRUCTION: usize = 4;
+const memory_ops_per_instruction: usize = 4;
 static chunks_x_size: usize = 4;
 static chunks_y_size: usize = 4;
 const NUM_CIRCUIT_FLAGS: usize = 11;
@@ -379,7 +379,7 @@ impl LinkingStuff1 {
         let bytecode_stuff_size = 6 * 9;
         let read_write_memory_stuff_size = 6 * 13;
         let instruction_lookups_stuff_size = 6 * (C + 3 * NUM_MEMORIES + NUM_INSTRUCTIONS + 1);
-        let timestamp_range_check_stuff_size = 6 * (4 * MEMORY_OPS_PER_INSTRUCTION);
+        let timestamp_range_check_stuff_size = 6 * (4 * memory_ops_per_instruction);
         let aux_variable_stuff_size = 6 * (8 + relevant_y_chunks_len);
         let r1cs_stuff_size =
             6 * (chunks_x_size + chunks_y_size + NUM_CIRCUIT_FLAGS) + aux_variable_stuff_size;
@@ -1112,30 +1112,35 @@ fn fib_e2e_hyperkzg() {
     let (preprocessing, proof, commitments) = fib_e2e::<Fr, PCS, ProofTranscript>();
 
     let (
-        // num_evals,
+        num_evals,
         bytecode_words_size,
-        // input_size,
-        // output_size,
+        input_size,
+        output_size,
         num_read_write_hashes_bytecode,
         num_init_final_hashes_bytecode,
         read_write_grand_product_layers_bytecode,
         init_final_grand_product_layers_bytecode,
-        // max_rounds_bytecode
+        max_rounds_bytecode
     ) = (
+        preprocessing.bytecode.v_init_final[0].len(),
         preprocessing.read_write_memory.bytecode_words.len(),
+        proof.program_io.inputs.len(),
+        proof.program_io.outputs.len(),
         proof.bytecode.multiset_hashes.read_hashes.len(),
         proof.bytecode.multiset_hashes.init_hashes.len(),
         proof.bytecode.read_write_grand_product.gkr_layers.len(),
         proof.bytecode.init_final_grand_product.gkr_layers.len(),
+        proof.bytecode.read_write_grand_product.gkr_layers[proof.bytecode.read_write_grand_product.gkr_layers.len() - 1].proof.uni_polys.len()
     ); // 12
 
     let (
-        // max_rounds_read_write,
-        num_read_write_hashes_read_write_memory_checking,
-        num_init_final_hashes_read_write_memory_checking,
+        max_rounds_read_write,
+        num_read_write_hashes_read_write_memory_checking,  //incorrect
+        num_init_final_hashes_read_write_memory_checking, //incorrect
         read_write_grand_product_layers_read_write_memory_checking,
         init_final_grand_product_layers_read_write_memory_checking
     ) = (
+        proof.read_write_memory.memory_checking_proof.read_write_grand_product.gkr_layers[proof.read_write_memory.memory_checking_proof.read_write_grand_product.gkr_layers.len() - 1].proof.uni_polys.len(),
         proof.read_write_memory.memory_checking_proof.multiset_hashes.read_hashes.len(),
         proof.read_write_memory.memory_checking_proof.multiset_hashes.init_hashes.len(),
         proof.read_write_memory.memory_checking_proof.read_write_grand_product.gkr_layers.len(),
@@ -1143,13 +1148,14 @@ fn fib_e2e_hyperkzg() {
     ); // 13
 
     let (
-        // max_rounds_timestamp,
+        max_rounds_timestamp,
         ts_validity_grand_product_layers_timestamp,
         num_read_write_hashes_timestamp,
         num_init_hashes_timestamp,
-        // MEMORY_OPS_PER_INSTRUCTION
+        memory_ops_per_instructions,
         max_rounds_outputsumcheck,
     ) = (
+        proof.read_write_memory.timestamp_validity_proof.batched_grand_product.gkr_layers[proof.read_write_memory.timestamp_validity_proof.batched_grand_product.gkr_layers.len() - 1].proof.uni_polys.len(),
         proof
             .read_write_memory
             .timestamp_validity_proof
@@ -1168,12 +1174,13 @@ fn fib_e2e_hyperkzg() {
             .multiset_hashes
             .init_hashes
             .len(),
+        proof.read_write_memory.timestamp_validity_proof.exogenous_openings.len(),
         proof.read_write_memory.output_proof.num_rounds,
     ); // 15
 
     let (
-        // max_rounds_instruction_lookups,
-        // primary_sumcheck_degree_instruction_lookups,
+        max_rounds_instruction_lookups,
+        primary_sumcheck_degree_instruction_lookups,
         primary_sumcheck_num_rounds_instruction_lookups,
         num_memories,
         // NUM_INSTRUCTIONS,
@@ -1181,37 +1188,45 @@ fn fib_e2e_hyperkzg() {
         read_write_grand_product_layers_instruction_lookups,
         init_final_grand_product_layers_instruction_lookups,
     ) = (
+        proof.instruction_lookups.memory_checking.init_final_grand_product.gkr_layers[proof.instruction_lookups.memory_checking.init_final_grand_product.gkr_layers.len() - 1].proof.uni_polys.len(),
+        proof.instruction_lookups.primary_sumcheck.sumcheck_proof.uni_polys[0].coeffs.len() - 1,
         proof.instruction_lookups.primary_sumcheck.num_rounds,
         preprocessing.instruction_lookups.num_memories,
         proof.instruction_lookups.memory_checking.read_write_grand_product.gkr_layers.len(),
         proof.instruction_lookups.memory_checking.init_final_grand_product.gkr_layers.len(),
     ); // 16
 
-    // let (
-    //     outer_num_rounds_uniform_spartan_proof,
-    //     inner_num_rounds_uniform_spartan_proof,
-    // ) = (
+    let (
+        outer_num_rounds_uniform_spartan_proof,
+        inner_num_rounds_uniform_spartan_proof,
+    ) = (
+        proof.r1cs.outer_sumcheck_proof.uni_polys.len(),
+        proof.r1cs.inner_sumcheck_proof.uni_polys.len(),
 
-    // ) // 17
+    ); // 17
 
-    // let (
-    //     rounds_reduced_opening_proof,
-    //     num_spartan_witness_evals,
-    //     num_sumcheck_claims,
-    // ) = (
+    let (
+        rounds_reduced_opening_proof,
+        num_spartan_witness_evals,
+        num_sumcheck_claims,
+    ) = (
+        proof.opening_proof.sumcheck_proof.uni_polys.len(),
+        proof.r1cs.claimed_witness_evals.len(),
+        proof.opening_proof.sumcheck_claims.len()
 
-    // ) // 18
+    );
+     // 18
 
     let (
         // WORD_SIZE,
         c,
-        // chunks_y_size,
         // chunks_x_size,
+        // chunks_y_size,
         // NUM_CIRCUIT_FLAGS,
         // relevant_y_chunks_len,
         m,
     ) = (
-        4,
+        C,
         (1 << 16),
     ); // 20
 
@@ -1223,19 +1238,19 @@ fn fib_e2e_hyperkzg() {
         memory_layout_output_start,
         memory_layout_panic,
         memory_layout_termination,
-        program_io_panic,
+        // program_io_panic,
     ) = (
         preprocessing.memory_layout.input_start as usize,
         preprocessing.memory_layout.output_start as usize,
         preprocessing.memory_layout.panic as usize,
         preprocessing.memory_layout.termination as usize,
-        // Not sure where to take program_io_panic from
-        preprocessing
-            .read_write_memory
-            .program_io
-            .clone()
-            .unwrap()
-            .panic as usize,
+        // // Not sure where to take program_io_panic from
+        // preprocessing
+        //     .read_write_memory
+        //     .program_io
+        //     .clone()
+        //     .unwrap()
+        //     .panic as usize,
     ); // 23
 
     // let (
@@ -1244,29 +1259,84 @@ fn fib_e2e_hyperkzg() {
     //     num_vars,
     //     num_rows
     // ) = (
-
+    //     proof.r1cs.
     // ) // 25
 
+    let array = [num_evals, bytecode_words_size,         input_size,
+    output_size,
+    num_read_write_hashes_bytecode,
+    num_init_final_hashes_bytecode,
+    read_write_grand_product_layers_bytecode,
+    init_final_grand_product_layers_bytecode,
+    max_rounds_bytecode,
+    
+    max_rounds_read_write,
+    num_read_write_hashes_read_write_memory_checking,
+    num_init_final_hashes_read_write_memory_checking,
+    read_write_grand_product_layers_read_write_memory_checking,
+    init_final_grand_product_layers_read_write_memory_checking,
 
-    let transcipt_init = <PoseidonTranscript<Fr, Fr> as Transcript>::new(b"Jolt transcript");
 
-    let jolt1_input = json!(
-    {
-        "preprocessing": {
-            "v_init_final_hash": preprocessing.bytecode.v_init_final_hash.to_string(),
-            "bytecode_words_hash": preprocessing.read_write_memory.hash.to_string()
-        },
-        "proof": proof.format(),
-        "commitments":commitments.format_non_native(),
-        "pi_proof":preprocessing.format()
-    });
+    max_rounds_timestamp,
+    ts_validity_grand_product_layers_timestamp,
+    num_read_write_hashes_timestamp,
+    num_init_hashes_timestamp,
+    memory_ops_per_instructions,
+    max_rounds_outputsumcheck,
 
-    // Convert the JSON to a pretty-printed string
-    let pretty_json = serde_json::to_string_pretty(&jolt1_input).expect("Failed to serialize JSON");
+    max_rounds_instruction_lookups,
+    primary_sumcheck_degree_instruction_lookups,
+    primary_sumcheck_num_rounds_instruction_lookups,
+    num_memories,
+    NUM_INSTRUCTIONS,
+    // JoltSubtableSet::<Fr>::COUNT,
+    // NUM_SUBTABLES,
+    read_write_grand_product_layers_instruction_lookups,
+    init_final_grand_product_layers_instruction_lookups,
 
-    let input_file_path = "input.json";
-    let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
-    input_file
-        .write_all(pretty_json.as_bytes())
-        .expect("Failed to write to input.json");
+    outer_num_rounds_uniform_spartan_proof,
+    inner_num_rounds_uniform_spartan_proof,
+
+    rounds_reduced_opening_proof,
+    num_spartan_witness_evals,
+    num_sumcheck_claims,
+
+    WORD_SIZE,
+    c,
+    chunks_x_size,
+    chunks_y_size,
+    NUM_CIRCUIT_FLAGS,
+    relevant_y_chunks_len,
+    m,
+
+    memory_layout_input_start,
+    memory_layout_output_start,
+    memory_layout_panic,
+    memory_layout_termination,
+
+    ];
+
+    println!("array is {:?}", array);
+
+    // let transcipt_init = <PoseidonTranscript<Fr, Fr> as Transcript>::new(b"Jolt transcript");
+
+    // let jolt1_input = json!(
+    // {
+    //     "preprocessing": {
+    //         "v_init_final_hash": preprocessing.bytecode.v_init_final_hash.to_string(),
+    //         "bytecode_words_hash": preprocessing.read_write_memory.hash.to_string()
+    //     },
+    //     "proof": proof.format(),
+    //     "commitments":commitments.format_non_native(),
+    //     "pi_proof":preprocessing.format()
+    // });
+
+    // // Convert the JSON to a pretty-printed string
+    // let pretty_json = serde_json::to_string_pretty(&jolt1_input).expect("Failed to serialize JSON");
+
+    // let input_file_path = "input.json";
+    // let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+    // input_file
+    //     .write_all(pretty_json.as_bytes())
+    //     .expect("Failed to write to input.json");
 }

@@ -143,7 +143,7 @@ pub struct JoltStuff<T: CanonicalSerialize + CanonicalDeserialize + Sync> {
     pub(crate) read_write_memory: ReadWriteMemoryStuff<T>,
     pub(crate) instruction_lookups: InstructionLookupStuff<T>,
     pub(crate) timestamp_range_check: TimestampRangeCheckStuff<T>,
-    pub(crate) r1cs: R1CSStuff<T>,
+    pub r1cs: R1CSStuff<T>,
 }
 
 impl<T: CanonicalSerialize + CanonicalDeserialize + Sync> StructuredPolynomialData<T>

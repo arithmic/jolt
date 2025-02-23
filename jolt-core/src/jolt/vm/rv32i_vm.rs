@@ -104,7 +104,7 @@ macro_rules! subtable_enum {
     };
 }
 
-const WORD_SIZE: usize = 32;
+pub const WORD_SIZE: usize = 32;
 
 instruction_set!(
   RV32I,
