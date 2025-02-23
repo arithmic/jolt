@@ -46,7 +46,10 @@ mod test {
             spartan_hkzg::{spartan_hkzg, LinkingStuff1},
             Parse,
         },
-        poly::commitment::{commitment_scheme::CommitmentScheme, hyperkzg::HyperKZG},
+        poly::commitment::{
+            commitment_scheme::CommitmentScheme,
+            hyperkzg::{self, HyperKZG},
+        },
         r1cs::inputs::JoltR1CSInputs,
         utils::{poseidon_transcript::PoseidonTranscript, transcript::Transcript},
     };
@@ -71,26 +74,26 @@ mod test {
         //     verification_result.err()
         // );
 
-        let jolt1_input = json!(
-        {
-            "preprocessing": {
-                "v_init_final_hash": jolt_preprocessing.bytecode.v_init_final_hash.to_string(),
-                "bytecode_words_hash": jolt_preprocessing.read_write_memory.hash.to_string()
-            },
-            "proof": jolt_proof.format(),
-            "commitments": jolt_commitments.format_non_native(),
-            "pi_proof": jolt_preprocessing.format()
-        });
+        // let jolt1_input = json!(
+        // {
+        //     "preprocessing": {
+        //         "v_init_final_hash": jolt_preprocessing.bytecode.v_init_final_hash.to_string(),
+        //         "bytecode_words_hash": jolt_preprocessing.read_write_memory.hash.to_string()
+        //     },
+        //     "proof": jolt_proof.format(),
+        //     "commitments": jolt_commitments.format_non_native(),
+        //     "pi_proof": jolt_preprocessing.format()
+        // });
 
-        // Convert the JSON to a pretty-printed string
-        let pretty_json =
-            serde_json::to_string_pretty(&jolt1_input).expect("Failed to serialize JSON");
+        // // Convert the JSON to a pretty-printed string
+        // let pretty_json =
+        //     serde_json::to_string_pretty(&jolt1_input).expect("Failed to serialize JSON");
 
-        let input_file_path = "jolt1_input.json";
-        let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
-        input_file
-            .write_all(pretty_json.as_bytes())
-            .expect("Failed to write to input.json");
+        // let input_file_path = "jolt1_input.json";
+        // let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+        // input_file
+        //     .write_all(pretty_json.as_bytes())
+        //     .expect("Failed to write to input.json");
 
         //TODO(Ashish):- Add code to generate witness
 
@@ -115,29 +118,48 @@ mod test {
             z.push(val);
         }
         let linking_stuff = LinkingStuff1::new(jolt_commitments, z);
-        let jolt_vk = jolt_preprocessing.generators.1.format();
-        let jolt2_input = json!(
-        {
-            "linkingstuff": linking_stuff.format(),
-            "vk": jolt_vk,
-            "pi": jolt_proof.opening_proof.joint_opening_proof.format()
-        });
 
-        let input_file_path = "jolt2_input.json";
-        let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
-        let pretty_json =
-            serde_json::to_string_pretty(&jolt2_input).expect("Failed to serialize JSON");
-        input_file
-            .write_all(pretty_json.as_bytes())
-            .expect("Failed to write to input.json");
-
-        let linking_stuff = linking_stuff.format_non_native();
         let jolt_pi = json!({
             "v_init_final_hash": jolt_preprocessing.bytecode.v_init_final_hash.format_non_native(),
                 "bytecode_words_hash": jolt_preprocessing.read_write_memory.hash.format_non_native()
         });
 
-        spartan_hkzg(linking_stuff, jolt_pi, jolt2_input, jolt_vk);
+        let linking_stuff_1 = linking_stuff.format_non_native();
+        let linking_stuff_2 = linking_stuff.format();
+
+        let vk_jolt_2 = jolt_preprocessing.generators.1.format();
+        let hyperkzg_proof = jolt_proof.opening_proof.joint_opening_proof.format();
+        println!(
+            "num_rounds = {}",
+            jolt_proof.opening_proof.joint_opening_proof.com.len() + 1
+        );
+
+        spartan_hkzg(
+            jolt_pi,
+            linking_stuff_1,
+            linking_stuff_2,
+            vk_jolt_2,
+            hyperkzg_proof,
+        );
+
+        // let jolt2_input = json!(
+        // {
+        //     "linkingstuff": linking_stuff.format(),
+        //     "vk": jolt_vk,
+        //     "pi": jolt_proof.opening_proof.joint_opening_proof.format()
+        // });
+
+        // let input_file_path = "jolt2_input.json";
+        // let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+        // let pretty_json =
+        //     serde_json::to_string_pretty(&jolt2_input).expect("Failed to serialize JSON");
+        // input_file
+        //     .write_all(pretty_json.as_bytes())
+        //     .expect("Failed to write to input.json");
+
+        // let linking_stuff = linking_stuff.format_non_native();
+
+        // spartan_hkzg(linking_stuff, jolt_pi, jolt2_input, jolt_vk);
     }
 
     fn fib_e2e<F, PCS, ProofTranscript>() -> (

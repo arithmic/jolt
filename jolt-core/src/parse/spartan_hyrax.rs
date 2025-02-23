@@ -148,6 +148,22 @@ pub(crate) fn spartan_hyrax(
 
     let to_eval = PostponedEval::new(z, POSTPONED_POINT_LEN);
 
+    let public_io = json!( {
+        "jolt_pi": jolt_pi,
+        "linking_stuff": linking_stuff,
+        "vk1": jolt_vk,
+        "vk2": hyperkzg_vk,
+    });
+
+    // Convert the JSON to a pretty-printed string
+    let pretty_json = serde_json::to_string_pretty(&public_io).expect("Failed to serialize JSON");
+
+    let input_file_path = "public_io.json";
+    let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+    input_file
+        .write_all(pretty_json.as_bytes())
+        .expect("Failed to write to input.json");
+
     let input_json = json!({
         "public_io": {
                 "jolt_pi": jolt_pi,

@@ -7,7 +7,7 @@ use crate::{
     parse::spartan_hyrax::spartan_hyrax,
     poly::commitment::{
         commitment_scheme::CommitmentScheme,
-        hyperkzg::{HyperKZG, HyperKZGCommitment},
+        hyperkzg::{self, HyperKZG, HyperKZGCommitment},
     },
     spartan::spartan_memory_checking::{SpartanPreprocessing, SpartanProof},
     subprotocols::sumcheck::SumcheckInstanceProof,
@@ -184,11 +184,13 @@ impl Parse for LinkingStuff1 {
     }
 }
 
+// TODO: Rename to test_combined_r1cs.
 pub(crate) fn spartan_hkzg(
-    linking_stuff: serde_json::Value,
     jolt_pi: serde_json::Value,
-    jolt2_input: serde_json::Value,
-    jolt_vk: serde_json::Value,
+    linking_stuff_1: serde_json::Value,
+    linking_stuff_2: serde_json::Value,
+    vk_jolt_2: serde_json::Value,
+    hyperkzg_proof: serde_json::Value,
 ) {
     type Fr = ark_bn254::Fr;
     type ProofTranscript = PoseidonTranscript<ark_bn254::Fr, ark_bn254::Fq>;
@@ -202,7 +204,7 @@ pub(crate) fn spartan_hkzg(
                 "inner_sumcheck_proof": self.inner_sumcheck_proof.format_non_native(),
                 "outer_sumcheck_claims": [self.outer_sumcheck_claims.0.format_non_native(),self.outer_sumcheck_claims.1.format_non_native(),self.outer_sumcheck_claims.2.format_non_native()],
                 "inner_sumcheck_claims": [self.inner_sumcheck_claims.0.format_non_native(),self.inner_sumcheck_claims.1.format_non_native(),self.inner_sumcheck_claims.2.format_non_native(),self.inner_sumcheck_claims.3.format_non_native()],
-                "pi_eval": self.pi_eval.format_non_native(),
+                "pub_io_eval": self.pi_eval.format_non_native(),
                 "joint_opening_proof": self.pcs_proof.format()
             })
         }
@@ -239,28 +241,32 @@ pub(crate) fn spartan_hkzg(
     let pcs_setup = PCS::setup(&commitment_shapes);
     let proof = SpartanProof::<Fr, PCS, ProofTranscript>::prove(&pcs_setup, &preprocessing);
     SpartanProof::<Fr, PCS, ProofTranscript>::verify(&pcs_setup, &preprocessing, &proof).unwrap();
-    let hyperkzg_vk = pcs_setup.1.format();
 
-    let spartan1_input = json!({
-        "jolt_pi": jolt_pi,
-        "linking_stuff": linking_stuff,
-        "vk": hyperkzg_vk,
-        "proof": proof.format(),
-        "w_commitment": proof.witness_commit.format(),
-    });
-
-    let input_file_path = "spartan1_input.json";
-    let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
-    let pretty_json =
-        serde_json::to_string_pretty(&spartan1_input).expect("Failed to serialize JSON");
-    input_file
-        .write_all(pretty_json.as_bytes())
-        .expect("Failed to write to input.json");
+    let vk_spartan_1 = pcs_setup.1.format();
 
     let combine_input = json!({
-        "jolt2": jolt2_input,
-        "spartan1": spartan1_input
+        "jolt_pi": jolt_pi,
+        "linking_stuff_1": linking_stuff_1,
+        "vk_spartan_1": pcs_setup.1.format(),
+        "spartan_proof": proof.format(),
+        "w_commitment": proof.witness_commit.format(),
+        "linking_stuff_2": linking_stuff_2,
+        "vk_jolt_2": vk_jolt_2,
+        "hyperkzg_proof": hyperkzg_proof
     });
+
+    // let input_file_path = "spartan1_input.json";
+    // let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+    // let pretty_json =
+    //     serde_json::to_string_pretty(&combine_input).expect("Failed to serialize JSON");
+    // input_file
+    //     .write_all(pretty_json.as_bytes())
+    //     .expect("Failed to write to input.json");
+
+    // let combine_input = json!({
+    //     "jolt2": jolt2_input,
+    //     "spartan1": spartan1_input
+    // });
 
     let input_file_path = "combine_input.json";
     let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
@@ -270,5 +276,5 @@ pub(crate) fn spartan_hkzg(
         .write_all(pretty_json.as_bytes())
         .expect("Failed to write to input.json");
 
-    spartan_hyrax(linking_stuff, jolt_pi, hyperkzg_vk, jolt_vk);
+    spartan_hyrax(linking_stuff_1, jolt_pi, vk_spartan_1, vk_jolt_2);
 }

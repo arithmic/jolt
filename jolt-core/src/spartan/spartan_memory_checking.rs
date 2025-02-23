@@ -684,7 +684,9 @@ where
     #[tracing::instrument(skip_all, name = "SpartanProof::prove")]
     pub fn prove<'a>(pcs_setup: &PCS::Setup, preprocessing: &SpartanPreprocessing<F>) -> Self {
         let protocol_name = Self::protocol_name();
-        let mut transcript = ProofTranscript::new(protocol_name);
+        let mut transcript = ProofTranscript::new(&[0]);
+        let scalar: F = transcript.challenge_scalar();
+        println!("Scalar in rust is = {}", scalar);
 
         let num_inputs = preprocessing.inputs.len();
         let num_vars = preprocessing.vars.len();
@@ -833,7 +835,9 @@ where
     ) -> Result<(), ProofVerifyError> {
         let num_vars = preprocessing.vars.len();
         let protocol_name = Self::protocol_name();
-        let mut transcript = ProofTranscript::new(protocol_name);
+        let mut transcript = ProofTranscript::new(&[0]);
+        let scalar: F = transcript.challenge_scalar();
+        println!("Scalar in rust is = {}", scalar);
 
         proof.witness_commit.append_to_transcript(&mut transcript);
 
