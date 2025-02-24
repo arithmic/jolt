@@ -190,7 +190,9 @@ pub(crate) fn spartan_hkzg(
     linking_stuff_1: serde_json::Value,
     linking_stuff_2: serde_json::Value,
     vk_jolt_2: serde_json::Value,
+    vk_jolt_2_nn: serde_json::Value,
     hyperkzg_proof: serde_json::Value,
+    pub_io_len: usize,
 ) {
     type Fr = ark_bn254::Fr;
     type ProofTranscript = PoseidonTranscript<ark_bn254::Fr, ark_bn254::Fq>;
@@ -232,15 +234,30 @@ pub(crate) fn spartan_hkzg(
     //TODO(Ashish):- Add code to generate jolt1_constraints
 
     let constraint_path = Some("src/spartan/jolt1_constraints.json");
-    let witness_path = Some("src/spartan/witness.json");
+    let witness_path = Some("src/spartan/jolt1_witness.json");
 
-    let preprocessing = SpartanPreprocessing::<Fr>::preprocess(constraint_path, witness_path, 9);
+    let preprocessing =
+        SpartanPreprocessing::<Fr>::preprocess(constraint_path, witness_path, pub_io_len - 1);
     let commitment_shapes = SpartanProof::<Fr, PCS, ProofTranscript>::commitment_shapes(
         preprocessing.inputs.len() + preprocessing.vars.len(),
     );
     let pcs_setup = PCS::setup(&commitment_shapes);
     let proof = SpartanProof::<Fr, PCS, ProofTranscript>::prove(&pcs_setup, &preprocessing);
     SpartanProof::<Fr, PCS, ProofTranscript>::verify(&pcs_setup, &preprocessing, &proof).unwrap();
+
+    println!("For Spartan 1,");
+    println!(
+        "Outer sum check rounds = {}",
+        proof.outer_sumcheck_proof.uni_polys.len()
+    );
+    println!(
+        "Inner sum check rounds = {}",
+        proof.inner_sumcheck_proof.uni_polys.len()
+    );
+    println!(
+        "Num vars = {}",
+        proof.inner_sumcheck_proof.uni_polys.len() - 1
+    );
 
     let vk_spartan_1 = pcs_setup.1.format();
 
@@ -255,19 +272,6 @@ pub(crate) fn spartan_hkzg(
         "hyperkzg_proof": hyperkzg_proof
     });
 
-    // let input_file_path = "spartan1_input.json";
-    // let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
-    // let pretty_json =
-    //     serde_json::to_string_pretty(&combine_input).expect("Failed to serialize JSON");
-    // input_file
-    //     .write_all(pretty_json.as_bytes())
-    //     .expect("Failed to write to input.json");
-
-    // let combine_input = json!({
-    //     "jolt2": jolt2_input,
-    //     "spartan1": spartan1_input
-    // });
-
     let input_file_path = "combine_input.json";
     let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
     let pretty_json =
@@ -276,5 +280,46 @@ pub(crate) fn spartan_hkzg(
         .write_all(pretty_json.as_bytes())
         .expect("Failed to write to input.json");
 
-    spartan_hyrax(linking_stuff_1, jolt_pi, vk_spartan_1, vk_jolt_2);
+    let bytecode_stuff_size = 6 * 9;
+    let read_write_memory_stuff_size = 6 * 13;
+    let instruction_lookups_stuff_size = 6 * (C + 3 * NUM_MEMORIES + NUM_INSTRUCTIONS + 1);
+    let timestamp_range_check_stuff_size = 6 * (4 * MEMORY_OPS_PER_INSTRUCTION);
+    let aux_variable_stuff_size = 6 * (8 + RELEVANT_Y_CHUNKS_LEN);
+    let r1cs_stuff_size =
+        6 * (CHUNKS_X_SIZE + CHUNKS_Y_SIZE + NUM_CIRCUIT_FLAGS) + aux_variable_stuff_size;
+    let jolt_stuff_size = bytecode_stuff_size
+        + read_write_memory_stuff_size
+        + instruction_lookups_stuff_size
+        + timestamp_range_check_stuff_size
+        + r1cs_stuff_size;
+
+    let inner_num_rounds = proof.inner_sumcheck_proof.uni_polys.len();
+
+    // let inner_num_rounds = 23;
+
+    // Length of public IO of Combined R1CS including the 1 at index 0.
+    // 1 + postponed eval size (point size = (inner num rounds - 1) * 3, eval size  = 3) +
+    // linking stuff (nn) size (jolt stuff size + 15 * 3) + jolt pi size (2 * 3)
+    // + 2 hyper kzg verifier keys (2 + 4 + 4) + postponed eval size ().
+
+    let pub_io_len_combine_r1cs =
+        1 + (inner_num_rounds - 1) * 3 + 3 + jolt_stuff_size + 15 * 3 + 2 * 3 + 10 + 10;
+    let postponed_point_len = inner_num_rounds - 1;
+
+    let input_file_path = "vk_spartan_1.json";
+    let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+    let pretty_json = serde_json::to_string_pretty(&pcs_setup.1.format_non_native())
+        .expect("Failed to serialize JSON");
+    input_file
+        .write_all(pretty_json.as_bytes())
+        .expect("Failed to write to hyperkzg_proof.json");
+
+    spartan_hyrax(
+        linking_stuff_1,
+        jolt_pi,
+        pcs_setup.1.format_non_native(),
+        vk_jolt_2_nn,
+        pub_io_len_combine_r1cs,
+        postponed_point_len,
+    );
 }

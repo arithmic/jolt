@@ -22,7 +22,7 @@ pub(crate) const NUM_CIRCUIT_FLAGS: usize = 11;
 pub(crate) static RELEVANT_Y_CHUNKS_LEN: usize = 4;
 
 // TODO: This is inner_sumcheck_rounds - 1. Fix this dynamically?
-pub(crate) static POSTPONED_POINT_LEN: usize = 10;
+// pub(crate) static POSTPONED_POINT_LEN: usize = 10;
 
 #[cfg(test)]
 mod test {
@@ -35,6 +35,10 @@ mod test {
     use num_bigint::BigUint;
     use serde_json::json;
 
+    use super::{
+        CHUNKS_X_SIZE, CHUNKS_Y_SIZE, MEMORY_OPS_PER_INSTRUCTION, NUM_CIRCUIT_FLAGS,
+        NUM_INSTRUCTIONS, NUM_MEMORIES, RELEVANT_Y_CHUNKS_LEN,
+    };
     use crate::{
         field::JoltField,
         host,
@@ -102,10 +106,10 @@ mod test {
         //2.Generate witness.json from circom --> CP witness.json here
         //3.Uncomment the below part --> generate jolt2_input --> CP to CircomJolt
         //4.Test Jolt2
-        //5. After 1st iteration repeate 3 to 4.zzzz
+        //5. After 1st iteration repeate 3 to 4.
 
         // Read the witness.json file
-        let witness_file_path = "src/spartan/witness.json";
+        let witness_file_path = "src/spartan/jolt1_witness.json";
         let witness_file = File::open(witness_file_path).expect("Failed to open witness.json");
         let witness: Vec<String> = serde_json::from_reader(witness_file).unwrap();
 
@@ -128,18 +132,85 @@ mod test {
         let linking_stuff_2 = linking_stuff.format();
 
         let vk_jolt_2 = jolt_preprocessing.generators.1.format();
+        let vk_jolt_2_nn = jolt_preprocessing.generators.1.format_non_native();
         let hyperkzg_proof = jolt_proof.opening_proof.joint_opening_proof.format();
         println!(
             "num_rounds = {}",
             jolt_proof.opening_proof.joint_opening_proof.com.len() + 1
         );
 
+        let bytecode_stuff_size = 6 * 9;
+        let read_write_memory_stuff_size = 6 * 13;
+        let instruction_lookups_stuff_size = 6 * (C + 3 * NUM_MEMORIES + NUM_INSTRUCTIONS + 1);
+        let timestamp_range_check_stuff_size = 6 * (4 * MEMORY_OPS_PER_INSTRUCTION);
+        let aux_variable_stuff_size = 6 * (8 + RELEVANT_Y_CHUNKS_LEN);
+        let r1cs_stuff_size =
+            6 * (CHUNKS_X_SIZE + CHUNKS_Y_SIZE + NUM_CIRCUIT_FLAGS) + aux_variable_stuff_size;
+        let jolt_stuff_size = bytecode_stuff_size
+            + read_write_memory_stuff_size
+            + instruction_lookups_stuff_size
+            + timestamp_range_check_stuff_size
+            + r1cs_stuff_size;
+
+        // Length of public IO of V_{Jolt, 1} including the 1 at index 0.
+        // 1 + linking stuff size (jolt stuff size + 15) + jolt pi size (2).
+        let mut pub_io_len = 1 + jolt_stuff_size + 15 + 2;
+
+        let input_file_path = "jolt_pi.json";
+        let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+        let pretty_json = serde_json::to_string_pretty(&jolt_pi).expect("Failed to serialize JSON");
+        input_file
+            .write_all(pretty_json.as_bytes())
+            .expect("Failed to write to jolt_pi.json");
+
+        let input_file_path = "linking_stuff_1.json";
+        let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+        let pretty_json =
+            serde_json::to_string_pretty(&linking_stuff_1).expect("Failed to serialize JSON");
+        input_file
+            .write_all(pretty_json.as_bytes())
+            .expect("Failed to write to linking_stuff_1.json");
+
+        let input_file_path = "linking_stuff_2.json";
+        let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+        let pretty_json =
+            serde_json::to_string_pretty(&linking_stuff_2).expect("Failed to serialize JSON");
+        input_file
+            .write_all(pretty_json.as_bytes())
+            .expect("Failed to write to linking_stuff_2.json");
+
+        let input_file_path = "vk_jolt_2.json";
+        let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+        let pretty_json =
+            serde_json::to_string_pretty(&vk_jolt_2).expect("Failed to serialize JSON");
+        input_file
+            .write_all(pretty_json.as_bytes())
+            .expect("Failed to write to vk_jolt_2.json");
+
+        let input_file_path = "vk_jolt_2_nn.json";
+        let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+        let pretty_json =
+            serde_json::to_string_pretty(&vk_jolt_2_nn).expect("Failed to serialize JSON");
+        input_file
+            .write_all(pretty_json.as_bytes())
+            .expect("Failed to write to vk_jolt_2_nn.json");
+
+        let input_file_path = "hyperkzg_proof.json";
+        let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+        let pretty_json =
+            serde_json::to_string_pretty(&hyperkzg_proof).expect("Failed to serialize JSON");
+        input_file
+            .write_all(pretty_json.as_bytes())
+            .expect("Failed to write to hyperkzg_proof.json");
+
         spartan_hkzg(
             jolt_pi,
             linking_stuff_1,
             linking_stuff_2,
             vk_jolt_2,
+            vk_jolt_2_nn,
             hyperkzg_proof,
+            pub_io_len,
         );
 
         // let jolt2_input = json!(

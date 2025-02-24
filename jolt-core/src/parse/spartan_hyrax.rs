@@ -1,6 +1,3 @@
-use std::fs::File;
-use std::io::Write;
-
 use super::*;
 use crate::field::JoltField;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
@@ -8,9 +5,12 @@ use crate::poly::unipoly::UniPoly;
 use crate::spartan::spartan_memory_checking::{SpartanPreprocessing, SpartanProof};
 use crate::subprotocols::sumcheck::SumcheckInstanceProof;
 use crate::{poly::commitment::hyrax::HyraxScheme, utils::poseidon_transcript::PoseidonTranscript};
-use ark_ff::{AdditiveGroup, BigInt, Field, PrimeField};
+use ark_ff::{AdditiveGroup, BigInt, BigInteger, PrimeField};
+use itertools::Itertools;
 use num_bigint::BigUint;
 use serde_json::json;
+use std::fs::File;
+use std::io::Write;
 
 type Fr = ark_grumpkin::Fr;
 type Fq = ark_grumpkin::Fq;
@@ -30,18 +30,20 @@ pub fn convert_to_3_limbs(r: Fr) -> [Fq; 3] {
     limbs
 }
 
-//TODO:- Fix
 pub fn combine_limbs(limbs: Vec<Fr>) -> Fq {
     assert_eq!(limbs.len(), 3);
-    let mut limbs_big_int: [BigInt<4>; 3] = [BigInt::<4>::default(); 3];
-    limbs_big_int[0] = limbs[0].into_bigint();
-    limbs_big_int[1] = limbs[1].into_bigint();
-    limbs_big_int[2] = limbs[2].into_bigint();
-    Fq::ONE
-    // Fq::from(limbs_big_int[0])
-    //     + Fq::from(limbs_big_int[1]) * Fq::from((1 as u128) << 125)
-    //     + Fq::from(limbs_big_int[2]) * Fq::from((1 as u128) << 250)
+    let bits = limbs[0]
+        .into_bigint()
+        .to_bits_le()
+        .iter()
+        .take(125)
+        .chain(limbs[1].into_bigint().to_bits_le().iter().take(125))
+        .chain(limbs[2].into_bigint().to_bits_le().iter().take(4))
+        .cloned()
+        .collect_vec();
+    Fq::from(BigInt::from_bits_le(&bits))
 }
+
 
 impl Parse for Fr {
     fn format(&self) -> serde_json::Value {
@@ -71,10 +73,14 @@ impl PostponedEval {
 }
 impl Parse for PostponedEval {
     fn format(&self) -> serde_json::Value {
-        let point: Vec<serde_json::Value> = self.point.iter().map(|elem| elem.format()).collect();
+        let point: Vec<serde_json::Value> = self
+            .point
+            .iter()
+            .map(|elem| elem.format_non_native())
+            .collect();
         json!({
             "point": point,
-            "y": self.eval.format()
+            "eval": self.eval.format_non_native()
         })
     }
 }
@@ -114,13 +120,16 @@ impl Parse for UniPoly<Fr> {
 pub(crate) fn spartan_hyrax(
     linking_stuff: serde_json::Value,
     jolt_pi: serde_json::Value,
-    hyperkzg_vk: serde_json::Value,
-    jolt_vk: serde_json::Value,
+    vk_spartan_1: serde_json::Value,
+    vk_jolt_2: serde_json::Value,
+    pub_io_len: usize,
+    postponed_point_len: usize,
 ) {
-    let constraint_path = Some("src/spartan/verifier_constraints.json");
-    let witness_path = Some("src/spartan/witness.json");
+    let constraint_path = Some("src/spartan/combine_constraints.json");
+    let witness_path = Some("src/spartan/combine_witness.json");
 
-    let preprocessing = SpartanPreprocessing::<Fr>::preprocess(None, None, 9);
+    let preprocessing =
+        SpartanPreprocessing::<Fr>::preprocess(constraint_path, witness_path, pub_io_len);
     let commitment_shapes = SpartanProof::<Fr, PCS, ProofTranscript>::commitment_shapes(
         preprocessing.inputs.len() + preprocessing.vars.len(),
     );
@@ -130,6 +139,21 @@ pub(crate) fn spartan_hyrax(
         SpartanProof::<Fr, PCS, ProofTranscript>::prove(&pcs_setup, &preprocessing);
 
     SpartanProof::<Fr, PCS, ProofTranscript>::verify(&pcs_setup, &preprocessing, &proof).unwrap();
+
+    println!("For Spartan 2,");
+    println!(
+        "Outer sum check rounds = {}",
+        proof.outer_sumcheck_proof.uni_polys.len()
+    );
+    println!(
+        "Inner sum check rounds = {}",
+        proof.inner_sumcheck_proof.uni_polys.len()
+    );
+    println!(
+        "Num vars = {}",
+        proof.inner_sumcheck_proof.uni_polys.len() - 1
+    );
+    println!("Postponed point len = {}", postponed_point_len);
 
     // TODO: Read witness.json file and put the first half into witness.
 
@@ -146,30 +170,30 @@ pub(crate) fn spartan_hyrax(
         z.push(val);
     }
 
-    let to_eval = PostponedEval::new(z, POSTPONED_POINT_LEN);
+    let to_eval = PostponedEval::new(z, postponed_point_len);
 
-    let public_io = json!( {
-        "jolt_pi": jolt_pi,
-        "linking_stuff": linking_stuff,
-        "vk1": jolt_vk,
-        "vk2": hyperkzg_vk,
-    });
+    // let public_io = json!( {
+    //     "jolt_pi": jolt_pi,
+    //     "linking_stuff": linking_stuff,
+    //     "vk1": jolt_vk,
+    //     "vk2": hyperkzg_vk,
+    // });
 
-    // Convert the JSON to a pretty-printed string
-    let pretty_json = serde_json::to_string_pretty(&public_io).expect("Failed to serialize JSON");
+    // // Convert the JSON to a pretty-printed string
+    // let pretty_json = serde_json::to_string_pretty(&public_io).expect("Failed to serialize JSON");
 
-    let input_file_path = "public_io.json";
-    let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
-    input_file
-        .write_all(pretty_json.as_bytes())
-        .expect("Failed to write to input.json");
+    // let input_file_path = "public_io.json";
+    // let mut input_file = File::create(input_file_path).expect("Failed to create input.json");
+    // input_file
+    //     .write_all(pretty_json.as_bytes())
+    //     .expect("Failed to write to input.json");
 
     let input_json = json!({
-        "public_io": {
+        "pub_io": {
                 "jolt_pi": jolt_pi,
                 "linking_stuff": linking_stuff,
-                "vk1": jolt_vk,
-                "vk2": hyperkzg_vk,
+                "vk_spartan_1": vk_spartan_1,
+                "vk_jolt_2": vk_jolt_2,
             },
         "to_eval": to_eval.format(),
         "setup": pcs_setup.format_setup(proof.pcs_proof.vector_matrix_product.len()),
