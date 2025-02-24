@@ -681,7 +681,7 @@ where
     Subtables: JoltSubtableSet<F>,
     ProofTranscript: Transcript,
 {
-    const NUM_SUBTABLES: usize = Subtables::COUNT;
+    pub const NUM_SUBTABLES: usize = Subtables::COUNT;
     const NUM_INSTRUCTIONS: usize = InstructionSet::COUNT;
 
     #[tracing::instrument(skip_all, name = "InstructionLookups::prove")]

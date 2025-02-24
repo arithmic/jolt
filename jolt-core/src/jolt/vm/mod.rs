@@ -462,6 +462,9 @@ where
             ProofTranscript,
         >::setup(&r1cs_builder, padded_trace_length);
 
+        // we can remove num_vars, num_rows if these are same for all programs
+        write_fields_to_file(spartan_key.num_steps, spartan_key.num_cons_total,spartan_key.uniform_r1cs.num_vars, spartan_key.uniform_r1cs.num_rows, "args.txt");
+
         let r1cs_polynomials = R1CSPolynomials::new::<
             C,
             M,
@@ -603,6 +606,15 @@ where
             &r1cs_builder,
             padded_trace_length,
         );
+
+        println!("num steps is {}", spartan_key.num_steps);
+        println!("num const total is {}", spartan_key.num_cons_total);
+        println!("num vars is {}", spartan_key.uniform_r1cs.num_vars);
+        println!("num rows is {}", spartan_key.uniform_r1cs.num_rows);
+        println!("max output size is {}", preprocessing.memory_layout.max_output_size);
+        println!("max input size is {}", preprocessing.memory_layout.max_input_size);
+
+
         // transcript.append_scalar(&spartan_key.vk_digest);
 
         let r1cs_proof = R1CSProof {
@@ -783,3 +795,13 @@ pub mod instruction_lookups;
 pub mod read_write_memory;
 pub mod rv32i_vm;
 pub mod timestamp_range_check;
+use std::{
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+};
+pub fn write_fields_to_file(num_steps: usize, num_const_total: usize, num_vars: usize, num_rows: usize, file_path: &str) -> std::io::Result<()> {
+    let mut file = File::create(file_path)?;
+    write!(file, "{}, {}, {}, {}", num_steps, num_const_total, num_vars, num_rows)?;
+    Ok(())
+}
