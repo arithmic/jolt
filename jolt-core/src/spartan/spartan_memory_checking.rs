@@ -1887,6 +1887,7 @@ pub mod tests {
 
         println!("spartan args are {:?}", spartan_args);
 
+        println!("While running it for Sparatn 1 we get postponed point len for Spartan 2 = [(inner rounds for spartan 1) - 1] is {}", spartan_args[2] - 1);
         // let pi = preprocessing.inputs;
         // let formatted_pub_inp: Vec<serde_json::Value> =
         //     pi.iter().map(|elem| elem.format()).collect();

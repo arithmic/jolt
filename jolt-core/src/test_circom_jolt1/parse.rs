@@ -1205,6 +1205,26 @@ fn fib_e2e_hyperkzg() {
     verify_args.push(preprocessing.memory_layout.max_input_size.try_into().unwrap());
 
     println!("array is {:?}", verify_args);
+
+    let rounds_reduced_opening_proof = proof.opening_proof.joint_opening_proof.com.len() + 1;
+    println!("rounds_reduced_opening_proof for JOLT 2 is {}", rounds_reduced_opening_proof);
+
+    let extra_args_for_spartan = [
+        C,
+        preprocessing.instruction_lookups.num_memories,
+        NUM_INSTRUCTIONS,
+        proof.read_write_memory.timestamp_validity_proof.exogenous_openings.len(),
+        chunks_x_size,
+        chunks_y_size,
+        NUM_CIRCUIT_FLAGS,
+        relevant_y_chunks_len,
+        rounds_reduced_opening_proof
+    ];
+
+    println!("last 9 params of Spartan and Jolt2 are {:?}", extra_args_for_spartan);
+
+    println!("Args for Combine R1CS are first 4 args of Spartan appended with extra args for spartan");
+
     let transcipt_init = <PoseidonTranscript<Fr, Fr> as Transcript>::new(b"Jolt transcript");
 
     let jolt1_input = json!(
