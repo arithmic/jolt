@@ -1169,7 +1169,7 @@ fn fib_e2e_hyperkzg() {
         proof.r1cs.outer_sumcheck_proof.uni_polys.len(),
         proof.r1cs.inner_sumcheck_proof.uni_polys.len(),
 
-         proof.opening_proof.sumcheck_proof.uni_polys.len(),
+        proof.opening_proof.sumcheck_proof.uni_polys.len(),
         proof.r1cs.claimed_witness_evals.len(),
         proof.opening_proof.sumcheck_claims.len(),
 
