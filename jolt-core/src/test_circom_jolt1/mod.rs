@@ -12,6 +12,7 @@ pub mod preprocess;
 pub mod struct_fq;
 pub mod sum_check_gkr;
 pub mod transcript;
+pub mod postponed_eval;
 use std::{
     fs::{File, OpenOptions},
     io::Write,
