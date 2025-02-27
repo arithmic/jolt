@@ -12,7 +12,7 @@ fn evals(r: Vec<Fq>) -> Vec<Fq> {
     let ell = r.len();
     let pow_2 = 1 << ell;
 
-    let mut temp: Vec<Vec<Fq>> = vec![vec![Fq::ZERO; ell]; pow_2];
+    let mut temp: Vec<Vec<Fq>> = vec![vec![Fq::ZERO; pow_2]; ell + 1];
     temp[0][0] = Fq::ONE;
 
     let mut size = 1;
@@ -71,4 +71,43 @@ fn verify_postponed_eval(input: Vec<Fq>, vec_to_eval_len: usize, l: usize) {
     let computed_eval = inner_product(pub_io, evals);
 
     assert_eq!(eval, computed_eval);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, io::Read};
+
+    use ark_bn254::Fq;
+    use num_bigint::BigUint;
+    use serde_json::Value;
+
+    use super::verify_postponed_eval;
+
+    #[test]
+    fn test_postponed_eval() {
+        let witness_file_path =
+            "/Users/anujsharma/code/jolt/jolt-core/src/test_circom_jolt1/witness.json";
+        let mut witness_file = File::open(witness_file_path).expect("Failed to open witness.json");
+
+        let mut witness_contents = String::new();
+        witness_file
+            .read_to_string(&mut witness_contents)
+            .expect("Failed to read witness.json");
+
+        let witness_json: Value =
+            serde_json::from_str(&witness_contents).expect("Failed to parse witness.json");
+
+        if let Some(witness_array) = witness_json.as_array() {
+            let result: Vec<Fq> = witness_array
+                .iter()
+                .take(1756)
+                .map(|entry| entry.as_str().map(|s| s.to_string()).unwrap())
+                .map(|entry| Fq::from(BigUint::parse_bytes(entry.as_bytes(), 10).unwrap()))
+                .collect();
+
+            verify_postponed_eval(result, 0, 24);
+        } else {
+            eprintln!("The JSON is not an array or 'witness' field is missing");
+        }
+    }
 }
