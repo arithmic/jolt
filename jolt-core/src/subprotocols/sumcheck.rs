@@ -3,11 +3,13 @@
 
 use crate::field::JoltField;
 use crate::poly::dense_mlpoly::DensePolynomial;
+use crate::poly::multilinear_polynomial::{
+    BindingOrder, MultilinearPolynomial, PolynomialBinding, PolynomialEvaluation,
+};
+use crate::poly::spartan_interleaved_poly::SpartanInterleavedPolynomial;
 use crate::poly::split_eq_poly::SplitEqPolynomial;
 use crate::poly::unipoly::{CompressedUniPoly, UniPoly};
-use crate::r1cs::special_polys::{SparsePolynomial, SparseTripleIterator};
 use crate::utils::errors::ProofVerifyError;
-use crate::utils::math::Math;
 use crate::utils::mul_0_optimized;
 use crate::utils::thread::drop_in_background_thread;
 use crate::utils::transcript::{AppendToTranscript, Transcript};
@@ -93,9 +95,9 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
     /// - `final_evals`: Each of the polys evaluated at `r_eval_point`
     #[tracing::instrument(skip_all, name = "Sumcheck.prove")]
     pub fn prove_arbitrary<Func>(
-        _claim: &F,
+        claim: &F,
         num_rounds: usize,
-        polys: &mut Vec<DensePolynomial<F>>,
+        polys: &mut Vec<MultilinearPolynomial<F>>,
         comb_func: Func,
         combined_degree: usize,
         transcript: &mut ProofTranscript,
@@ -103,58 +105,37 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
     where
         Func: Fn(&[F]) -> F + std::marker::Sync,
     {
+        let mut previous_claim = *claim;
         let mut r: Vec<F> = Vec::new();
         let mut uni_polys: Vec<UniPoly<F>> = Vec::new();
 
         for _round in 0..num_rounds {
             // Vector storing evaluations of combined polynomials g(x) = P_0(x) * ... P_{num_polys} (x)
             // for points {0, ..., |g(x)|}
-            let mut eval_points = vec![F::zero(); combined_degree + 1];
+            let mut eval_points = vec![F::zero(); combined_degree];
 
             let mle_half = polys[0].len() / 2;
 
             let accum: Vec<Vec<F>> = (0..mle_half)
                 .into_par_iter()
                 .map(|poly_term_i| {
-                    let mut accum = vec![F::zero(); combined_degree + 1];
-                    // Evaluate P({0, ..., |g(r)|})
-
-                    // TODO(#28): Optimize
-                    // Tricks can be used here for low order bits {0,1} but general premise is a running sum for each
-                    // of the m terms in the Dense multilinear polynomials. Formula is:
-                    // half = | D_{n-1} | / 2
-                    // D_n(index, r) = D_{n-1}[half + index] + r * (D_{n-1}[half + index] - D_{n-1}[index])
-
-                    // eval 0: bound_func is A(low)
-                    let params_zero: Vec<F> = polys.iter().map(|poly| poly[poly_term_i]).collect();
-                    accum[0] += comb_func(&params_zero);
-
-                    // TODO(#28): Can be computed from prev_round_claim - eval_point_0
-                    let params_one: Vec<F> = polys
+                    let mut accum = vec![F::zero(); combined_degree];
+                    // TODO(moodlezoup): Optimize
+                    let evals: Vec<_> = polys
                         .iter()
-                        .map(|poly| poly[mle_half + poly_term_i])
+                        .map(|poly| {
+                            poly.sumcheck_evals(
+                                poly_term_i,
+                                combined_degree,
+                                BindingOrder::HighToLow,
+                            )
+                        })
                         .collect();
-                    accum[1] += comb_func(&params_one);
-
-                    // D_n(index, r) = D_{n-1}[half + index] + r * (D_{n-1}[half + index] - D_{n-1}[index])
-                    // D_n(index, 0) = D_{n-1}[LOW]
-                    // D_n(index, 1) = D_{n-1}[HIGH]
-                    // D_n(index, 2) = D_{n-1}[HIGH] + (D_{n-1}[HIGH] - D_{n-1}[LOW])
-                    // D_n(index, 3) = D_{n-1}[HIGH] + (D_{n-1}[HIGH] - D_{n-1}[LOW]) + (D_{n-1}[HIGH] - D_{n-1}[LOW])
-                    // ...
-                    let mut existing_term = params_one;
-                    for eval_i in 2..(combined_degree + 1) {
-                        let mut poly_evals = vec![F::zero(); polys.len()];
-                        for poly_i in 0..polys.len() {
-                            let poly = &polys[poly_i];
-                            poly_evals[poly_i] = existing_term[poly_i]
-                                + poly[mle_half + poly_term_i]
-                                - poly[poly_term_i];
-                        }
-
-                        accum[eval_i] += comb_func(&poly_evals);
-                        existing_term = poly_evals;
+                    for j in 0..combined_degree {
+                        let evals_j: Vec<_> = evals.iter().map(|x| x[j]).collect();
+                        accum[j] += comb_func(&evals_j);
                     }
+
                     accum
                 })
                 .collect();
@@ -382,14 +363,11 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
     #[tracing::instrument(skip_all, name = "Spartan2::sumcheck::prove_spartan_cubic")]
     pub fn prove_spartan_cubic(
-        claim: &F,
         num_rounds: usize,
-        poly_eq: &mut SplitEqPolynomial<F>,
-        poly_A: &mut SparsePolynomial<F>,
-        poly_B: &mut SparsePolynomial<F>,
-        poly_C: &mut SparsePolynomial<F>,
+        eq_poly: &mut SplitEqPolynomial<F>,
+        az_bz_cz_poly: &mut SpartanInterleavedPolynomial<F>,
         transcript: &mut ProofTranscript,
-    ) -> (Self, Vec<F>, Vec<F>) {
+    ) -> (Self, Vec<F>, [F; 3]) {
         let mut r: Vec<F> = Vec::new();
         let mut polys: Vec<UniPoly<F>> = Vec::new();
         let mut claim_per_round = *claim;
@@ -434,11 +412,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         (
             SumcheckInstanceProof::new(polys),
             r,
-            vec![
-                poly_A.final_eval(),
-                poly_B.final_eval(),
-                poly_C.final_eval(),
-            ],
+            az_bz_cz_poly.final_sumcheck_evals(),
         )
     }
 
@@ -452,7 +426,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         claim: &F,
         num_rounds: usize,
         poly_A: &mut DensePolynomial<F>,
-        witness_polynomials: &[&DensePolynomial<F>],
+        witness_polynomials: &[&MultilinearPolynomial<F>],
         transcript: &mut ProofTranscript,
     ) -> (Self, Vec<F>, Vec<F>) {
         let mut r: Vec<F> = Vec::with_capacity(num_rounds);
@@ -463,9 +437,9 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
         let len = poly_A.len() / 2;
         let trace_len = witness_polynomials[0].len();
-        witness_polynomials
-            .iter()
-            .for_each(|poly| debug_assert_eq!(poly.len(), trace_len));
+        // witness_polynomials
+        //     .iter()
+        //     .for_each(|poly| debug_assert_eq!(poly.len(), trace_len));
 
         // We don't materialize the full, flattened witness vector, but this closure
         // simulates it
@@ -473,7 +447,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             if (index / trace_len) >= witness_polynomials.len() {
                 F::zero()
             } else {
-                witness_polynomials[index / trace_len][index % trace_len]
+                witness_polynomials[index / trace_len].get_coeff(index % trace_len)
             }
         };
 
@@ -506,7 +480,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                 .sum();
             eval_point_2 += mul_0_optimized(
                 &(poly_A[len] + poly_A[len] - poly_A[0]),
-                &(F::from_u64(2).unwrap() - witness_value(0)),
+                &(F::from_u8(2) - witness_value(0)),
             );
 
             let evals = [eval_point_0, claim_per_round - eval_point_0, eval_point_2];

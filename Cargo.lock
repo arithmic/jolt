@@ -1791,7 +1791,7 @@ dependencies = [
 [[package]]
 name = "icicle-bn254"
 version = "3.2.0"
-source = "git+https://github.com/ingonyama-zk/icicle-jolt.git?rev=ed93e21#ed93e21cbb405822b0aa1b58b5dc6c7837a04108"
+source = "git+https://github.com/ingonyama-zk/icicle-jolt.git?rev=94fe8ca#94fe8cad314a716c6a76c526cab7683da798bc8d"
 dependencies = [
  "cmake",
  "icicle-core",
@@ -1802,7 +1802,7 @@ dependencies = [
 [[package]]
 name = "icicle-core"
 version = "3.2.0"
-source = "git+https://github.com/ingonyama-zk/icicle-jolt.git?rev=ed93e21#ed93e21cbb405822b0aa1b58b5dc6c7837a04108"
+source = "git+https://github.com/ingonyama-zk/icicle-jolt.git?rev=94fe8ca#94fe8cad314a716c6a76c526cab7683da798bc8d"
 dependencies = [
  "hex",
  "icicle-runtime",
@@ -1825,7 +1825,7 @@ dependencies = [
 [[package]]
 name = "icicle-hash"
 version = "3.2.0"
-source = "git+https://github.com/ingonyama-zk/icicle-jolt.git?rev=ed93e21#ed93e21cbb405822b0aa1b58b5dc6c7837a04108"
+source = "git+https://github.com/ingonyama-zk/icicle-jolt.git?rev=94fe8ca#94fe8cad314a716c6a76c526cab7683da798bc8d"
 dependencies = [
  "cmake",
  "icicle-core",
@@ -1836,7 +1836,7 @@ dependencies = [
 [[package]]
 name = "icicle-runtime"
 version = "3.2.0"
-source = "git+https://github.com/ingonyama-zk/icicle-jolt.git?rev=ed93e21#ed93e21cbb405822b0aa1b58b5dc6c7837a04108"
+source = "git+https://github.com/ingonyama-zk/icicle-jolt.git?rev=94fe8ca#94fe8cad314a716c6a76c526cab7683da798bc8d"
 dependencies = [
  "cmake",
  "once_cell",
@@ -2142,6 +2142,7 @@ dependencies = [
  "rand 0.7.3",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
+ "rand_distr",
  "rayon",
  "reqwest",
  "serde",
@@ -2305,7 +2306,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
-name = "memory-ops-ex"
+name = "memory-ops"
 version = "0.1.0"
 dependencies = [
  "hex",
@@ -2910,6 +2911,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
  "getrandom 0.2.15",
+]
+
+[[package]]
+name = "rand_distr"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
+dependencies = [
+ "num-traits",
+ "rand 0.8.5",
 ]
 
 [[package]]
