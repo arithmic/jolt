@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{borrow::Borrow, marker::PhantomData};
 
 use super::transcript::Transcript;
 use crate::field::JoltField;
@@ -248,10 +248,10 @@ impl<J: PrimeField, K: PrimeField> Transcript for PoseidonTranscript<J, K> {
         self.update_state(new_state);
     }
 
-    fn append_scalars<F: JoltField>(&mut self, scalars: &[F]) {
+    fn append_scalars<F: JoltField>(&mut self, scalars: &[impl Borrow<F>]) {
         // self.append_message(b"begin_append_vector");
         for item in scalars.iter() {
-            self.append_scalar(item);
+            self.append_scalar(item.borrow());
         }
         // self.append_message(b"end_append_vector");
     }
@@ -259,7 +259,7 @@ impl<J: PrimeField, K: PrimeField> Transcript for PoseidonTranscript<J, K> {
     fn append_point<G: CurveGroup>(&mut self, point: &G) {
         if J::MODULUS.to_string() == K::MODULUS.to_string() {
             if point.is_zero() {
-                let to_absorb = [
+                let to_absorb: Vec<ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>> = [
                     <ark_bn254::Fr as ark_ff::PrimeField>::from_bigint(self.n_rounds.into())
                         .unwrap(),
                     <ark_bn254::Fr as ark_ff::Zero>::zero(),

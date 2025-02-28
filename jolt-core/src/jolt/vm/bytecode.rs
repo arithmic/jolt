@@ -297,10 +297,10 @@ impl<F: JoltField> BytecodePreprocessing<F> {
             PoseidonTranscript::<ark_bn254::Fr, ark_bn254::Fr>::new().state;
 
         v_init_final.iter().for_each(|poly| {
-            let wrapped_poly: Vec<_> = poly
-                .Z
-                .iter()
-                .map(|elem| {
+            let wrapped_poly: Vec<_> = (0..poly.len())
+                .into_iter()
+                .map(|i| {
+                    let elem: F = poly.get_coeff(i);
                     let mut buf = vec![];
                     elem.serialize_uncompressed(&mut buf).unwrap();
                     ark_bn254::Fr::from_le_bytes_mod_order(&buf)

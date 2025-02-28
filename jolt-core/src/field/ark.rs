@@ -10,7 +10,7 @@ impl<'a, 'b> FieldOps<&'b ark_bn254::Fr, ark_bn254::Fr> for &'a ark_bn254::Fr {}
 impl<'b> FieldOps<&'b ark_bn254::Fr, ark_bn254::Fr> for ark_bn254::Fr {}
 
 static mut SMALL_VALUE_LOOKUP_TABLES: [Vec<ark_bn254::Fr>; 4] = [vec![], vec![], vec![], vec![]];
-
+static mut SMALL_VALUE_LOOKUP_TABLES_GRUMPKIN: [Vec<ark_grumpkin::Fr>; 4] = [vec![], vec![], vec![], vec![]];
 impl JoltField for ark_bn254::Fr {
     const NUM_BYTES: usize = 32;
     type SmallValueLookupTables = [Vec<Self>; 4];
@@ -30,10 +30,10 @@ impl JoltField for ark_bn254::Fr {
 
         for i in 0..4 {
             let bitshift = 16 * i;
-            let unit = <Self as ark_ff::PrimeField>::from_u64(1 << bitshift).unwrap();
+            let unit = Self::from(1 << bitshift);
             lookup_tables[i] = (0..(1 << 16))
                 .into_par_iter()
-                .map(|j| unit * <Self as ark_ff::PrimeField>::from_u64(j).unwrap())
+                .map(|j| unit * Self::from(j))
                 .collect();
         }
 
@@ -51,7 +51,7 @@ impl JoltField for ark_bn254::Fr {
         // TODO(moodlezoup): Using the lookup tables seems to break our tests
         #[cfg(test)]
         {
-            <Self as ark_ff::PrimeField>::from_u64(n as u64).unwrap()
+            Self::from(n as u64)
         }
         #[cfg(not(test))]
         {
@@ -64,7 +64,7 @@ impl JoltField for ark_bn254::Fr {
         // TODO(moodlezoup): Using the lookup tables seems to break our tests
         #[cfg(test)]
         {
-            <Self as ark_ff::PrimeField>::from_u64(n as u64).unwrap()
+            Self::from(n as u64)
         }
         #[cfg(not(test))]
         {
@@ -77,7 +77,7 @@ impl JoltField for ark_bn254::Fr {
         // TODO(moodlezoup): Using the lookup tables seems to break our tests
         #[cfg(test)]
         {
-            <Self as ark_ff::PrimeField>::from_u64(n as u64).unwrap()
+            Self::from(n as u64)
         }
         #[cfg(not(test))]
         {
@@ -94,7 +94,7 @@ impl JoltField for ark_bn254::Fr {
         // TODO(moodlezoup): Using the lookup tables seems to break our tests
         #[cfg(test)]
         {
-            <Self as ark_ff::PrimeField>::from_u64(n).unwrap()
+            Self::from(n)
         }
         #[cfg(not(test))]
         {
@@ -191,10 +191,6 @@ impl JoltField for ark_bn254::Fr {
         Some(ark_ff::Fp::new_unchecked(Self::R2))
     }
 
-    #[inline(always)]
-    fn mul_u64_unchecked(&self, n: u64) -> Self {
-        ark_ff::Fp::mul_u64(*self, n)
-    }
 }
 
 #[cfg(test)]
@@ -234,20 +230,148 @@ impl<'b> FieldOps<&'b ark_grumpkin::Fr, ark_grumpkin::Fr> for ark_grumpkin::Fr {
 
 impl JoltField for ark_grumpkin::Fr {
     const NUM_BYTES: usize = 32;
+    type SmallValueLookupTables = [Vec<Self>; 4];
 
     fn random<R: rand_core::RngCore>(rng: &mut R) -> Self {
         <Self as UniformRand>::rand(rng)
     }
 
-    fn from_u64(n: u64) -> Option<Self> {
-        <Self as ark_ff::PrimeField>::from_bigint(n.into())
+    fn compute_lookup_tables() -> Self::SmallValueLookupTables {
+        // These four lookup tables correspond to the four 16-bit limbs of a u64
+        let mut lookup_tables = [
+            unsafe_allocate_zero_vec(1 << 16),
+            unsafe_allocate_zero_vec(1 << 16),
+            unsafe_allocate_zero_vec(1 << 16),
+            unsafe_allocate_zero_vec(1 << 16),
+        ];
+
+        for i in 0..4 {
+            let bitshift = 16 * i;
+            let unit = Self::from(1 << bitshift);
+            lookup_tables[i] = (0..(1 << 16))
+                .into_par_iter()
+                .map(|j| unit * Self::from(j))
+                .collect();
+        }
+
+        lookup_tables
+    }
+
+    fn initialize_lookup_tables(init: Self::SmallValueLookupTables) {
+        unsafe {
+            SMALL_VALUE_LOOKUP_TABLES_GRUMPKIN = init;
+        }
+    }
+
+    #[inline]
+    fn from_u8(n: u8) -> Self {
+        // TODO(moodlezoup): Using the lookup tables seems to break our tests
+        #[cfg(test)]
+        {
+            Self::from(n as u64)
+        }
+        #[cfg(not(test))]
+        {
+            unsafe { SMALL_VALUE_LOOKUP_TABLES_GRUMPKIN[0][n as usize] }
+        }
+    }
+
+    #[inline]
+    fn from_u16(n: u16) -> Self {
+        // TODO(moodlezoup): Using the lookup tables seems to break our tests
+        #[cfg(test)]
+        {
+            Self::from(n as u64)
+        }
+        #[cfg(not(test))]
+        {
+            unsafe { SMALL_VALUE_LOOKUP_TABLES_GRUMPKIN[0][n as usize] }
+        }
+    }
+
+    #[inline]
+    fn from_u32(n: u32) -> Self {
+        // TODO(moodlezoup): Using the lookup tables seems to break our tests
+        #[cfg(test)]
+        {
+            Self::from(n as u64)
+        }
+        #[cfg(not(test))]
+        {
+            const BITMASK: u32 = (1 << 16) - 1;
+            unsafe {
+                SMALL_VALUE_LOOKUP_TABLES_GRUMPKIN[0][(n & BITMASK) as usize]
+                    + SMALL_VALUE_LOOKUP_TABLES_GRUMPKIN[1][((n >> 16) & BITMASK) as usize]
+            }
+        }
+    }
+
+    #[inline]
+    fn from_u64(n: u64) -> Self {
+        // TODO(moodlezoup): Using the lookup tables seems to break our tests
+        #[cfg(test)]
+        {
+            Self::from(n)
+        }
+        #[cfg(not(test))]
+        {
+            const BITMASK: u64 = (1 << 16) - 1;
+            unsafe {
+                SMALL_VALUE_LOOKUP_TABLES_GRUMPKIN[0][(n & BITMASK) as usize]
+                    + SMALL_VALUE_LOOKUP_TABLES_GRUMPKIN[1][((n >> 16) & BITMASK) as usize]
+                    + SMALL_VALUE_LOOKUP_TABLES_GRUMPKIN[2][((n >> 32) & BITMASK) as usize]
+                    + SMALL_VALUE_LOOKUP_TABLES_GRUMPKIN[3][((n >> 48) & BITMASK) as usize]
+            }
+        }
     }
 
     fn from_i64(val: i64) -> Self {
-        if val > 0 {
-            <Self as JoltField>::from_u64(val as u64).unwrap()
+        if val.is_negative() {
+            let val = (-val) as u64;
+            if val <= u16::MAX as u64 {
+                -<Self as JoltField>::from_u16(val as u16)
+            } else if val <= u32::MAX as u64 {
+                -<Self as JoltField>::from_u32(val as u32)
+            } else {
+                -<Self as JoltField>::from_u64(val)
+            }
         } else {
-            Self::zero() - <Self as JoltField>::from_u64(-(val) as u64).unwrap()
+            let val = val as u64;
+            if val <= u16::MAX as u64 {
+                <Self as JoltField>::from_u16(val as u16)
+            } else if val <= u32::MAX as u64 {
+                <Self as JoltField>::from_u32(val as u32)
+            } else {
+                <Self as JoltField>::from_u64(val)
+            }
+        }
+    }
+
+    fn from_i128(val: i128) -> Self {
+        if val.is_negative() {
+            let val = (-val) as u128;
+            if val <= u16::MAX as u128 {
+                -<Self as JoltField>::from_u16(val as u16)
+            } else if val <= u32::MAX as u128 {
+                -<Self as JoltField>::from_u32(val as u32)
+            } else if val <= u64::MAX as u128 {
+                -<Self as JoltField>::from_u64(val as u64)
+            } else {
+                let bigint = BigInt::new([val as u64, (val >> 64) as u64, 0, 0]);
+                -<Self as ark_ff::PrimeField>::from_bigint(bigint).unwrap()
+            }
+        } else {
+            let val = val as u128;
+            if val <= u16::MAX as u128 {
+                <Self as JoltField>::from_u16(val as u16)
+            } else if val <= u32::MAX as u128 {
+                <Self as JoltField>::from_u32(val as u32)
+            } else if val <= u64::MAX as u128 {
+                <Self as JoltField>::from_u64(val as u64)
+            } else {
+                let bigint = BigInt::new([val as u64, (val >> 64) as u64, 0, 0]);
+                <Self as ark_ff::PrimeField>::from_bigint(bigint).unwrap()
+            }
         }
     }
 
@@ -256,15 +380,10 @@ impl JoltField for ark_grumpkin::Fr {
         let limbs: &[u64] = bigint.as_ref();
         let result = limbs[0];
 
-        match <Self as JoltField>::from_u64(result) {
-            None => None,
-            Some(x) => {
-                if x == *self {
-                    Some(result)
-                } else {
-                    None
-                }
-            }
+        if <Self as JoltField>::from_u64(result) != *self {
+            None
+        } else {
+            Some(result)
         }
     }
 
@@ -280,4 +399,13 @@ impl JoltField for ark_grumpkin::Fr {
         assert_eq!(bytes.len(), Self::NUM_BYTES);
         ark_grumpkin::Fr::from_le_bytes_mod_order(bytes)
     }
+
+    fn num_bits(&self) -> u32 {
+        self.into_bigint().num_bits()
+    }
+
+    fn montgomery_r2() -> Option<Self> {
+        Some(ark_ff::Fp::new_unchecked(Self::R2))
+    }
+    
 }

@@ -324,7 +324,7 @@ impl<F: JoltField, ProofTranscript: Transcript> ProverOpeningAccumulator<F, Proo
 
         for round in 0..max_num_vars {
             let remaining_rounds = max_num_vars - round;
-            let uni_poly = self.compute_quadratic(coeffs, remaining_rounds, &mut bound_polys, e);
+            let uni_poly = self.compute_quadratic(coeffs, remaining_rounds, e);
             // let compressed_poly = uni_poly.compress();
 
             // append the prover's message to the transcript

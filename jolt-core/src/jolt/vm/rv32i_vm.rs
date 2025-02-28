@@ -334,15 +334,15 @@ pub mod tests {
         fib_e2e::<Fr, MockCommitScheme<Fr, KeccakTranscript>, KeccakTranscript>();
     }
 
-    #[ignore = "Opening proof reduction for Hyrax doesn't work right now"]
-    #[test]
-    fn fib_e2e_hyrax() {
-        fib_e2e::<
-            ark_bn254::Fr,
-            HyraxScheme<ark_bn254::G1Projective, KeccakTranscript>,
-            KeccakTranscript,
-        >();
-    }
+    // #[ignore = "Opening proof reduction for Hyrax doesn't work right now"]
+    // #[test]
+    // fn fib_e2e_hyrax() {
+    //     fib_e2e::<
+    //         ark_bn254::Fr,
+    //         HyraxScheme<ark_bn254::G1Projective, KeccakTranscript>,
+    //         KeccakTranscript,
+    //     >();
+    // }
 
     // #[test]
     // fn fib_e2e_zeromorph() {

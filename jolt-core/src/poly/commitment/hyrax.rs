@@ -370,36 +370,34 @@ mod tests {
     >() {
         let Z = vec![
             G::ScalarField::one(),
-            G::ScalarField::from_u64(2u64).unwrap(),
+            G::ScalarField::from_u64(2u64),
             G::ScalarField::one(),
-            G::ScalarField::from_u64(4u64).unwrap(),
+            G::ScalarField::from_u64(4u64),
         ];
         let poly = DensePolynomial::new(Z);
 
         // r = [4,3]
         let r = vec![
-            G::ScalarField::from_u64(4u64).unwrap(),
-            G::ScalarField::from_u64(3u64).unwrap(),
+            G::ScalarField::from_u64(4u64),
+            G::ScalarField::from_u64(3u64),
         ];
         let eval = poly.evaluate(&r);
-        assert_eq!(eval, G::ScalarField::from_u64(28u64).unwrap());
+        assert_eq!(eval, G::ScalarField::from_u64(28u64));
 
         let generators: PedersenGenerators<G> = PedersenGenerators::new(1 << 8, b"test-two");
-        let poly_commitment: HyraxCommitment<G> = HyraxCommitment::commit(&poly, &generators);
+        let poly_commitment: HyraxCommitment<RATIO, G> = HyraxCommitment::commit(&poly, &generators);
 
         let mut prover_transcript = KeccakTranscript::new(b"example");
-        let proof = HyraxOpeningProof::prove(&poly, &r, RATIO, &mut prover_transcript);
+        let proof = HyraxOpeningProof::prove(&poly, &r, RATIO);
 
         let mut verifier_transcript = KeccakTranscript::new(b"example");
 
         assert!(proof
             .verify(
                 &generators,
-                &mut verifier_transcript,
                 &r,
                 &eval,
                 &poly_commitment,
-                RATIO
             )
             .is_ok());
     }

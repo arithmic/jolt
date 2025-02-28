@@ -1002,52 +1002,29 @@ where
             .for_each(|flag_poly| debug_assert_eq!(flag_poly.len(), poly_len));
         debug_assert_eq!(lookup_outputs_poly.len(), poly_len);
 
-        let mut random_vars: Vec<F> = Vec::with_capacity(num_rounds);
+        let mut previous_claim = F::zero();
+        let mut r: Vec<F> = Vec::with_capacity(num_rounds);
         let mut uni_polys: Vec<UniPoly<F>> = Vec::with_capacity(num_rounds);
-        let num_eval_points = degree + 1;
 
-        let round_uni_poly = Self::primary_sumcheck_inner_loop(
-            preprocessing,
-            eq_poly,
-            flag_polys,
-            memory_polys,
-            lookup_outputs_poly,
-            num_eval_points,
-        );
-        uni_polys.push(round_uni_poly.clone());
-        let r_j = Self::update_primary_sumcheck_transcript(round_uni_poly, transcript);
-        random_vars.push(r_j);
-
-        let _bind_span = trace_span!("BindPolys");
-        let _bind_enter = _bind_span.enter();
-        rayon::join(
-            || eq_poly.bound_poly_var_top(&r_j),
-            || lookup_outputs_poly.bound_poly_var_top_many_ones(&r_j),
-        );
-        let mut flag_polys_updated: Vec<DensePolynomial<F>> = flag_polys
-            .par_iter()
-            .map(|poly| poly.new_poly_from_bound_poly_var_top_flags(&r_j))
-            .collect();
-        let mut memory_polys_updated: Vec<DensePolynomial<F>> = memory_polys
-            .par_iter()
-            .map(|poly| poly.new_poly_from_bound_poly_var_top(&r_j))
-            .collect();
-        drop(_bind_enter);
-        drop(_bind_span);
-
-        for _round in 1..num_rounds {
-            let round_uni_poly = Self::primary_sumcheck_inner_loop(
+        for _round in 0..num_rounds {
+            let univariate_poly = Self::primary_sumcheck_prover_message(
                 preprocessing,
-                eq_poly,
-                &flag_polys_updated,
-                &memory_polys_updated,
+                &eq_poly,
+                flag_polys,
+                memory_polys,
                 lookup_outputs_poly,
-                num_eval_points,
+                previous_claim,
             );
-            uni_polys.push(round_uni_poly.clone());
-            let r_j = Self::update_primary_sumcheck_transcript(round_uni_poly, transcript);
-            random_vars.push(r_j);
 
+            univariate_poly.append_to_transcript(transcript);
+        
+
+            let r_j = transcript.challenge_scalar::<F>();
+            r.push(r_j);
+
+            previous_claim = univariate_poly.evaluate(&r_j);
+            
+            uni_polys.push(univariate_poly);
             // Bind all polys
             let _bind_span = trace_span!("bind");
             let _bind_enter = _bind_span.enter();
@@ -1076,7 +1053,7 @@ where
 
         (
             SumcheckInstanceProof::new(uni_polys),
-            random_vars,
+            r,
             flag_evals,
             memory_evals,
             outputs_eval,

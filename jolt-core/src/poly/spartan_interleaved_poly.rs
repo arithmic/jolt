@@ -231,7 +231,7 @@ impl<F: JoltField> SpartanInterleavedPolynomial<F> {
         eq_poly: &mut SplitEqPolynomial<F>,
         transcript: &mut ProofTranscript,
         r: &mut Vec<F>,
-        polys: &mut Vec<CompressedUniPoly<F>>,
+        polys: &mut Vec<UniPoly<F>>,
         claim: &mut F,
     ) {
         assert!(!self.is_bound());
@@ -333,19 +333,18 @@ impl<F: JoltField> SpartanInterleavedPolynomial<F> {
         let cubic_evals = [evals.0, /* 0 */ -evals.0, evals.1, evals.2];
         let cubic_poly = UniPoly::from_evals(&cubic_evals);
 
-        let compressed_poly = cubic_poly.compress();
 
         // append the prover's message to the transcript
-        compressed_poly.append_to_transcript(transcript);
+        cubic_poly.append_to_transcript(transcript);
 
         // derive the verifier's challenge for the next round
         let r_i = transcript.challenge_scalar();
         r.push(r_i);
-        polys.push(compressed_poly);
+        
 
         // Set up next round
         *claim = cubic_poly.evaluate(&r_i);
-
+        polys.push(cubic_poly);
         // Bind polynomials
         eq_poly.bind(r_i);
 
@@ -454,7 +453,7 @@ impl<F: JoltField> SpartanInterleavedPolynomial<F> {
         eq_poly: &mut SplitEqPolynomial<F>,
         transcript: &mut ProofTranscript,
         r: &mut Vec<F>,
-        polys: &mut Vec<CompressedUniPoly<F>>,
+        polys: &mut Vec<UniPoly<F>>,
         claim: &mut F,
     ) {
         assert!(self.is_bound());
@@ -626,19 +625,17 @@ impl<F: JoltField> SpartanInterleavedPolynomial<F> {
             UniPoly::from_evals(&cubic_evals)
         };
 
-        let compressed_poly = cubic_poly.compress();
-
         // append the prover's message to the transcript
-        compressed_poly.append_to_transcript(transcript);
+        cubic_poly.append_to_transcript(transcript);
 
         // derive the verifier's challenge for the next round
         let r_i = transcript.challenge_scalar();
         r.push(r_i);
-        polys.push(compressed_poly);
+       
 
         // Set up next round
         *claim = cubic_poly.evaluate(&r_i);
-
+        polys.push(cubic_poly);
         // Bind polynomials
         eq_poly.bind(r_i);
 
