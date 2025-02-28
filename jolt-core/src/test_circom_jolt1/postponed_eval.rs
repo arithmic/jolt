@@ -1,5 +1,6 @@
 use ark_bn254::Fq;
 use ark_ff::{AdditiveGroup, Field};
+use rayon::vec;
 use std::ops::Add;
 use std::ops::Mul;
 
@@ -12,27 +13,23 @@ fn evals(r: Vec<Fq>) -> Vec<Fq> {
     let ell = r.len();
     let pow_2 = 1 << ell;
 
-    let mut temp: Vec<Vec<Fq>> = vec![vec![Fq::ZERO; pow_2]; ell + 1];
-    temp[0][0] = Fq::ONE;
-
+    let mut evals: Vec<Fq> = vec![Fq::ONE; pow_2];
     let mut size = 1;
     for j in 0..ell {
+        // in each iteration, we double the size of chis
         size *= 2;
-        for i in (0..size).step_by(2) {
-            temp[j][i] = temp[j][i / 2] * r[j];
-            temp[j + 1][i + 1] = temp[j][i / 2] - temp[j + 1][i];
+        for i in (0..size).rev().step_by(2) {
+            // copy each element from the prior iteration twice
+            let scalar = evals[i / 2];
+            evals[i] = scalar * r[j];
+            evals[i - 1] = scalar - evals[i];
         }
     }
-
-    let mut output = vec![Fq::ZERO; pow_2];
-    for i in 0..pow_2 {
-        output[i] = temp[ell][pow_2 - i - 1];
-    }
-
-    output
+    evals
 }
 
 fn inner_product(a: Vec<Fq>, b: Vec<Fq>) -> Fq {
+    assert_eq!(a.len(), b.len());
     a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
@@ -59,17 +56,22 @@ fn verify_postponed_eval(input: Vec<Fq>, vec_to_eval_len: usize, l: usize) {
         .map(|chunk| combine_limbs(chunk[0], chunk[1], chunk[2]))
         .collect();
 
-    let mut pub_io = [vec_to_eval1, comms].concat();
+    let mut pub_io = [[Fq::ONE].to_vec(), vec_to_eval1, comms].concat();
     let pad_length = pub_io.len().checked_next_power_of_two().unwrap();
-    let log_pad_length = (64 - (pad_length as u64).leading_zeros() - 1) as usize;
+    let log_pad_length = pad_length.ilog2() as usize;
 
     pub_io.resize(pad_length, Fq::ZERO);
 
     let required_pt = pt[pt.len() - log_pad_length..].to_vec();
     let evals = evals(required_pt);
 
-    let computed_eval = inner_product(pub_io, evals);
+    let mut computed_eval = inner_product(pub_io, evals);
+    computed_eval *= pt[0..pt.len() - log_pad_length]
+        .iter()
+        .map(|r| Fq::ONE - r)
+        .product::<Fq>();
 
+    println!("difference = {}", computed_eval - eval);
     assert_eq!(eval, computed_eval);
 }
 
@@ -85,8 +87,7 @@ mod tests {
 
     #[test]
     fn test_postponed_eval() {
-        let witness_file_path =
-            "/Users/anujsharma/code/jolt/jolt-core/src/test_circom_jolt1/witness.json";
+        let witness_file_path = "src/test_circom_jolt1/witness.json";
         let mut witness_file = File::open(witness_file_path).expect("Failed to open witness.json");
 
         let mut witness_contents = String::new();
