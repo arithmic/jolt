@@ -30,7 +30,7 @@ impl JoltField for ark_bn254::Fr {
 
         for i in 0..4 {
             let bitshift = 16 * i;
-            let unit = Self::from(1 << bitshift);
+            let unit = Self::from(1u64 << bitshift);
             lookup_tables[i] = (0..(1 << 16))
                 .into_par_iter()
                 .map(|j| unit * Self::from(j))
@@ -189,6 +189,11 @@ impl JoltField for ark_bn254::Fr {
 
     fn montgomery_r2() -> Option<Self> {
         Some(ark_ff::Fp::new_unchecked(Self::R2))
+    }
+
+    #[inline(always)]
+    fn mul_u64_unchecked(&self, n: u64) -> Self {
+        *self * Self::new_unchecked(n.into())
     }
 
 }
