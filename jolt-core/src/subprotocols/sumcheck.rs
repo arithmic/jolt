@@ -12,7 +12,7 @@ use crate::poly::unipoly::{CompressedUniPoly, UniPoly};
 use crate::utils::errors::ProofVerifyError;
 use crate::utils::mul_0_optimized;
 use crate::utils::thread::drop_in_background_thread;
-use crate::utils::transcript::{AppendToTranscript, Transcript};
+use crate::utils::transcript::{AppendToTranscript, KeccakTranscript, Transcript};
 use ark_serialize::*;
 use rayon::prelude::*;
 use std::marker::PhantomData;
@@ -173,7 +173,9 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             // bound all tables to the verifier's challenge
             polys
                 .par_iter_mut()
-                .for_each(|poly| poly.bind(r_j, BindingOrder::HighToLow));
+                .for_each(|poly: &mut MultilinearPolynomial<F>| {
+                    poly.bind(r_j, BindingOrder::HighToLow)
+                });
             previous_claim = univariate_poly.evaluate(&r_j);
             compressed_polys.push(compressed_poly);
         }
@@ -388,6 +390,74 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             })
             .reduce(|| (F::zero(), F::zero()), |a, b| (a.0 + b.0, a.1 + b.1))
     }
+
+    pub fn streaming_prove_product(
+        claim: &F,
+        num_rounds: usize,
+        polys: &mut Vec<MultilinearPolynomial<F>>,
+        combined_degree: usize,
+        transcript: &mut ProofTranscript,
+    ) -> (Self, Vec<F>, Vec<F>) {
+        let mut r: Vec<F> = Vec::new();
+        let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::new();
+        let mut univeriate_polys: Vec<UniPoly<F>> = Vec::new();
+
+        for i in 0..num_rounds {
+            // Initializing the accumulator
+            let mut accumulator = vec![F::zero(); combined_degree + 1];
+            let half_size = (1 << (num_rounds - i - 1)) - 1;
+            for m in 0..=half_size {
+                // Initializing the witness eval of l * l+1
+                let mut witness_eval = vec![vec![F::zero(); combined_degree + 1]; combined_degree];
+                for j in 0..=((1 << i) - 1) {
+                    // u_even = 2^i * 2m + j is the binary represenation of (j,0,to_bits(m))
+                    let u_even = (1 << i) * (2 * m) + j;
+                    // u_odd = 2^i * (2m +1) + j is the binary represenation of (j,1,to_bits(m))
+                    let u_odd = (1 << i) * ((2 * m) + 1) + j;
+                    if i == 0 {
+                        for k in 0..combined_degree {
+                            for s in 0..=combined_degree {
+                                witness_eval[k][s] += (F::one() - F::from_u64(s as u64))
+                                    * polys[k].get_coeff(u_even)
+                                    + F::from_u64(s as u64) * polys[k].get_coeff(u_odd);
+                            }
+                        }
+                    } else {
+                        for k in 0..combined_degree {
+                            for s in 0..=combined_degree {
+                                let eq_eval = evaluate_eq(&r, to_bits(j.into(), r.len()));
+                                witness_eval[k][s] += eq_eval
+                                    * (((F::one() - F::from_u64(s as u64))
+                                        * polys[k].get_coeff(u_even))
+                                        + (F::from_u64(s as u64) * polys[k].get_coeff(u_odd)));
+                            }
+                        }
+                    }
+                }
+                for s in 0..=combined_degree {
+                    let prod = (0..combined_degree)
+                        .map(|k| witness_eval[k][s])
+                        .product::<F>();
+                    accumulator[s] += prod;
+                }
+            }
+            let univariate_poly = UniPoly::from_evals(&accumulator);
+            let compressed_poly = univariate_poly.compress();
+            compressed_poly.append_to_transcript(transcript);
+
+            let r_i = transcript.challenge_scalar();
+            r.push(r_i);
+            univeriate_polys.push(univariate_poly);
+            compressed_polys.push(compressed_poly);
+        }
+
+        let final_eval = univeriate_polys
+            .iter()
+            .map(|uni_poly| uni_poly.evaluate(&r[num_rounds - 1]))
+            .collect();
+
+        (SumcheckInstanceProof::new(compressed_polys), r, final_eval)
+    }
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
@@ -453,4 +523,92 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
         Ok((e, r))
     }
+}
+
+pub fn evaluate_eq<F>(r_x: &Vec<F>, r_y: Vec<F>) -> F
+where
+    F: JoltField,
+{
+    let mut temp = F::one();
+    assert_eq!(r_x.len(), r_y.len());
+    for k in 0..r_y.len() {
+        temp = temp * ((r_x[k] * r_y[k]) + ((F::one() - r_x[k]) * (F::one() - r_y[k])));
+    }
+    temp
+}
+
+pub fn to_bits<F>(j: usize, len: usize) -> Vec<F>
+where
+    F: JoltField,
+{
+    let mut bits = vec![F::zero(); len];
+    let value = j;
+    for i in 0..len {
+        let res = value >> i & 1;
+        bits[i] = F::from_u64(res as u64);
+    }
+    bits
+}
+
+#[test]
+fn test_streaming_prove_product() {
+    use crate::poly::multilinear_polynomial::MultilinearPolynomial;
+    use crate::utils::transcript::Transcript;
+    use ark_bn254::Fr;
+    use ark_ff::PrimeField;
+    use ark_ff::{Fp, One, Zero};
+    use ark_std::test_rng;
+    use ark_std::UniformRand;
+    let rng = &mut test_rng();
+    let num_rounds = 3;
+    let num_vars = 5;
+    let combined_degree = 3;
+    let mut polys: Vec<MultilinearPolynomial<Fr>> = Vec::new();
+    for _ in 0..num_vars {
+        let mut coeffs = Vec::new();
+        for _ in 0..(1 << num_rounds) {
+            coeffs.push(Fr::rand(rng));
+        }
+        let poly = MultilinearPolynomial::from(coeffs);
+        polys.push(poly);
+    }
+
+    let mut initial_claim = Fr::zero();
+    let mut initial_claim_vec = vec![Fr::zero(); num_vars];
+    for k in 0..num_vars {
+        let mut temp_val = Fr::one();
+        for i in 0..(1 << num_rounds) {
+            temp_val = temp_val * polys[k].get_coeff(i);
+        }
+        initial_claim_vec[k] = temp_val;
+    }
+    for k in 0..num_vars {
+        initial_claim = initial_claim + initial_claim_vec[k];
+    }
+
+    let mut transcript = <KeccakTranscript as Transcript>::new(b"test");
+    println!("started proof");
+    let (proof, r, final_evals) = SumcheckInstanceProof::streaming_prove_product(
+        &initial_claim,
+        num_rounds,
+        &mut polys,
+        combined_degree,
+        &mut transcript,
+    );
+
+    let mut transcript = <KeccakTranscript as Transcript>::new(b"test");
+
+    let (e_verify, r_prime) = proof
+        .verify(initial_claim, num_rounds, combined_degree, &mut transcript)
+        .unwrap();
+
+    println!("e_verify {:?}", e_verify);
+    assert_eq!(r, r_prime, "random points are not matching");
+    let evals = polys
+        .iter()
+        .map(|poly| poly.evaluate(&r))
+        .collect::<Vec<Fr>>();
+    let res = (0..evals.len()).map(|k| evals[k]).product::<Fr>();
+    println!("res {:?}", res);
+    
 }
