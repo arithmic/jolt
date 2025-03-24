@@ -99,6 +99,21 @@ impl<F: JoltField> EqPolynomial<F> {
 
         evals
     }
+    // Evaluate the polynomial by calculating the bits of rx.
+    pub fn evaluate_with_bits(&self, rx: &usize) -> F {
+        (0..self.r.len())
+        .map(|i| {
+            let bit = (rx >> i) & 1;
+            if bit == 0 {
+                F::one() - self.r[i]
+            } else {
+                self.r[i]
+            }
+        })
+        .product()
+    }
+
+
 }
 
 impl<F: JoltField> EqPlusOnePolynomial<F> {
