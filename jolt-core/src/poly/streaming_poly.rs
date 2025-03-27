@@ -15,7 +15,7 @@ where
 }
 
 pub struct Oracle<I: Iterator, F> {
-    trace_iter: I,
+    pub trace_iter: I,
     polys: Vec<StreamingPolyinomial<I, F>>,
 }
 
@@ -27,7 +27,9 @@ where
     pub fn new(trace_iter: I, polys: Vec<StreamingPolyinomial<I, F>>) -> Self {
         Self { trace_iter, polys }
     }
-
+    pub fn update_iter(&mut self, iter: I) {
+        self.trace_iter = iter
+    }
     pub fn stream_next_evals(&mut self) -> Vec<F> {
         let trace = self.trace_iter.next().unwrap();
         let mut evals = Vec::new();
@@ -36,17 +38,19 @@ where
         }
         evals
     }
-
+    pub fn num_polys(&self) -> usize {
+        self.polys.len()
+    }
     pub fn stream_next_shards(&mut self, shard_len: usize) -> Vec<Vec<F>> {
         (0..shard_len).map(|_| self.stream_next_evals()).collect()
     }
 }
 
 mod test {
-    use ark_bn254::Fr;
-    use rand::{thread_rng, Rng};
-    use rayon::vec;
     use std::slice::Iter;
+
+    use ark_bn254::Fr;
+    use rand::{Rng, thread_rng};
 
     use super::*;
 
