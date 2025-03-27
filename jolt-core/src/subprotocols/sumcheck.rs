@@ -461,11 +461,10 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         (SumcheckInstanceProof::new(compressed_polys), r, final_eval)
     }
 
-    pub fn streaming_prove_product_with_sharding<I: Iterator>(
+    pub fn streaming_prove_product_with_sharding(
         _claim: &F,
         num_rounds: usize,
-        trace: Vec<usize>,
-        oracle: &mut Oracle<I, F>,
+        oracle: &mut Oracle<Iter<usize>, F>,
         combined_degree: usize,
         shard_length: usize,
         transcript: &mut ProofTranscript,
@@ -485,9 +484,9 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             let mut accumulator = vec![F::zero(); combined_degree + 1];
             // Initializing the witness eval of l * l+1
             let mut witness_eval = vec![vec![F::zero(); combined_degree + 1]; combined_degree];
-            // for j in 0..(1 << num_rounds) {
-            // let mut oracle = Oracle::new(iter.iter(), &polys);
-            oracle.update_iter(trace.iter());
+
+            // oracle.update_iter(trace_temp.iter());
+            // let temp_iter = oracle.trace_iter.clone();
 
             for j in 0..(1 << num_rounds) / shard_length {
                 let polys = oracle.stream_next_shards(shard_length);
@@ -540,6 +539,9 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                     })
                     .collect();
             }
+
+            // oracle.trace_iter = temp_iter;
+            oracle.update_iter();
         }
 
         (SumcheckInstanceProof::new(compressed_polys), r, final_eval)
@@ -676,7 +678,7 @@ fn test_streaming_prover_product_sharding() {
         })
         .collect();
     let trace = (0..(1 << num_vars)).map(|idx| idx).collect_vec();
-    let mut oracle = Oracle::new(trace.iter(), polys);
+    let mut oracle = Oracle::<Iter<usize>, Fr>::new(trace.iter(), polys);
 
     // let mut polys: Vec<MultilinearPolynomial<Fr>> = Vec::new();
     // for _ in 0..num_polys {
@@ -692,12 +694,11 @@ fn test_streaming_prover_product_sharding() {
     //     let temp_val: Fr = (0..num_polys).map(|j| polys[j].get_coeff(i)).product();
     //     initial_claim = initial_claim + temp_val;
     // }
-    let shard_length = 1 << 5;
+    let shard_length = 1 << 3;
     let mut transcript = <KeccakTranscript as Transcript>::new(b"test");
     let (proof, r, final_evals) = SumcheckInstanceProof::streaming_prove_product_with_sharding(
         &Fr::zero(),
         num_vars,
-        trace,
         &mut oracle,
         num_polys,
         shard_length,
@@ -707,7 +708,7 @@ fn test_streaming_prover_product_sharding() {
     let (e_verify, r_prime) = proof
         .verify(Fr::zero(), num_vars, num_polys, &mut transcript)
         .unwrap();
-    // assert_eq!(r, r_prime, "random points are not matching");
+    assert_eq!(r, r_prime, "random points are not matching");
     // let evals = polys
     //     .iter()
     //     .map(|poly| poly.evaluate(&r.iter().rev().cloned().collect::<Vec<_>>()))

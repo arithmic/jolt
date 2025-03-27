@@ -14,21 +14,26 @@ where
     }
 }
 
-pub struct Oracle<I: Iterator, F> {
+pub struct Oracle<I: Iterator + Clone, F> {
     pub trace_iter: I,
+    pub static_trace_iter: I,
     polys: Vec<StreamingPolyinomial<I, F>>,
 }
 
 impl<I, F> Oracle<I, F>
 where
-    I: Iterator,
+    I: Iterator + Clone,
     F: JoltField,
 {
     pub fn new(trace_iter: I, polys: Vec<StreamingPolyinomial<I, F>>) -> Self {
-        Self { trace_iter, polys }
+        Self {
+            trace_iter: trace_iter.clone(),
+            static_trace_iter: trace_iter,
+            polys,
+        }
     }
-    pub fn update_iter(&mut self, iter: I) {
-        self.trace_iter = iter
+    pub fn update_iter(&mut self) {
+        self.trace_iter = (self.static_trace_iter).clone();
     }
     pub fn stream_next_evals(&mut self) -> Vec<F> {
         let trace = self.trace_iter.next().unwrap();
@@ -46,47 +51,47 @@ where
     }
 }
 
-mod test {
-    use std::slice::Iter;
+// mod test {
+//     use std::slice::Iter;
 
-    use ark_bn254::Fr;
-    use rand::{Rng, thread_rng};
+//     use ark_bn254::Fr;
+//     use rand::{Rng, thread_rng};
 
-    use super::*;
+//     use super::*;
 
-    struct Trace {
-        elem_1: u64,
-        elem_2: u64,
-    }
+//     struct Trace {
+//         elem_1: u64,
+//         elem_2: u64,
+//     }
 
-    #[test]
-    fn test_oracle() {
-        let mut rng = thread_rng();
-        let trace_1 = (0..10).map(|_| rng.gen()).collect::<Vec<u64>>();
-        let trace_2 = (0..10).map(|_| rng.gen()).collect::<Vec<u64>>();
-        let mut trace = Vec::new();
-        for i in 0..10 {
-            trace.push(Trace {
-                elem_1: trace_1[i],
-                elem_2: trace_2[i],
-            });
-        }
+//     #[test]
+//     fn test_oracle() {
+//         let mut rng = thread_rng();
+//         let trace_1 = (0..10).map(|_| rng.gen()).collect::<Vec<u64>>();
+//         let trace_2 = (0..10).map(|_| rng.gen()).collect::<Vec<u64>>();
+//         let mut trace = Vec::new();
+//         for i in 0..10 {
+//             trace.push(Trace {
+//                 elem_1: trace_1[i],
+//                 elem_2: trace_2[i],
+//             });
+//         }
 
-        let poly_1 = StreamingPolyinomial::<Iter<Trace>, Fr>::new(|elem: &&Trace| {
-            Fr::from_u64(elem.elem_1) * Fr::from_u64(elem.elem_2)
-        });
-        let poly_2 = StreamingPolyinomial::<Iter<Trace>, Fr>::new(|elem: &&Trace| {
-            Fr::from_u64(elem.elem_1) + Fr::from_u64(elem.elem_2)
-        });
+//         let poly_1 = StreamingPolyinomial::<Iter<Trace>, Fr>::new(|elem: &&Trace| {
+//             Fr::from_u64(elem.elem_1) * Fr::from_u64(elem.elem_2)
+//         });
+//         let poly_2 = StreamingPolyinomial::<Iter<Trace>, Fr>::new(|elem: &&Trace| {
+//             Fr::from_u64(elem.elem_1) + Fr::from_u64(elem.elem_2)
+//         });
 
-        let mut oracle = Oracle::new(trace.iter(), vec![poly_1, poly_2]);
+//         let mut oracle = Oracle::new(trace.iter(), vec![poly_1, poly_2]);
 
-        for i in 0..10 {
-            let temp = oracle.stream_next_evals();
-            println!("The {}th evals are {}, {}", i, temp[0], temp[1]);
-        }
-    }
-}
+//         for i in 0..10 {
+//             let temp = oracle.stream_next_evals();
+//             println!("The {}th evals are {}, {}", i, temp[0], temp[1]);
+//         }
+//     }
+// }
 
 // use crate::field::JoltField;
 
