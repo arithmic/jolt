@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use std::slice::Iter;
 
 use ark_serialize::*;
+use ark_std::log2;
 use itertools::Itertools;
 use rayon::prelude::*;
 
@@ -477,46 +478,48 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let mut final_eval = vec![F::zero(); num_polys];
 
         let mut witness_eval_for_final_eval = vec![vec![F::zero(); 2]; combined_degree];
-
+        let num_shards = log2((1 << num_rounds) / shard_length) as usize;
         for i in 0..num_rounds {
-            println!("round is {}", i);
             // Initializing the accumulator
             let mut accumulator = vec![F::zero(); combined_degree + 1];
+
             // Initializing the witness eval of l * l+1
             let mut witness_eval = vec![vec![F::zero(); combined_degree + 1]; combined_degree];
 
-            // oracle.update_iter(trace_temp.iter());
-            // let temp_iter = oracle.trace_iter.clone();
-
-            for j in 0..(1 << num_rounds) / shard_length {
+            for shard in 0..num_shards {
                 let polys = oracle.stream_next_shards(shard_length);
-                // Computing eq(r, j)
-                let eq_eval_r_j = EqPolynomial::new(r.to_vec()).evaluate_with_bits(&j);
+                for j in 0..shard_length {
+                    let eval_at = shard_length * shard + j;
+                    // Computing eq(r, j)
+                    let eq_eval_r_j = EqPolynomial::new(r.to_vec()).evaluate_with_bits(&eval_at);
 
-                // Computing eq(j_i, s) for all s
-                let mut eq_eval_j_s_vec = vec![F::zero(); combined_degree + 1];
-                let bit = (j >> i) & 1;
-                for s in 0..=combined_degree {
-                    let val = F::from_u64(s as u64);
-                    eq_eval_j_s_vec[s] = if bit == 0 { F::one() - val } else { val };
-                }
+                    // Computing eq(j_i, s) for all s
+                    let mut eq_eval_j_s_vec = vec![F::zero(); combined_degree + 1];
 
-                for k in 0..combined_degree {
+                    let bit = j & 1;
+
                     for s in 0..=combined_degree {
-                        witness_eval[k][s] += eq_eval_r_j * eq_eval_j_s_vec[s] * polys[k][j];
+                        let val = F::from_u64(s as u64);
+                        eq_eval_j_s_vec[s] = if bit == 0 { F::one() - val } else { val };
                     }
-                    witness_eval_for_final_eval[k][0] = witness_eval[k][0];
-                    witness_eval_for_final_eval[k][1] = witness_eval[k][1];
-                }
 
-                if (j + 1) % (1 << (i + 1)) == 0 {
-                    for s in 0..=combined_degree {
-                        let prod = (0..combined_degree)
-                            .map(|k| witness_eval[k][s])
-                            .product::<F>();
-                        accumulator[s] += prod;
+                    for k in 0..combined_degree {
+                        for s in 0..=combined_degree {
+                            witness_eval[k][s] += eq_eval_r_j * eq_eval_j_s_vec[s] * polys[j][k];
+                        }
+                        witness_eval_for_final_eval[k][0] = witness_eval[k][0];
+                        witness_eval_for_final_eval[k][1] = witness_eval[k][1];
                     }
-                    witness_eval = vec![vec![F::zero(); combined_degree + 1]; combined_degree];
+
+                    if (j + 1) % (1 << (i + 1)) == 0 {
+                        for s in 0..=combined_degree {
+                            let prod = (0..combined_degree)
+                                .map(|k| witness_eval[k][s])
+                                .product::<F>();
+                            accumulator[s] += prod;
+                        }
+                        witness_eval = vec![vec![F::zero(); combined_degree + 1]; combined_degree];
+                    }
                 }
             }
 
@@ -540,7 +543,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                     .collect();
             }
 
-            // oracle.trace_iter = temp_iter;
             oracle.update_iter();
         }
 
@@ -666,11 +668,9 @@ fn test_streaming_prover_product_sharding() {
     use crate::utils::transcript::Transcript;
     use ark_bn254::Fr;
     use ark_ff::Zero;
-    use ark_std::test_rng;
-    let rng = &mut test_rng();
     let num_vars = 7;
     let num_polys = 10;
-    let mut polys = (0..num_polys)
+    let polys = (0..num_polys)
         .map(|_| {
             StreamingPolyinomial::<Iter<usize>, Fr>::new(|elem: &&usize| {
                 Fr::from_u64(**elem as u64)
@@ -680,21 +680,7 @@ fn test_streaming_prover_product_sharding() {
     let trace = (0..(1 << num_vars)).map(|idx| idx).collect_vec();
     let mut oracle = Oracle::<Iter<usize>, Fr>::new(trace.iter(), polys);
 
-    // let mut polys: Vec<MultilinearPolynomial<Fr>> = Vec::new();
-    // for _ in 0..num_polys {
-    //     let mut coeffs = Vec::new();
-    //     for _ in 0..(1 << num_vars) {
-    //         coeffs.push(Fr::rand(rng));
-    //     }
-    //     let poly = MultilinearPolynomial::from(coeffs);
-    //     polys.push(poly);
-    // }
-    // let mut initial_claim = Fr::zero();
-    // for i in 0..(1 << num_vars) {
-    //     let temp_val: Fr = (0..num_polys).map(|j| polys[j].get_coeff(i)).product();
-    //     initial_claim = initial_claim + temp_val;
-    // }
-    let shard_length = 1 << 3;
+    let shard_length = 1 << 6;
     let mut transcript = <KeccakTranscript as Transcript>::new(b"test");
     let (proof, r, final_evals) = SumcheckInstanceProof::streaming_prove_product_with_sharding(
         &Fr::zero(),
@@ -708,12 +694,11 @@ fn test_streaming_prover_product_sharding() {
     let (e_verify, r_prime) = proof
         .verify(Fr::zero(), num_vars, num_polys, &mut transcript)
         .unwrap();
-    assert_eq!(r, r_prime, "random points are not matching");
     // let evals = polys
     //     .iter()
     //     .map(|poly| poly.evaluate(&r.iter().rev().cloned().collect::<Vec<_>>()))
     //     .collect::<Vec<Fr>>();
-    // let res = (0..evals.len()).map(|k| evals[k]).product::<Fr>();
-    // assert_eq!(res, e_verify);
+    let res = final_evals.iter().product::<Fr>();
+    assert_eq!(res, e_verify);
     // assert_eq!(final_evals, evals, "final evals are not matching");
 }

@@ -46,8 +46,11 @@ where
     pub fn num_polys(&self) -> usize {
         self.polys.len()
     }
+
     pub fn stream_next_shards(&mut self, shard_len: usize) -> Vec<Vec<F>> {
-        (0..shard_len).map(|_| self.stream_next_evals()).collect()
+        (0..shard_len)
+            .map(|_| self.stream_next_evals())
+            .collect::<Vec<Vec<F>>>()
     }
 }
 
