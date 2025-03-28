@@ -292,6 +292,7 @@ impl<F: JoltField> CompressedUniPoly<F> {
         for i in 1..self.coeffs_except_linear_term.len() {
             linear_term -= self.coeffs_except_linear_term[i];
         }
+        println!(" linear_term = {}", linear_term);
 
         let mut running_point = *x;
         let mut running_sum = self.coeffs_except_linear_term[0] + *x * linear_term;

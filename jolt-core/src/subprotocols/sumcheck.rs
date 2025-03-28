@@ -478,7 +478,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let mut final_eval = vec![F::zero(); num_polys];
 
         let mut witness_eval_for_final_eval = vec![vec![F::zero(); 2]; combined_degree];
-        let num_shards = log2((1 << num_rounds) / shard_length) as usize;
+        let num_shards = ((1 << num_rounds) / shard_length) as usize;
         for i in 0..num_rounds {
             // Initializing the accumulator
             let mut accumulator = vec![F::zero(); combined_degree + 1];
@@ -489,29 +489,29 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             for shard in 0..num_shards {
                 let polys = oracle.stream_next_shards(shard_length);
                 for j in 0..shard_length {
-                    let eval_at = shard_length * shard + j;
-                    // Computing eq(r, j)
-                    let eq_eval_r_j = EqPolynomial::new(r.to_vec()).evaluate_with_bits(&eval_at);
+                    let idx = shard_length * shard + j;
+                    // Computing eq(r, idx)
+                    let eq_eval_r_idx = EqPolynomial::new(r.to_vec()).evaluate_with_bits(&idx);
 
-                    // Computing eq(j_i, s) for all s
-                    let mut eq_eval_j_s_vec = vec![F::zero(); combined_degree + 1];
+                    // Computing eq(idx_i, s) for all s
+                    let mut eq_eval_idx_s_vec = vec![F::one(); combined_degree + 1];
 
-                    let bit = j & 1;
+                    let bit = (idx >> i) & 1;
 
                     for s in 0..=combined_degree {
                         let val = F::from_u64(s as u64);
-                        eq_eval_j_s_vec[s] = if bit == 0 { F::one() - val } else { val };
+                        eq_eval_idx_s_vec[s] = if bit == 0 { F::one() - val } else { val };
                     }
 
                     for k in 0..combined_degree {
                         for s in 0..=combined_degree {
-                            witness_eval[k][s] += eq_eval_r_j * eq_eval_j_s_vec[s] * polys[j][k];
+                            witness_eval[k][s] += eq_eval_r_idx * eq_eval_idx_s_vec[s] * polys[j][k];
                         }
                         witness_eval_for_final_eval[k][0] = witness_eval[k][0];
                         witness_eval_for_final_eval[k][1] = witness_eval[k][1];
                     }
 
-                    if (j + 1) % (1 << (i + 1)) == 0 {
+                    if (idx + 1) % (1 << (i + 1)) == 0 {
                         for s in 0..=combined_degree {
                             let prod = (0..combined_degree)
                                 .map(|k| witness_eval[k][s])
@@ -525,6 +525,10 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
             // Interpolating the polynomial
             let univariate_poly = UniPoly::from_evals(&accumulator);
+            println!(
+                "linear_term on prover side in round {} = {}",
+                i, univariate_poly.coeffs[1]
+            );
             let compressed_poly = univariate_poly.compress();
             compressed_poly.append_to_transcript(transcript);
 
@@ -608,6 +612,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             r.push(r_i);
 
             // evaluate the claimed degree-ell polynomial at r_i using the hint
+            print!("Verifier round {}", i);
             e = self.compressed_polys[i].eval_from_hint(&e, &r_i);
         }
 
@@ -668,8 +673,8 @@ fn test_streaming_prover_product_sharding() {
     use crate::utils::transcript::Transcript;
     use ark_bn254::Fr;
     use ark_ff::Zero;
-    let num_vars = 7;
-    let num_polys = 10;
+    let num_vars = 10;
+    let num_polys = 2;
     let polys = (0..num_polys)
         .map(|_| {
             StreamingPolyinomial::<Iter<usize>, Fr>::new(|elem: &&usize| {
@@ -682,17 +687,22 @@ fn test_streaming_prover_product_sharding() {
 
     let shard_length = 1 << 6;
     let mut transcript = <KeccakTranscript as Transcript>::new(b"test");
+    let claim: Fr = (0..(1 << num_vars))
+        .map(|idx| Fr::from_u64(idx as u64) * Fr::from_u64(idx as u64))
+        .sum();
+
     let (proof, r, final_evals) = SumcheckInstanceProof::streaming_prove_product_with_sharding(
-        &Fr::zero(),
+        &claim,
         num_vars,
         &mut oracle,
         num_polys,
         shard_length,
         &mut transcript,
     );
+    println!("");
     let mut transcript = <KeccakTranscript as Transcript>::new(b"test");
     let (e_verify, r_prime) = proof
-        .verify(Fr::zero(), num_vars, num_polys, &mut transcript)
+        .verify(claim, num_vars, num_polys, &mut transcript)
         .unwrap();
     // let evals = polys
     //     .iter()
