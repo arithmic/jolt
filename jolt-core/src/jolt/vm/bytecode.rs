@@ -16,6 +16,7 @@ use crate::lasso::memory_checking::{
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::poly::compact_polynomial::{CompactPolynomial, SmallScalar};
 use crate::poly::multilinear_polynomial::{MultilinearPolynomial, PolynomialEvaluation};
+use crate::poly::streaming_poly::StreamingOracle;
 use common::constants::{BYTES_PER_INSTRUCTION, RAM_START_ADDRESS};
 use common::rv_trace::ELFInstruction;
 
@@ -46,6 +47,102 @@ pub struct BytecodeStuff<T: CanonicalSerialize + CanonicalDeserialize> {
     pub(crate) t_final: T,
     a_init_final: VerifierComputedOpening<T>,
     v_init_final: VerifierComputedOpening<[T; 6]>,
+}
+
+pub struct StreamingBytecodeStuff<'a, I: Iterator, F: JoltField> {
+    pub(crate) trace_iter: I,
+    pub(crate) init_iter: I,
+    pub(crate) preprocessing: &'a BytecodePreprocessing<F>,
+    pub(crate) shard: BytecodeStuff<Vec<F>>,
+}
+
+impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField>
+    StreamingOracle<I> for StreamingBytecodeStuff<'_, I, F>
+{
+    fn stream_next_shard(&mut self, shard_len: usize) {
+        for i in 0..shard_len {
+            let mut step = self.trace_iter.next().unwrap();
+            
+            let bytecode_stuff =
+                Self::generate_witness_bytecode_streaming(&mut step, self.preprocessing);
+
+            self.shard.a_read_write[i] = bytecode_stuff.a_read_write;
+            self.shard.v_read_write[0][i] = bytecode_stuff.v_read_write[0];
+            self.shard.v_read_write[1][i] = bytecode_stuff.v_read_write[1];
+            self.shard.v_read_write[2][i] = bytecode_stuff.v_read_write[2];
+            self.shard.v_read_write[3][i] = bytecode_stuff.v_read_write[3];
+            self.shard.v_read_write[4][i] = bytecode_stuff.v_read_write[4];
+            self.shard.v_read_write[5][i] = bytecode_stuff.v_read_write[5];
+        }
+    }
+}
+
+impl<'a, I: Iterator + Clone, F: JoltField> StreamingBytecodeStuff<'a, I, F> {
+    pub fn new(
+        trace_iter: I,
+        shard_len: usize,
+        preprocessing: &'a BytecodePreprocessing<F>,
+    ) -> Self {
+        StreamingBytecodeStuff {
+            trace_iter: trace_iter.clone(),
+            init_iter: trace_iter,
+            shard: BytecodeStuff {
+                a_read_write: vec![F::zero(); shard_len],
+                v_read_write: [
+                    vec![F::zero(); shard_len],
+                    vec![F::zero(); shard_len],
+                    vec![F::zero(); shard_len],
+                    vec![F::zero(); shard_len],
+                    vec![F::zero(); shard_len],
+                    vec![F::zero(); shard_len],
+                ],
+                t_read: vec![F::zero(); shard_len],
+                t_final: vec![F::zero(); shard_len],
+                a_init_final: None,
+                v_init_final: None,
+            },
+            preprocessing,
+        }
+    }
+
+    pub fn generate_witness_bytecode_streaming<InstructionSet: JoltInstructionSet>(
+        step: &mut JoltTraceStep<InstructionSet>,
+        preprocessing: &BytecodePreprocessing<F>,
+    ) -> BytecodeStuff<F> {
+        if !step.bytecode_row.address.is_zero() {
+            assert!(step.bytecode_row.address >= RAM_START_ADDRESS as usize);
+            assert!(step.bytecode_row.address % BYTES_PER_INSTRUCTION == 0);
+            // Compress instruction address for more efficient commitment:
+            step.bytecode_row.address = 1
+                + (step.bytecode_row.address - RAM_START_ADDRESS as usize) / BYTES_PER_INSTRUCTION;
+        }
+
+        let virtual_address = preprocessing
+            .virtual_address_map
+            .get(&(
+                step.bytecode_row.address,
+                step.bytecode_row.virtual_sequence_remaining.unwrap_or(0),
+            ))
+            .unwrap();
+
+        let a_read_write = F::from_u32(*virtual_address as u32);
+        let mut v_read_write_vec = [F::zero(); 6];
+        v_read_write_vec[0] = F::from_u64(step.bytecode_row.address as u64);
+        v_read_write_vec[1] = F::from_u64(step.bytecode_row.bitflags as u64);
+        v_read_write_vec[2] = F::from_u64(step.bytecode_row.rd as u64);
+        v_read_write_vec[3] = F::from_u64(step.bytecode_row.rs1 as u64);
+        v_read_write_vec[4] = F::from_u64(step.bytecode_row.rs2 as u64);
+        v_read_write_vec[5] = F::from_i64(step.bytecode_row.imm as i64);
+
+        BytecodeStuff {
+            a_read_write: (a_read_write),
+            v_read_write: (v_read_write_vec),
+            t_read: (F::zero()),  // adding the dummy value
+            t_final: (F::zero()),  // adding the dummy value
+            a_init_final: None,
+            v_init_final: None,
+        }
+    }
 }
 
 /// Note –– F: JoltField bound is not enforced.

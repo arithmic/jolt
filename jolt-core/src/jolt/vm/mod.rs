@@ -6,12 +6,15 @@ use crate::poly::multilinear_polynomial::MultilinearPolynomial;
 use crate::poly::opening_proof::{
     ProverOpeningAccumulator, ReducedOpeningProof, VerifierOpeningAccumulator,
 };
+use crate::poly::streaming_poly::StreamingOracle;
 use crate::r1cs::constraints::R1CSConstraints;
 use crate::r1cs::spartan::{self, UniformSpartanProof};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use bytecode::StreamingBytecodeStuff;
 use common::rv_trace::{MemoryLayout, NUM_CIRCUIT_FLAGS};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
+use std::vec::IntoIter;
 use strum::EnumCount;
 use timestamp_range_check::TimestampRangeCheckStuff;
 
@@ -413,9 +416,18 @@ where
         );
 
         // TODO: Declare bytecode_polynomials_new of type BytecodeStuff<StreamingPolynomial<Iter::JoltTraceStep, F>>.
-
         // TODO: Initialise bytecode_polynomials_new by creating a_read_write etc... using StreamingPolynomial::new().
         // TODO: To new() we need to pass a closure.
+        let shard_len = 100;
+        let mut bytecode_streaming_polynomial = StreamingBytecodeStuff::<
+        IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
+                            F,
+                        >::new(trace.clone().into_iter(), shard_len, &preprocessing.bytecode);
+
+        bytecode_streaming_polynomial.stream_next_shard(shard_len);
+
+        
+
         let (bytecode_polynomials, range_check_polys) = rayon::join(
             || {
                 BytecodeProof::<F, PCS, ProofTranscript>::generate_witness(
