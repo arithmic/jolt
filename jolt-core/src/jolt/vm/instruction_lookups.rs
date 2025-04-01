@@ -3,6 +3,7 @@ use crate::poly::multilinear_polynomial::{
     BindingOrder, MultilinearPolynomial, PolynomialBinding, PolynomialEvaluation,
 };
 use crate::poly::opening_proof::{ProverOpeningAccumulator, VerifierOpeningAccumulator};
+use crate::poly::streaming_poly::StreamingOracle;
 use crate::subprotocols::grand_product::BatchedGrandProduct;
 use crate::subprotocols::sparse_grand_product::ToggledBatchedGrandProduct;
 use crate::utils::thread::unsafe_allocate_zero_vec;
@@ -60,6 +61,163 @@ pub struct InstructionLookupStuff<T: CanonicalSerialize + CanonicalDeserialize> 
 
     a_init_final: VerifierComputedOpening<T>,
     v_init_final: VerifierComputedOpening<Vec<T>>,
+}
+
+pub struct StreamingInstructionLookupStuff<
+    'a,
+    I: Iterator,
+    F: JoltField,
+    const C: usize,
+    const M: usize,
+> {
+    pub(crate) trace_iter: I,
+    pub(crate) init_iter: I,
+    pub(crate) preprocessing: &'a InstructionLookupsPreprocessing<C, F>,
+    pub(crate) shard: InstructionLookupStuff<Vec<F>>,
+}
+
+impl<'a, I: Iterator + Clone, F: JoltField, const C: usize, const M: usize>
+    StreamingInstructionLookupStuff<'a, I, F, C, M>
+{
+    pub fn new(
+        trace_iter: I,
+        shard_len: usize,
+        preprocessing: &'a InstructionLookupsPreprocessing<C, F>,
+    ) -> Self {
+        StreamingInstructionLookupStuff {
+            trace_iter: trace_iter.clone(),
+            init_iter: trace_iter,
+            shard: InstructionLookupStuff {
+                dim: vec![vec![F::zero(); shard_len]; C],
+                read_cts: vec![vec![F::zero(); shard_len]; preprocessing.num_memories],
+                final_cts: vec![vec![F::zero(); shard_len]; preprocessing.num_memories],
+                E_polys: vec![vec![F::zero(); shard_len]; preprocessing.num_memories],
+                instruction_flags: vec![
+                    vec![F::zero(); shard_len];
+                    preprocessing.instruction_to_memory_indices.len()
+                ],
+                lookup_outputs: vec![F::zero(); shard_len],
+                a_init_final: None,
+                v_init_final: None,
+            },
+            preprocessing,
+        }
+    }
+
+    pub fn generate_witness_instructionlookups_streaming<InstructionSet: JoltInstructionSet>(
+        step: &mut JoltTraceStep<InstructionSet>,
+        preprocessing: &InstructionLookupsPreprocessing<C, F>,
+    ) -> InstructionLookupStuff<F> {
+        //Computing subtable_lookup_indices
+        let subtable_lookup_indices = Self::subtable_lookup_indices(step);
+
+        //Computing dim
+        let dim: Vec<F> = subtable_lookup_indices
+            .clone()
+            .into_par_iter()
+            .map(F::from_u16)
+            .collect();
+
+        //Computing E_polys
+        let E_polynomials: Vec<F> = (0..preprocessing.num_memories)
+            .into_par_iter()
+            .map(|memory_index| {
+                let dim_index = preprocessing.memory_to_dimension_index[memory_index];
+                let subtable_index = preprocessing.memory_to_subtable_index[memory_index];
+                let access_sequence = subtable_lookup_indices[dim_index];
+                let mut subtable_lookups: u32 = 0;
+                if let Some(instr) = &step.instruction_lookup {
+                    let memories_used = &preprocessing.instruction_to_memory_indices
+                        [InstructionSet::enum_index(instr)];
+                    if memories_used.contains(&memory_index) {
+                        let memory_address = access_sequence as usize;
+                        debug_assert!(memory_address < M);
+                        subtable_lookups =
+                            preprocessing.materialized_subtables[subtable_index][memory_address];
+                    }
+                }
+                F::from_u32(subtable_lookups)
+            })
+            .collect();
+
+        // Computing instruction_flags
+        let mut instruction_flag_bitvectors: Vec<F> =
+            vec![F::zero(); preprocessing.instruction_to_memory_indices.len()];
+        if let Some(instr) = &step.instruction_lookup {
+            instruction_flag_bitvectors[InstructionSet::enum_index(instr)] = F::one();
+        }
+
+        // Computing instruction lookups
+        let lookup_outputs = if let Some(instr) = &step.instruction_lookup {
+            F::from_u32(instr.lookup_entry() as u32)
+        } else {
+            F::zero()
+        };
+
+        InstructionLookupStuff {
+            dim,
+            read_cts: vec![F::zero()],
+            final_cts: vec![F::zero()],
+            E_polys: E_polynomials,
+            instruction_flags: instruction_flag_bitvectors,
+            lookup_outputs,
+            a_init_final: None,
+            v_init_final: None,
+        }
+    }
+
+    pub fn subtable_lookup_indices<InstructionSet: JoltInstructionSet>(
+        ops: &JoltTraceStep<InstructionSet>,
+    ) -> Vec<u16> {
+        let log_M = M.log_2();
+        let chunked_indices: Vec<u16> = if let Some(instr) = &ops.instruction_lookup {
+            instr
+                .to_indices(C, log_M)
+                .iter()
+                .map(|i| *i as u16)
+                .collect()
+        } else {
+            vec![0; C]
+        };
+        let mut subtable_lookup_indices: Vec<u16> = Vec::with_capacity(C);
+        for i in 0..C {
+            subtable_lookup_indices.push(chunked_indices[i]);
+        }
+        subtable_lookup_indices
+    }
+}
+
+impl<
+        'a,
+        IS: JoltInstructionSet,
+        I: Iterator<Item = JoltTraceStep<IS>> + Clone,
+        F: JoltField,
+        const C: usize,
+        const M: usize,
+    > StreamingOracle<I> for StreamingInstructionLookupStuff<'a, I, F, C, M>
+{
+    fn stream_next_shard(&mut self, shard_len: usize) {
+        for i in 0..shard_len {
+            let mut step = self.trace_iter.next().unwrap();
+            let instruction_lookup_stuff =
+                Self::generate_witness_instructionlookups_streaming(&mut step, self.preprocessing);
+
+            for idx in 0..self.shard.dim.len() {
+                self.shard.dim[idx][i] = instruction_lookup_stuff.dim[idx];
+            }
+
+            for idx in 0..self.shard.E_polys.len() {
+                self.shard.E_polys[idx][i] = instruction_lookup_stuff.E_polys[idx];
+            }
+
+            for idx in 0..self.shard.instruction_flags.len() {
+                self.shard.instruction_flags[idx][i] =
+                    instruction_lookup_stuff.instruction_flags[idx];
+            }
+
+            self.shard.lookup_outputs[i] = instruction_lookup_stuff.lookup_outputs;
+        }
+    }
 }
 
 /// Note –– F: JoltField bound is not enforced.

@@ -62,7 +62,7 @@ impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: J
     fn stream_next_shard(&mut self, shard_len: usize) {
         for i in 0..shard_len {
             let mut step = self.trace_iter.next().unwrap();
-            
+
             let bytecode_stuff =
                 Self::generate_witness_bytecode_streaming(&mut step, self.preprocessing);
 
@@ -138,7 +138,7 @@ impl<'a, I: Iterator + Clone, F: JoltField> StreamingBytecodeStuff<'a, I, F> {
             a_read_write: (a_read_write),
             v_read_write: (v_read_write_vec),
             t_read: (F::zero()),  // adding the dummy value
-            t_final: (F::zero()),  // adding the dummy value
+            t_final: (F::zero()), // adding the dummy value
             a_init_final: None,
             v_init_final: None,
         }

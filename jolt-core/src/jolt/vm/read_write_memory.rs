@@ -186,26 +186,33 @@ impl<T: CanonicalSerialize + CanonicalDeserialize> StructuredPolynomialData<T>
     }
 }
 
-pub struct StreamingReadWriteMemoryStuff<'a, I: Iterator, F: JoltField>{
+pub struct StreamingReadWriteMemoryStuff<'a, I: Iterator, F: JoltField> {
     pub(crate) trace_iter: I,
     pub(crate) init_iter: I,
-    pub(crate) program_io:  &'a JoltDevice,
+    pub(crate) program_io: &'a JoltDevice,
     pub(crate) v_init: Vec<u32>,
     pub(crate) v_final: Vec<u32>,
     preprocessing: &'a ReadWriteMemoryPreprocessing,
-    pub(crate) shard: ReadWriteMemoryStuff<Vec<F>>
+    pub(crate) shard: ReadWriteMemoryStuff<Vec<F>>,
 }
 
-impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField> StreamingReadWriteMemoryStuff<'a, I, F>{
-    pub fn new(trace_iter: I, shard_len: usize, preprocessing: &'a ReadWriteMemoryPreprocessing, program_io: &'a JoltDevice) -> Self {
-
-        let max_trace_address = trace_iter.clone()
-        .map(|step| match step.memory_ops[RAM] {
-            MemoryOp::Read(a) => remap_address(a, &program_io.memory_layout),
-            MemoryOp::Write(a, _) => remap_address(a, &program_io.memory_layout),
-        })
-        .max()
-        .unwrap();
+impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField>
+    StreamingReadWriteMemoryStuff<'a, I, F>
+{
+    pub fn new(
+        trace_iter: I,
+        shard_len: usize,
+        preprocessing: &'a ReadWriteMemoryPreprocessing,
+        program_io: &'a JoltDevice,
+    ) -> Self {
+        let max_trace_address = trace_iter
+            .clone()
+            .map(|step| match step.memory_ops[RAM] {
+                MemoryOp::Read(a) => remap_address(a, &program_io.memory_layout),
+                MemoryOp::Write(a, _) => remap_address(a, &program_io.memory_layout),
+            })
+            .max()
+            .unwrap();
 
         let memory_size = max_trace_address.next_power_of_two() as usize;
         let mut v_init: Vec<u32> = vec![0; memory_size];
@@ -239,11 +246,10 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
 
         let v_final = v_init.clone();
 
-
-        StreamingReadWriteMemoryStuff{
+        StreamingReadWriteMemoryStuff {
             trace_iter: trace_iter.clone(),
             init_iter: trace_iter.clone(),
-            shard: ReadWriteMemoryStuff{
+            shard: ReadWriteMemoryStuff {
                 a_ram: vec![F::zero(); shard_len],
                 v_read_rd: vec![F::zero(); shard_len],
                 v_read_rs1: vec![F::zero(); shard_len],
@@ -263,8 +269,8 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
             },
             program_io,
             preprocessing,
-            v_init: v_init,
-            v_final: v_final,
+            v_init,
+            v_final,
         }
     }
 
@@ -272,7 +278,7 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
         step: JoltTraceStep<InstructionSet>,
         program_io: JoltDevice,
         v_final: &mut Vec<u32>,
-    ) -> ReadWriteMemoryStuff<F>{
+    ) -> ReadWriteMemoryStuff<F> {
         let a_ram;
         let v_read_rd;
         let v_read_rs1;
@@ -344,8 +350,8 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
             }
         }
 
-        ReadWriteMemoryStuff{
-            a_ram:F::from_u32(a_ram),
+        ReadWriteMemoryStuff {
+            a_ram: F::from_u32(a_ram),
             v_read_rd: F::from_u32(v_read_rd),
             v_read_rs1: F::from_u32(v_read_rs1),
             v_read_rs2: F::from_u32(v_read_rs2),
@@ -362,15 +368,16 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
             v_init: None,
             identity: None,
         }
-
-        }
+    }
 }
 
-impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField> StreamingOracle<I> for StreamingReadWriteMemoryStuff<'_, I, F>{
+impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField>
+    StreamingOracle<I> for StreamingReadWriteMemoryStuff<'_, I, F>
+{
     fn stream_next_shard(&mut self, shard_len: usize) {
         for shards in 0..shard_len {
             let step = self.trace_iter.next().unwrap();
-            let read_mem_stuff  = Self::generate_witness_rw_memory_streaming(
+            let read_mem_stuff = Self::generate_witness_rw_memory_streaming(
                 step,
                 self.program_io.clone(),
                 &mut self.v_final,
@@ -386,7 +393,6 @@ impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: J
         }
     }
 }
-
 
 /// Note –– F: JoltField bound is not enforced.
 ///

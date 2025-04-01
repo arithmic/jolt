@@ -1,5 +1,5 @@
-pub trait StreamingOracle<I: Iterator > {
-    fn stream_next_shard(&mut self, shard_len: usize );
+pub trait StreamingOracle<I: Iterator> {
+    fn stream_next_shard(&mut self, shard_len: usize);
 }
 
 // pub struct StreamingPolyinomial<I: Iterator, F> {
