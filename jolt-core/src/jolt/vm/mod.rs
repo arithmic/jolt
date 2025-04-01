@@ -12,6 +12,7 @@ use crate::r1cs::spartan::{self, UniformSpartanProof};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytecode::StreamingBytecodeStuff;
 use common::rv_trace::{MemoryLayout, NUM_CIRCUIT_FLAGS};
+use read_write_memory::StreamingReadWriteMemoryStuff;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::vec::IntoIter;
@@ -415,6 +416,8 @@ where
             &trace,
         );
 
+
+
         // TODO: Declare bytecode_polynomials_new of type BytecodeStuff<StreamingPolynomial<Iter::JoltTraceStep, F>>.
         // TODO: Initialise bytecode_polynomials_new by creating a_read_write etc... using StreamingPolynomial::new().
         // TODO: To new() we need to pass a closure.
@@ -426,7 +429,28 @@ where
 
         bytecode_streaming_polynomial.stream_next_shard(shard_len);
 
+        let mut streaming_mem_rw_polynomials = StreamingReadWriteMemoryStuff::<
+            IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
+            F,
+        >::new(trace.clone().into_iter(), shard_len, &preprocessing.read_write_memory, &program_io);
+
         
+        // testing the streaming polynomials for memory_polynomials
+        for n in 0..5 {
+            streaming_mem_rw_polynomials.stream_next_shard(shard_len);
+            for i in 0..shard_len{
+                assert_eq!(streaming_mem_rw_polynomials.shard.a_ram[i], memory_polynomials.a_ram.get_coeff(n * shard_len + i));
+                assert_eq!(streaming_mem_rw_polynomials.shard.v_read_rs1[i], memory_polynomials.v_read_rs1.get_coeff(n * shard_len + i));
+                assert_eq!(streaming_mem_rw_polynomials.shard.v_read_rs2[i], memory_polynomials.v_read_rs2.get_coeff(n * shard_len + i));
+                assert_eq!(streaming_mem_rw_polynomials.shard.v_read_rd[i], memory_polynomials.v_read_rd.get_coeff(n * shard_len + i));
+                assert_eq!(streaming_mem_rw_polynomials.shard.v_write_rd[i], memory_polynomials.v_write_rd.get_coeff(n * shard_len + i));
+                assert_eq!(streaming_mem_rw_polynomials.shard.v_read_ram[i], memory_polynomials.v_read_ram.get_coeff(n * shard_len + i));
+                assert_eq!(streaming_mem_rw_polynomials.shard.v_write_ram[i], memory_polynomials.v_write_ram.get_coeff(n * shard_len + i));
+            }
+            println!("Passing for {n}th shard");
+        }
+
+
 
         let (bytecode_polynomials, range_check_polys) = rayon::join(
             || {

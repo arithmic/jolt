@@ -186,25 +186,204 @@ impl<T: CanonicalSerialize + CanonicalDeserialize> StructuredPolynomialData<T>
     }
 }
 
-pub struct StreamingReadWriteMemoryStuff<I: Iterator, F: JoltField>{
-    pub a_ram: I,
-    pub v_read_rd: F,
-    pub v_read_rs1: F,
-    pub v_read_rs2: F,
-    pub v_read_ram: F,
-    pub v_write_rd: F,
-    pub v_write_ram: F,
-    pub v_final: F,
-    pub t_read_rd: F,
-    pub t_read_rs1: F,
-    pub t_read_rs2: F,
-    pub t_read_ram: F,
-    pub t_final: F,
+pub struct StreamingReadWriteMemoryStuff<'a, I: Iterator, F: JoltField>{
+    pub(crate) trace_iter: I,
+    pub(crate) init_iter: I,
+    pub(crate) program_io:  &'a JoltDevice,
+    pub(crate) v_init: Vec<u32>,
+    pub(crate) v_final: Vec<u32>,
+    preprocessing: &'a ReadWriteMemoryPreprocessing,
+    pub(crate) shard: ReadWriteMemoryStuff<Vec<F>>
 }
 
-impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField> StreamingOracle<I> for StreamingReadWriteMemoryStuff<I, F>{
+impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField> StreamingReadWriteMemoryStuff<'a, I, F>{
+    pub fn new(trace_iter: I, shard_len: usize, preprocessing: &'a ReadWriteMemoryPreprocessing, program_io: &'a JoltDevice) -> Self {
+
+        let max_trace_address = trace_iter.clone()
+        .map(|step| match step.memory_ops[RAM] {
+            MemoryOp::Read(a) => remap_address(a, &program_io.memory_layout),
+            MemoryOp::Write(a, _) => remap_address(a, &program_io.memory_layout),
+        })
+        .max()
+        .unwrap();
+
+        let memory_size = max_trace_address.next_power_of_two() as usize;
+        let mut v_init: Vec<u32> = vec![0; memory_size];
+
+        // Copy bytecode
+        let mut v_init_index = memory_address_to_witness_index(
+            preprocessing.min_bytecode_address,
+            &program_io.memory_layout,
+        );
+
+        for word in preprocessing.bytecode_words.iter() {
+            v_init[v_init_index] = *word;
+            v_init_index += 1;
+        }
+        // Copy input bytes
+        v_init_index = memory_address_to_witness_index(
+            program_io.memory_layout.input_start,
+            &program_io.memory_layout,
+        );
+
+        // Convert input bytes into words and populate `v_init`
+        for chunk in program_io.inputs.chunks(4) {
+            let mut word = [0u8; 4];
+            for (i, byte) in chunk.iter().enumerate() {
+                word[i] = *byte;
+            }
+            let word = u32::from_le_bytes(word);
+            v_init[v_init_index] = word;
+            v_init_index += 1;
+        }
+
+        let v_final = v_init.clone();
+
+
+        StreamingReadWriteMemoryStuff{
+            trace_iter: trace_iter.clone(),
+            init_iter: trace_iter.clone(),
+            shard: ReadWriteMemoryStuff{
+                a_ram: vec![F::zero(); shard_len],
+                v_read_rd: vec![F::zero(); shard_len],
+                v_read_rs1: vec![F::zero(); shard_len],
+                v_read_rs2: vec![F::zero(); shard_len],
+                v_read_ram: vec![F::zero(); shard_len],
+                v_write_rd: vec![F::zero(); shard_len],
+                v_write_ram: vec![F::zero(); shard_len],
+                v_final: vec![F::zero(); shard_len],
+                t_read_rd: vec![F::zero(); shard_len],
+                t_read_rs1: vec![F::zero(); shard_len],
+                t_read_rs2: vec![F::zero(); shard_len],
+                t_read_ram: vec![F::zero(); shard_len],
+                t_final: vec![F::zero(); shard_len],
+                a_init_final: None,
+                v_init: None,
+                identity: None,
+            },
+            program_io,
+            preprocessing,
+            v_init: v_init,
+            v_final: v_final,
+        }
+    }
+
+    pub fn generate_witness_rw_memory_streaming<InstructionSet: JoltInstructionSet>(
+        step: JoltTraceStep<InstructionSet>,
+        program_io: JoltDevice,
+        v_final: &mut Vec<u32>,
+    ) -> ReadWriteMemoryStuff<F>{
+        let a_ram;
+        let v_read_rd;
+        let v_read_rs1;
+        let v_read_rs2;
+        let v_read_ram;
+        let v_write_rd;
+        let v_write_ram;
+
+        match step.memory_ops[RS1] {
+            MemoryOp::Read(a) => {
+                assert!(a < REGISTER_COUNT);
+                let a = a as usize;
+                let v = v_final[a];
+
+                v_read_rs1 = v;
+            }
+            MemoryOp::Write(a, v) => {
+                panic!("Unexpected rs1 MemoryOp::Write({}, {})", a, v);
+            }
+        };
+
+        match step.memory_ops[RS2] {
+            MemoryOp::Read(a) => {
+                assert!(a < REGISTER_COUNT);
+                let a = a as usize;
+                let v = v_final[a];
+
+                v_read_rs2 = v;
+            }
+            MemoryOp::Write(a, v) => {
+                panic!("Unexpected rs2 MemoryOp::Write({}, {})", a, v)
+            }
+        };
+
+        match step.memory_ops[RD] {
+            MemoryOp::Read(a) => {
+                panic!("Unexpected rd MemoryOp::Read({})", a)
+            }
+            MemoryOp::Write(a, v_new) => {
+                assert!(a < REGISTER_COUNT);
+                let a = a as usize;
+                let v_old = v_final[a];
+
+                v_read_rd = v_old;
+                v_write_rd = v_new as u32;
+                v_final[a] = v_new as u32;
+            }
+        };
+
+        match step.memory_ops[RAM] {
+            MemoryOp::Read(a) => {
+                debug_assert!(a % 4 == 0);
+                let remapped_a = remap_address(a, &program_io.memory_layout) as usize;
+                let v = v_final[remapped_a];
+
+                a_ram = remapped_a as u32;
+                v_read_ram = v;
+                v_write_ram = v;
+            }
+            MemoryOp::Write(a, v_new) => {
+                debug_assert!(a % 4 == 0);
+                let remapped_a = remap_address(a, &program_io.memory_layout) as usize;
+                let v_old = v_final[remapped_a];
+
+                a_ram = remapped_a as u32;
+                v_read_ram = v_old;
+                v_write_ram = v_new as u32;
+                v_final[remapped_a] = v_new as u32;
+            }
+        }
+
+        ReadWriteMemoryStuff{
+            a_ram:F::from_u32(a_ram),
+            v_read_rd: F::from_u32(v_read_rd),
+            v_read_rs1: F::from_u32(v_read_rs1),
+            v_read_rs2: F::from_u32(v_read_rs2),
+            v_read_ram: F::from_u32(v_read_ram),
+            v_write_rd: F::from_u32(v_write_rd),
+            v_write_ram: F::from_u32(v_write_ram),
+            v_final: F::zero(),
+            t_read_rd: F::zero(),
+            t_read_rs1: F::zero(),
+            t_read_rs2: F::zero(),
+            t_read_ram: F::zero(),
+            t_final: F::zero(),
+            a_init_final: None,
+            v_init: None,
+            identity: None,
+        }
+
+        }
+}
+
+impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField> StreamingOracle<I> for StreamingReadWriteMemoryStuff<'_, I, F>{
     fn stream_next_shard(&mut self, shard_len: usize) {
-        todo!()
+        for shards in 0..shard_len {
+            let step = self.trace_iter.next().unwrap();
+            let read_mem_stuff  = Self::generate_witness_rw_memory_streaming(
+                step,
+                self.program_io.clone(),
+                &mut self.v_final,
+            );
+
+            self.shard.a_ram[shards] = read_mem_stuff.a_ram;
+            self.shard.v_read_rd[shards] = read_mem_stuff.v_read_rd;
+            self.shard.v_read_rs1[shards] = read_mem_stuff.v_read_rs1;
+            self.shard.v_read_rs2[shards] = read_mem_stuff.v_read_rs2;
+            self.shard.v_read_ram[shards] = read_mem_stuff.v_read_ram;
+            self.shard.v_write_rd[shards] = read_mem_stuff.v_write_rd;
+            self.shard.v_write_ram[shards] = read_mem_stuff.v_write_ram;
+        }
     }
 }
 
