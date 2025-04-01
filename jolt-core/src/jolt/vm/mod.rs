@@ -12,6 +12,7 @@ use crate::r1cs::spartan::{self, UniformSpartanProof};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytecode::StreamingBytecodeStuff;
 use common::rv_trace::{MemoryLayout, NUM_CIRCUIT_FLAGS};
+use instruction_lookups::StreamingInstructionLookupStuff;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::vec::IntoIter;
@@ -398,6 +399,22 @@ where
             trace_length,
         );
 
+        ///////////////////////////////////////////////////////
+        let shard_len = 200;
+        let mut instruction_streaming_polynomials = StreamingInstructionLookupStuff::<
+            IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
+            F,
+            C,
+            M,
+        >::new(
+            trace.clone().into_iter(),
+            shard_len,
+            &preprocessing.instruction_lookups,
+        );
+        instruction_streaming_polynomials.stream_next_shard(shard_len);
+        ///////////////////////////////////////////////////////
+
+
         let instruction_polynomials =
             InstructionLookupsProof::<
                 C,
@@ -418,15 +435,18 @@ where
         // TODO: Declare bytecode_polynomials_new of type BytecodeStuff<StreamingPolynomial<Iter::JoltTraceStep, F>>.
         // TODO: Initialise bytecode_polynomials_new by creating a_read_write etc... using StreamingPolynomial::new().
         // TODO: To new() we need to pass a closure.
+         ///////////////////////////////////////////////////////
         let shard_len = 100;
         let mut bytecode_streaming_polynomial = StreamingBytecodeStuff::<
-        IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
-                            F,
-                        >::new(trace.clone().into_iter(), shard_len, &preprocessing.bytecode);
-
+            IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
+            F,
+        >::new(
+            trace.clone().into_iter(),
+            shard_len,
+            &preprocessing.bytecode,
+        );
         bytecode_streaming_polynomial.stream_next_shard(shard_len);
-
-        
+        ///////////////////////////////////////////////////////
 
         let (bytecode_polynomials, range_check_polys) = rayon::join(
             || {
