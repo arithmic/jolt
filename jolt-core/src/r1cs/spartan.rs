@@ -2,14 +2,17 @@ use std::marker::PhantomData;
 use tracing::{span, Level};
 
 use crate::field::JoltField;
+use crate::jolt::instruction::JoltInstructionSet;
 use crate::jolt::vm::JoltCommitments;
 use crate::jolt::vm::JoltPolynomials;
+use crate::jolt::vm::JoltTraceStep;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::poly::multilinear_polynomial::MultilinearPolynomial;
 use crate::poly::multilinear_polynomial::PolynomialEvaluation;
 use crate::poly::opening_proof::ProverOpeningAccumulator;
 use crate::poly::opening_proof::VerifierOpeningAccumulator;
 use crate::poly::split_eq_poly::SplitEqPolynomial;
+use crate::r1cs::inputs::StreamingR1CSStuff;
 use crate::r1cs::key::UniformSpartanKey;
 use crate::utils::math::Math;
 use crate::utils::thread::drop_in_background_thread;
@@ -108,16 +111,21 @@ where
     }
 
     #[tracing::instrument(skip_all, name = "Spartan::prove")]
-    pub fn prove<PCS>(
+    pub fn prove<PCS, InstructionSet: JoltInstructionSet>(
         constraint_builder: &CombinedUniformBuilder<C, F, I>,
         key: &UniformSpartanKey<C, I, F>,
         polynomials: &JoltPolynomials<F>,
         opening_accumulator: &mut ProverOpeningAccumulator<F, ProofTranscript>,
         transcript: &mut ProofTranscript,
+        trace: std::vec::IntoIter<JoltTraceStep<InstructionSet>>
     ) -> Result<Self, SpartanError>
     where
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
+        let shard_len = 2^5;
+        
+        let r1cs_stuff_new = StreamingR1CSStuff::<std::vec::IntoIter<JoltTraceStep<InstructionSet>>, F>::new(trace, shard_len);
+
         let flattened_polys: Vec<&MultilinearPolynomial<F>> = I::flatten::<C>()
             .iter()
             .map(|var| var.get_ref(polynomials))

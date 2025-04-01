@@ -517,12 +517,13 @@ where
             <Self::Constraints as R1CSConstraints<C, F>>::Inputs,
             F,
             ProofTranscript,
-        >::prove::<PCS>(
+            >::prove::<PCS, Self::InstructionSet>(
             &r1cs_builder,
             &spartan_key,
             &jolt_polynomials,
             &mut opening_accumulator,
             &mut transcript,
+            trace.clone().into_iter()
         )
         .expect("r1cs proof failed");
 

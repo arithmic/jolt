@@ -6,12 +6,13 @@
 
 use crate::impl_r1cs_input_lc_conversions;
 use crate::jolt::instruction::JoltInstructionSet;
-use crate::jolt::vm::rv32i_vm::RV32I;
+use crate::jolt::vm::rv32i_vm::{RV32I, M};
 use crate::jolt::vm::{JoltCommitments, JoltStuff, JoltTraceStep};
 use crate::lasso::memory_checking::{Initializable, StructuredPolynomialData};
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::poly::multilinear_polynomial::MultilinearPolynomial;
 use crate::poly::opening_proof::VerifierOpeningAccumulator;
+use crate::poly::streaming_poly::StreamingOracle;
 use crate::utils::transcript::Transcript;
 
 use super::key::UniformSpartanKey;
@@ -127,6 +128,54 @@ impl<T: CanonicalSerialize + CanonicalDeserialize> StructuredPolynomialData<T> f
             .chain(self.circuit_flags.iter_mut())
             .chain(self.aux.read_write_values_mut())
             .collect()
+    }
+}
+
+pub struct StreamingR1CSStuff<I: Iterator, F: JoltField> {
+    pub(crate) trace_iter: I,
+    pub(crate) init_iter: I,
+    // pub(crate) r1cs_builder: ,
+    // pub(crate) jolt_preprocessing: ,
+    pub(crate) shard: R1CSStuff<Vec<F>>,
+}
+
+
+impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField> StreamingOracle<I>
+    for StreamingR1CSStuff<I, F>
+{
+    fn stream_next_shard(&mut self, shard_len: usize) {
+        const C: usize = 4;
+
+        for i in 0..shard_len {
+            let step = self.trace_iter.next().unwrap();
+
+            for j in 0..C{
+                self.shard.chunks_x[j][i] = F::from_u8(step.instruction_lookup.clone().unwrap().operand_chunks(C, log2(M) as usize).0[j]);
+                self.shard.chunks_y[j][i] = F::from_u8(step.instruction_lookup.clone().unwrap().operand_chunks(C, log2(M) as usize).1[j]);
+            }
+            for j in 0..NUM_CIRCUIT_FLAGS{
+                self.shard.circuit_flags[j][i] = F::from_u8(step.circuit_flags[j] as u8); 
+            }
+        }
+        // aux polys
+        
+
+    }
+}
+
+impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField> StreamingR1CSStuff<I, F>{
+    pub fn new(trace_iter: I, shard_len: usize) -> Self {
+        const C: usize = 4;
+        (return StreamingR1CSStuff{
+            trace_iter: trace_iter.clone(),
+            init_iter: trace_iter.clone(),
+            shard: R1CSStuff {
+                chunks_x: vec![vec![F::zero(); shard_len]; C],
+                chunks_y: vec![vec![F::zero(); shard_len]; C],
+                circuit_flags: [vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len]],
+                aux: AuxVariableStuff::default(),
+            },
+    });
     }
 }
 

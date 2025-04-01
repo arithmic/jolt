@@ -6,6 +6,7 @@ use crate::lasso::memory_checking::{
 use crate::poly::compact_polynomial::{CompactPolynomial, SmallScalar};
 use crate::poly::multilinear_polynomial::{MultilinearPolynomial, PolynomialEvaluation};
 use crate::poly::opening_proof::{ProverOpeningAccumulator, VerifierOpeningAccumulator};
+use crate::poly::streaming_poly::StreamingOracle;
 use crate::utils::thread::unsafe_allocate_zero_vec;
 use rayon::prelude::*;
 #[cfg(test)]
@@ -184,6 +185,29 @@ impl<T: CanonicalSerialize + CanonicalDeserialize> StructuredPolynomialData<T>
         vec![&mut self.v_final, &mut self.t_final]
     }
 }
+
+pub struct StreamingReadWriteMemoryStuff<I: Iterator, F: JoltField>{
+    pub a_ram: I,
+    pub v_read_rd: F,
+    pub v_read_rs1: F,
+    pub v_read_rs2: F,
+    pub v_read_ram: F,
+    pub v_write_rd: F,
+    pub v_write_ram: F,
+    pub v_final: F,
+    pub t_read_rd: F,
+    pub t_read_rs1: F,
+    pub t_read_rs2: F,
+    pub t_read_ram: F,
+    pub t_final: F,
+}
+
+impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField> StreamingOracle<I> for StreamingReadWriteMemoryStuff<I, F>{
+    fn stream_next_shard(&mut self, shard_len: usize) {
+        todo!()
+    }
+}
+
 
 /// Note –– F: JoltField bound is not enforced.
 ///
