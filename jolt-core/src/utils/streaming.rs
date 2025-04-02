@@ -1,40 +1,42 @@
 // An iterator that maps over the values of `iter` with `f`, which modifies its accumulated state.
-pub struct MapState<I, F> {
+pub struct MapState<S, I, F> {
+    state: S,
     iter: std::iter::Cycle<I>,
     f: F,
 }
 
-pub fn map_state<B, I, F>(iter: I, f: F) -> MapState<I, F>
+pub fn map_state<B, S, I, F>(initial_state: S, iter: I, f: F) -> MapState<S, I, F>
 where
     I: Iterator + Clone,
-    F: FnMut(I::Item) -> B,
+    F: FnMut(&mut S, I::Item) -> B,
 {
-    MapState::new(iter, f)
+    MapState::new(initial_state, iter, f)
 }
 
-impl<I, F> MapState<I, F> {
-    fn new<B>(iter: I, f: F) -> Self
+impl<S, I, F> MapState<S, I, F> {
+    fn new<B>(initial_state: S, iter: I, f: F) -> Self
     where
         I: Iterator + Clone,
-        F: FnMut(I::Item) -> B,
+        F: FnMut(&mut S, I::Item) -> B,
     {
         MapState {
+            state: initial_state,
             iter: iter.cycle(),
             f,
         }
     }
 }
 
-impl<B, I, F> Iterator for MapState<I, F>
+impl<B, S, I, F> Iterator for MapState<S, I, F>
 where
     I: Iterator + Clone,
-    F: FnMut(I::Item) -> B,
+    F: FnMut(&mut S, I::Item) -> B,
 {
     type Item = B;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|x| (self.f)(x))
+        self.iter.next().map(|x| (self.f)(&mut self.state, x))
     }
 
     #[inline]

@@ -242,7 +242,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         )
     }
 
-
     #[tracing::instrument(skip_all)]
     // A specialized sumcheck implementation with the 0th round unrolled from the rest of the
     // `for` loop. This allows us to pass in `witness_polynomials` by reference instead of

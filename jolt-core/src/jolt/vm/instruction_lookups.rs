@@ -5,6 +5,7 @@ use crate::poly::multilinear_polynomial::{
 use crate::poly::opening_proof::{ProverOpeningAccumulator, VerifierOpeningAccumulator};
 use crate::subprotocols::grand_product::BatchedGrandProduct;
 use crate::subprotocols::sparse_grand_product::ToggledBatchedGrandProduct;
+use crate::utils::streaming::map_state;
 use crate::utils::thread::unsafe_allocate_zero_vec;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::{interleave, Itertools};
@@ -139,6 +140,101 @@ impl<T: CanonicalSerialize + CanonicalDeserialize> StructuredPolynomialData<T>
 
     fn init_final_values_mut(&mut self) -> Vec<&mut T> {
         self.final_cts.iter_mut().collect()
+    }
+}
+
+pub struct StreamingInstructionLookupsPolynomials<'a, F: JoltField> {
+    /// Stream that builds the bytecode polynomial.
+    pub polynomial_stream: Box<dyn Iterator<Item = InstructionLookupStuff<F>> + 'a>, // MapState<Vec<usize>, I, FN>,
+}
+
+impl<'a, F: JoltField> StreamingInstructionLookupsPolynomials<'a, F> {
+    #[tracing::instrument(skip_all, name = "StreamingInstructionLookupsPolynomials::new")]
+    pub fn new<
+        It: 'a + Iterator<Item = &'a JoltTraceStep<InstructionSet>> + Clone,
+        InstructionSet: 'a + JoltInstructionSet,
+        const C: usize,
+        const M: usize,
+    >(
+        preprocessing: &'a InstructionLookupsPreprocessing<C, F>,
+        trace: It,
+    ) -> Self {
+        let state: Option<()> = None;
+        let polynomial_stream = map_state(state, trace, |_state, step| {
+            //Computing subtable_lookup_indices
+            let chunked_indices: Vec<u16> = if let Some(instr) = &step.instruction_lookup {
+                instr
+                    .to_indices(C, M.log_2())
+                    .iter()
+                    .map(|i| *i as u16)
+                    .collect()
+            } else {
+                vec![0; C]
+            };
+            let mut subtable_lookup_indices: Vec<u16> = Vec::with_capacity(C);
+            for i in 0..C {
+                subtable_lookup_indices.push(chunked_indices[i]);
+            }
+
+            //Computing dim
+            let dim: Vec<F> = subtable_lookup_indices
+                .clone()
+                .into_par_iter()
+                .map(F::from_u16)
+                .collect();
+
+            //Computing E_polys
+            let E_polynomials: Vec<F> = (0..preprocessing.num_memories)
+                .into_par_iter()
+                .map(|memory_index| {
+                    let dim_index = preprocessing.memory_to_dimension_index[memory_index];
+                    let subtable_index = preprocessing.memory_to_subtable_index[memory_index];
+                    let access_sequence = subtable_lookup_indices[dim_index];
+                    let mut subtable_lookups: u32 = 0;
+                    if let Some(instr) = &step.instruction_lookup {
+                        let memories_used = &preprocessing.instruction_to_memory_indices
+                            [InstructionSet::enum_index(instr)];
+                        if memories_used.contains(&memory_index) {
+                            let memory_address = access_sequence as usize;
+                            debug_assert!(memory_address < M);
+                            subtable_lookups = preprocessing.materialized_subtables[subtable_index]
+                                [memory_address];
+                        }
+                    }
+                    F::from_u32(subtable_lookups)
+                })
+                .collect();
+
+            // Computing instruction_flags
+            let mut instruction_flag_bitvectors: Vec<F> =
+                vec![F::zero(); preprocessing.instruction_to_memory_indices.len()];
+            if let Some(instr) = &step.instruction_lookup {
+                instruction_flag_bitvectors[InstructionSet::enum_index(instr)] = F::one();
+            }
+
+            // Computing instruction lookups
+            let lookup_outputs = if let Some(instr) = &step.instruction_lookup {
+                F::from_u32(instr.lookup_entry() as u32)
+            } else {
+                F::zero()
+            };
+
+            InstructionLookupStuff {
+                dim,
+                E_polys: E_polynomials,
+                instruction_flags: instruction_flag_bitvectors,
+                lookup_outputs,
+                // These are dummy values since they are not required for Twist + Shout.
+                read_cts: vec![F::zero()],
+                final_cts: vec![F::zero()],
+                a_init_final: None,
+                v_init_final: None,
+            }
+        });
+
+        StreamingInstructionLookupsPolynomials {
+            polynomial_stream: Box::new(polynomial_stream),
+        }
     }
 }
 

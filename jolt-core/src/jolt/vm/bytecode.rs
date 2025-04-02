@@ -4,8 +4,8 @@ use std::collections::HashSet;
 
 use ark_ff::Zero;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use rand::RngCore;
 use rand::rngs::StdRng;
+use rand::RngCore;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -13,10 +13,6 @@ use common::constants::{BYTES_PER_INSTRUCTION, RAM_START_ADDRESS};
 use common::rv_trace::ELFInstruction;
 use tracer::RV32IM;
 
-use crate::{
-    lasso::memory_checking::{MemoryCheckingProof, MemoryCheckingProver, MemoryCheckingVerifier},
-    poly::identity_poly::IdentityPolynomial,
-};
 use crate::field::JoltField;
 use crate::jolt::instruction::JoltInstructionSet;
 use crate::lasso::memory_checking::{
@@ -27,6 +23,10 @@ use crate::poly::compact_polynomial::{CompactPolynomial, SmallScalar};
 use crate::poly::multilinear_polynomial::{MultilinearPolynomial, PolynomialEvaluation};
 use crate::utils::streaming::{map_state, MapState};
 use crate::utils::transcript::Transcript;
+use crate::{
+    lasso::memory_checking::{MemoryCheckingProof, MemoryCheckingProver, MemoryCheckingVerifier},
+    poly::identity_poly::IdentityPolynomial,
+};
 
 use super::{JoltPolynomials, JoltTraceStep};
 
@@ -124,7 +124,8 @@ impl<'a, F: JoltField> StreamingBytecodePolynomials<'a, F> {
         preprocessing: &'a BytecodePreprocessing<F>,
         trace: It,
     ) -> Self {
-        let polynomial_stream = map_state(trace, |step| {
+        let state: Option<()> = None;
+        let polynomial_stream = map_state(state, trace, |_state, step| {
             let virtual_address = preprocessing
                 .virtual_address_map
                 .get(&(
@@ -162,9 +163,8 @@ impl<'a, F: JoltField> StreamingBytecodePolynomials<'a, F> {
     pub fn update_trace<InstructionSet: JoltInstructionSet>(
         trace: &mut [JoltTraceStep<InstructionSet>],
     ) {
-        for (step_idx, step) in trace.iter_mut().enumerate() {
+        for (_, step) in trace.iter_mut().enumerate() {
             if !step.bytecode_row.address.is_zero() {
-                // println!("step.bytecode_row.address = {}", step.bytecode_row.address);
                 assert!(step.bytecode_row.address >= RAM_START_ADDRESS as usize);
                 assert!(step.bytecode_row.address % BYTES_PER_INSTRUCTION == 0);
                 // Compress instruction address for more efficient commitment:
@@ -172,29 +172,9 @@ impl<'a, F: JoltField> StreamingBytecodePolynomials<'a, F> {
                     + (step.bytecode_row.address - RAM_START_ADDRESS as usize)
                         / BYTES_PER_INSTRUCTION;
             }
-
-            // if step_idx < 10 {
-            //     println!(
-            //         "step.bytecode_row.address[{step_idx}] = {}",
-            //         step.bytecode_row.address
-            //     );
-            // }
         }
     }
 }
-//
-// impl<'a, F: JoltField> StreamingDerived<'a, F> {
-//     #[tracing::instrument(skip_all, name = "StreamingDerived::new")]
-//     pub fn new<It: Iterator<Item = BytecodeStuff<F>> + Clone + 'a>(bytecode_stream: It) -> Self {
-//         let polynomial_stream = map_state(bytecode_stream, |step| Derived {
-//             sum: step.a_read_write + step.v_read_write[0],
-//         });
-//
-//         StreamingDerived {
-//             polynomial_stream: Box::new(polynomial_stream),
-//         }
-//     }
-// }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BytecodeRow {

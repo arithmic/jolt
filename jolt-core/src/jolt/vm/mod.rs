@@ -5,14 +5,16 @@ use std::marker::PhantomData;
 use std::slice::Iter;
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use instruction_lookups::StreamingInstructionLookupsPolynomials;
+use read_write_memory::StreamingReadWriteMemoryPolynomials;
 use serde::{Deserialize, Serialize};
 use strum::EnumCount;
 
+use common::rv_trace::{MemoryLayout, NUM_CIRCUIT_FLAGS};
 use common::{
     constants::MEMORY_OPS_PER_INSTRUCTION,
     rv_trace::{ELFInstruction, JoltDevice, MemoryOp},
 };
-use common::rv_trace::{MemoryLayout, NUM_CIRCUIT_FLAGS};
 use timestamp_range_check::TimestampRangeCheckStuff;
 
 use crate::field::JoltField;
@@ -42,13 +44,13 @@ use crate::utils::errors::ProofVerifyError;
 use crate::utils::thread::drop_in_background_thread;
 use crate::utils::transcript::{AppendToTranscript, Transcript};
 
-use super::instruction::JoltInstructionSet;
 use super::instruction::lb::LBInstruction;
 use super::instruction::lbu::LBUInstruction;
 use super::instruction::lh::LHInstruction;
 use super::instruction::lhu::LHUInstruction;
 use super::instruction::sb::SBInstruction;
 use super::instruction::sh::SHInstruction;
+use super::instruction::JoltInstructionSet;
 
 use self::bytecode::{
     BytecodePreprocessing,
@@ -59,7 +61,7 @@ use self::bytecode::{
     // StreamingDerived,
 };
 use self::instruction_lookups::{
-    InstructionLookupsPreprocessing, InstructionLookupsProof, InstructionLookupStuff,
+    InstructionLookupStuff, InstructionLookupsPreprocessing, InstructionLookupsProof,
 };
 use self::read_write_memory::{
     ReadWriteMemoryPolynomials, ReadWriteMemoryPreprocessing, ReadWriteMemoryProof,
@@ -401,7 +403,6 @@ where
         println!("Trace length: {}", trace_length);
 
         let mut trace_1 = trace.clone();
-        let mut trace_2 = trace.clone();
 
         F::initialize_lookup_tables(std::mem::take(&mut preprocessing.field));
 
@@ -506,6 +507,95 @@ where
                     eval.v_read_write[j]
                 );
             }
+        }
+
+        let mut streaming_instructionlookups_polynomails =
+            StreamingInstructionLookupsPolynomials::new::<
+                Iter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
+                Self::InstructionSet,
+                C,
+                M,
+            >(&preprocessing.instruction_lookups, trace_1.iter());
+
+        for i in 0..trace_length {
+            let eval = streaming_instructionlookups_polynomails
+                .polynomial_stream
+                .next()
+                .unwrap();
+            for j in 0..C {
+                assert_eq!(
+                    eval.dim[j],
+                    jolt_polynomials.instruction_lookups.dim[j].get_coeff(i)
+                );
+            }
+
+            for j in 0..jolt_polynomials.instruction_lookups.E_polys.len() {
+                assert_eq!(
+                    eval.E_polys[j],
+                    jolt_polynomials.instruction_lookups.E_polys[j].get_coeff(i)
+                );
+            }
+
+            for j in 0..jolt_polynomials.instruction_lookups.instruction_flags.len() {
+                assert_eq!(
+                    eval.instruction_flags[j],
+                    jolt_polynomials.instruction_lookups.instruction_flags[j].get_coeff(i)
+                );
+            }
+
+            assert_eq!(
+                eval.lookup_outputs,
+                jolt_polynomials
+                    .instruction_lookups
+                    .lookup_outputs
+                    .get_coeff(i)
+            );
+        }
+
+        let program_io_temp = program_io.clone();
+        let mut streaming_readwritememory_polynomails =
+            StreamingReadWriteMemoryPolynomials::<F>::new::<
+                Iter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
+                Self::InstructionSet,
+            >(
+                &preprocessing.read_write_memory,
+                &program_io_temp,
+                trace_1.iter(),
+            );
+
+        for i in 0..trace_length {
+            let eval = streaming_readwritememory_polynomails
+                .polynomial_stream
+                .next()
+                .unwrap();
+            assert_eq!(
+                eval.a_ram,
+                jolt_polynomials.read_write_memory.a_ram.get_coeff(i)
+            );
+            assert_eq!(
+                eval.v_read_rd,
+                jolt_polynomials.read_write_memory.v_read_rd.get_coeff(i)
+            );
+            assert_eq!(
+                eval.v_read_rs1,
+                jolt_polynomials.read_write_memory.v_read_rs1.get_coeff(i)
+            );
+            assert_eq!(
+                eval.v_read_rs2,
+                jolt_polynomials.read_write_memory.v_read_rs2.get_coeff(i)
+            );
+            assert_eq!(
+                eval.v_read_ram,
+                jolt_polynomials.read_write_memory.v_read_ram.get_coeff(i)
+            );
+            assert_eq!(
+                eval.v_write_rd,
+                jolt_polynomials.read_write_memory.v_write_rd.get_coeff(i)
+            );
+            assert_eq!(
+                eval.v_write_ram,
+                jolt_polynomials.read_write_memory.v_write_ram.get_coeff(i)
+            );
         }
 
         // let mut streaming_bytecode_polynomails =
