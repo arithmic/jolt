@@ -134,10 +134,9 @@ impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: J
         let mut v_read_write_5_vec = vec![0i64; shard_len];
 
         for i in 0..shard_len {
-            if let Some(mut step) = self.trace_iter.next()
-            {
+            if let Some(mut step) = self.trace_iter.next() {
                 let (a_read_write, v_read_write_0_1, v_read_write_2_4, v_read_write_5) =
-                Self::generate_witness_bytecode_streaming(&mut step, self.preprocessing);
+                    Self::generate_witness_bytecode_streaming(&mut step, self.preprocessing);
 
                 a_read_write_vec[i] = a_read_write;
                 v_read_write_0_1_vec

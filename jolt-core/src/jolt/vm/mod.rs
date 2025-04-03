@@ -409,8 +409,8 @@ where
 
         ///////////////////////////////////////////////////////
         let shard_len = padded_trace_length;
-        let no_of_shards = padded_trace_length/shard_len;
-        
+        let no_of_shards = padded_trace_length / shard_len;
+
         let mut instruction_streaming_polynomials = StreamingInstructionLookupStuff::<
             IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
             F,
@@ -470,7 +470,6 @@ where
                 );
             }
             println!("Streaming for Instruction polynomials passing for {n}th shard");
-
         }
         let memory_polynomials = ReadWriteMemoryPolynomials::generate_witness(
             &program_io,
@@ -629,33 +628,123 @@ where
             streaming_r1cs_polynomials.stream_next_shard(shard_len);
             for shard in 0..shard_len {
                 for i in 0..C {
-                        assert_eq!(
-                            streaming_r1cs_polynomials.shard.chunks_x[i].get_coeff(shard),
-                            jolt_polynomials.r1cs.chunks_x[i].get_coeff(n * shard_len + shard)
-                        );
-                        assert_eq!(
-                            streaming_r1cs_polynomials.shard.chunks_y[i].get_coeff(shard),
-                            jolt_polynomials.r1cs.chunks_y[i].get_coeff(n * shard_len + shard)
-                        );
-                    }
+                    assert_eq!(
+                        streaming_r1cs_polynomials.shard.chunks_x[i].get_coeff(shard),
+                        jolt_polynomials.r1cs.chunks_x[i].get_coeff(n * shard_len + shard)
+                    );
+                    assert_eq!(
+                        streaming_r1cs_polynomials.shard.chunks_y[i].get_coeff(shard),
+                        jolt_polynomials.r1cs.chunks_y[i].get_coeff(n * shard_len + shard)
+                    );
+                }
                 for i in 0..NUM_CIRCUIT_FLAGS {
                     assert_eq!(
                         streaming_r1cs_polynomials.shard.circuit_flags[i].get_coeff(shard),
                         jolt_polynomials.r1cs.circuit_flags[i].get_coeff(n * shard_len + shard)
                     );
                 }
-                for i in 0..jolt_polynomials.r1cs.aux.relevant_y_chunks.len(){
-                    assert_eq!(streaming_r1cs_polynomials.shard.aux.relevant_y_chunks[i].get_coeff(shard),
-                    jolt_polynomials.r1cs.aux.relevant_y_chunks[i].get_coeff(n * shard_len + shard)
-                );
-                assert_eq!(streaming_r1cs_polynomials.shard.aux.left_lookup_operand.get_coeff(shard), jolt_polynomials.r1cs.aux.left_lookup_operand.get_coeff(n * shard_len + shard));
-                assert_eq!(streaming_r1cs_polynomials.shard.aux.right_lookup_operand.get_coeff(shard), jolt_polynomials.r1cs.aux.right_lookup_operand.get_coeff(n * shard_len + shard));
-                assert_eq!(streaming_r1cs_polynomials.shard.aux.product.get_coeff(shard), jolt_polynomials.r1cs.aux.product.get_coeff(n * shard_len + shard));
-                assert_eq!(streaming_r1cs_polynomials.shard.aux.write_lookup_output_to_rd.get_coeff(shard), jolt_polynomials.r1cs.aux.write_lookup_output_to_rd.get_coeff(n * shard_len + shard));
-                assert_eq!(streaming_r1cs_polynomials.shard.aux.write_pc_to_rd.get_coeff(shard), jolt_polynomials.r1cs.aux.write_pc_to_rd.get_coeff(n * shard_len + shard));
-                assert_eq!(streaming_r1cs_polynomials.shard.aux.next_pc_jump.get_coeff(shard), jolt_polynomials.r1cs.aux.next_pc_jump.get_coeff(n * shard_len + shard));
-                assert_eq!(streaming_r1cs_polynomials.shard.aux.should_branch.get_coeff(shard), jolt_polynomials.r1cs.aux.should_branch.get_coeff(n * shard_len + shard));
-                assert_eq!(streaming_r1cs_polynomials.shard.aux.next_pc.get_coeff(shard), jolt_polynomials.r1cs.aux.next_pc.get_coeff(n * shard_len + shard));
+                for i in 0..jolt_polynomials.r1cs.aux.relevant_y_chunks.len() {
+                    assert_eq!(
+                        streaming_r1cs_polynomials.shard.aux.relevant_y_chunks[i].get_coeff(shard),
+                        jolt_polynomials.r1cs.aux.relevant_y_chunks[i]
+                            .get_coeff(n * shard_len + shard)
+                    );
+                    assert_eq!(
+                        streaming_r1cs_polynomials
+                            .shard
+                            .aux
+                            .left_lookup_operand
+                            .get_coeff(shard),
+                        jolt_polynomials
+                            .r1cs
+                            .aux
+                            .left_lookup_operand
+                            .get_coeff(n * shard_len + shard)
+                    );
+                    assert_eq!(
+                        streaming_r1cs_polynomials
+                            .shard
+                            .aux
+                            .right_lookup_operand
+                            .get_coeff(shard),
+                        jolt_polynomials
+                            .r1cs
+                            .aux
+                            .right_lookup_operand
+                            .get_coeff(n * shard_len + shard)
+                    );
+                    assert_eq!(
+                        streaming_r1cs_polynomials
+                            .shard
+                            .aux
+                            .product
+                            .get_coeff(shard),
+                        jolt_polynomials
+                            .r1cs
+                            .aux
+                            .product
+                            .get_coeff(n * shard_len + shard)
+                    );
+                    assert_eq!(
+                        streaming_r1cs_polynomials
+                            .shard
+                            .aux
+                            .write_lookup_output_to_rd
+                            .get_coeff(shard),
+                        jolt_polynomials
+                            .r1cs
+                            .aux
+                            .write_lookup_output_to_rd
+                            .get_coeff(n * shard_len + shard)
+                    );
+                    assert_eq!(
+                        streaming_r1cs_polynomials
+                            .shard
+                            .aux
+                            .write_pc_to_rd
+                            .get_coeff(shard),
+                        jolt_polynomials
+                            .r1cs
+                            .aux
+                            .write_pc_to_rd
+                            .get_coeff(n * shard_len + shard)
+                    );
+                    assert_eq!(
+                        streaming_r1cs_polynomials
+                            .shard
+                            .aux
+                            .next_pc_jump
+                            .get_coeff(shard),
+                        jolt_polynomials
+                            .r1cs
+                            .aux
+                            .next_pc_jump
+                            .get_coeff(n * shard_len + shard)
+                    );
+                    assert_eq!(
+                        streaming_r1cs_polynomials
+                            .shard
+                            .aux
+                            .should_branch
+                            .get_coeff(shard),
+                        jolt_polynomials
+                            .r1cs
+                            .aux
+                            .should_branch
+                            .get_coeff(n * shard_len + shard)
+                    );
+                    assert_eq!(
+                        streaming_r1cs_polynomials
+                            .shard
+                            .aux
+                            .next_pc
+                            .get_coeff(shard),
+                        jolt_polynomials
+                            .r1cs
+                            .aux
+                            .next_pc
+                            .get_coeff(n * shard_len + shard)
+                    );
                 }
             }
             println!("Streaming for R1CS polynomials passing for {n}th shard");

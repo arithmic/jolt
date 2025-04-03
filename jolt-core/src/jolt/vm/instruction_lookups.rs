@@ -203,11 +203,13 @@ impl<
             vec![vec![0u8; shard_len]; self.shard.instruction_flags.len()];
         let mut lookup_outputs_poly = vec![0u32; shard_len];
 
-        for i in 0..shard_len {        
-            if let Some(mut step) = self.trace_iter.next()
-            {
+        for i in 0..shard_len {
+            if let Some(mut step) = self.trace_iter.next() {
                 let (dim, E_polys, instruction_flags, lookup_outputs) =
-                Self::generate_witness_instructionlookups_streaming(&mut step, self.preprocessing);
+                    Self::generate_witness_instructionlookups_streaming(
+                        &mut step,
+                        self.preprocessing,
+                    );
 
                 for idx in 0..self.shard.dim.len() {
                     dim_poly[idx][i] = dim[idx];
@@ -223,7 +225,6 @@ impl<
 
                 lookup_outputs_poly[i] = lookup_outputs;
             }
-
         }
 
         self.shard.dim = dim_poly

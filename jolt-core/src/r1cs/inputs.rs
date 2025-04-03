@@ -270,8 +270,7 @@ impl<
         let mut circuit_flags = vec![vec![0u8; shard_len]; NUM_CIRCUIT_FLAGS];
 
         for shard in 0..shard_len {
-            if let Some(mut step) = self.trace_iter.next()
-            {
+            if let Some(mut step) = self.trace_iter.next() {
                 let (dim_temp, E_polys_temp, instruction_flags_temp, lookup_outputs_temp) = StreamingInstructionLookupStuff::<I, F, C, M>::generate_witness_instructionlookups_streaming(
                     &step,
                     &self.jolt_preprocessing.instruction_lookups,
