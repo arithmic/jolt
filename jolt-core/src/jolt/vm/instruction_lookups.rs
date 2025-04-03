@@ -227,7 +227,6 @@ impl<
         self.shard.E_polys = E_polys_poly.into_par_iter().map(MultilinearPolynomial::from).collect();
         self.shard.instruction_flags = instruction_flags_poly.into_par_iter().map(MultilinearPolynomial::from).collect();
         self.shard.lookup_outputs = MultilinearPolynomial::from(lookup_outputs_poly);
-
     }
 }
 

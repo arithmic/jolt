@@ -400,7 +400,7 @@ where
         );
 
         ///////////////////////////////////////////////////////
-        let shard_len = 4;
+        let shard_len = 32;
         let mut instruction_streaming_polynomials = StreamingInstructionLookupStuff::<
             IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
             F,
@@ -450,16 +450,14 @@ where
         // TODO: Initialise bytecode_polynomials_new by creating a_read_write etc... using StreamingPolynomial::new().
         // TODO: To new() we need to pass a closure.
         ///////////////////////////////////////////////////////
-        // // let shard_len = 2;
-        // let mut bytecode_streaming_polynomial = StreamingBytecodeStuff::<
-        //     IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
-        //     F,
-        // >::new(
-        //     trace.clone().into_iter(),
-        //     shard_len,
-        //     &preprocessing.bytecode,
-        // );
-        // bytecode_streaming_polynomial.stream_next_shard(shard_len);
+        let mut bytecode_streaming_polynomial = StreamingBytecodeStuff::<
+            IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
+            F,
+        >::new(
+            trace.clone().into_iter(),
+            shard_len,
+            &preprocessing.bytecode,
+        );
 
         let mut streaming_mem_rw_polynomials = StreamingReadWriteMemoryStuff::<
             IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
@@ -534,6 +532,28 @@ where
                 )
             },
         );
+
+        for n in 0..5 {
+            bytecode_streaming_polynomial.stream_next_shard(shard_len);
+            for i in 0..shard_len {
+                assert_eq!(
+                    bytecode_streaming_polynomial.shard.a_read_write.get_coeff(i),
+                    bytecode_polynomials
+                        .a_read_write
+                        .get_coeff(n * shard_len + i)
+                );
+            }
+
+            for j in 0..6 {
+                for i in 0..shard_len {
+                    assert_eq!(
+                        bytecode_streaming_polynomial.shard.v_read_write[j].get_coeff(i),
+                        bytecode_polynomials.v_read_write[j].get_coeff(n * shard_len + i)
+                    );
+                }
+            }
+            println!("Streaming for bytecode_polynomials  passing for {n}th shard");
+        }
 
 
         let spartan_key = spartan::UniformSpartanProof::<

@@ -53,28 +53,7 @@ pub struct StreamingBytecodeStuff<'a, I: Iterator, F: JoltField> {
     pub(crate) trace_iter: I,
     pub(crate) init_iter: I,
     pub(crate) preprocessing: &'a BytecodePreprocessing<F>,
-    pub(crate) shard: BytecodeStuff<Vec<F>>,
-}
-
-impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField>
-    StreamingOracle<I> for StreamingBytecodeStuff<'_, I, F>
-{
-    fn stream_next_shard(&mut self, shard_len: usize) {
-        for i in 0..shard_len {
-            let mut step = self.trace_iter.next().unwrap();
-
-            let bytecode_stuff =
-                Self::generate_witness_bytecode_streaming(&mut step, self.preprocessing);
-
-            self.shard.a_read_write[i] = bytecode_stuff.a_read_write;
-            self.shard.v_read_write[0][i] = bytecode_stuff.v_read_write[0];
-            self.shard.v_read_write[1][i] = bytecode_stuff.v_read_write[1];
-            self.shard.v_read_write[2][i] = bytecode_stuff.v_read_write[2];
-            self.shard.v_read_write[3][i] = bytecode_stuff.v_read_write[3];
-            self.shard.v_read_write[4][i] = bytecode_stuff.v_read_write[4];
-            self.shard.v_read_write[5][i] = bytecode_stuff.v_read_write[5];
-        }
-    }
+    pub(crate) shard: BytecodeStuff<MultilinearPolynomial<F>>,
 }
 
 impl<'a, I: Iterator + Clone, F: JoltField> StreamingBytecodeStuff<'a, I, F> {
@@ -87,17 +66,17 @@ impl<'a, I: Iterator + Clone, F: JoltField> StreamingBytecodeStuff<'a, I, F> {
             trace_iter: trace_iter.clone(),
             init_iter: trace_iter,
             shard: BytecodeStuff {
-                a_read_write: vec![F::zero(); shard_len],
+                a_read_write: MultilinearPolynomial::from(vec![0_u32; shard_len]),
                 v_read_write: [
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
+                    MultilinearPolynomial::from(vec![0_u64; shard_len]),
+                    MultilinearPolynomial::from(vec![0_u64; shard_len]),
+                    MultilinearPolynomial::from(vec![0_u64; shard_len]),
+                    MultilinearPolynomial::from(vec![0_u64; shard_len]),
+                    MultilinearPolynomial::from(vec![0_u64; shard_len]),
+                    MultilinearPolynomial::from(vec![0_i64; shard_len]),
                 ],
-                t_read: vec![F::zero(); shard_len],
-                t_final: vec![F::zero(); shard_len],
+                t_read: MultilinearPolynomial::from(vec![0_u32; shard_len]),
+                t_final: MultilinearPolynomial::from(vec![0_u32; shard_len]),
                 a_init_final: None,
                 v_init_final: None,
             },
@@ -108,7 +87,7 @@ impl<'a, I: Iterator + Clone, F: JoltField> StreamingBytecodeStuff<'a, I, F> {
     pub fn generate_witness_bytecode_streaming<InstructionSet: JoltInstructionSet>(
         step: &mut JoltTraceStep<InstructionSet>,
         preprocessing: &BytecodePreprocessing<F>,
-    ) -> BytecodeStuff<F> {
+    ) -> (u32, Vec<u64>, i64) {
         if !step.bytecode_row.address.is_zero() {
             assert!(step.bytecode_row.address >= RAM_START_ADDRESS as usize);
             assert!(step.bytecode_row.address % BYTES_PER_INSTRUCTION == 0);
@@ -125,23 +104,45 @@ impl<'a, I: Iterator + Clone, F: JoltField> StreamingBytecodeStuff<'a, I, F> {
             ))
             .unwrap();
 
-        let a_read_write = F::from_u32(*virtual_address as u32);
-        let mut v_read_write_vec = [F::zero(); 6];
-        v_read_write_vec[0] = F::from_u64(step.bytecode_row.address as u64);
-        v_read_write_vec[1] = F::from_u64(step.bytecode_row.bitflags as u64);
-        v_read_write_vec[2] = F::from_u64(step.bytecode_row.rd as u64);
-        v_read_write_vec[3] = F::from_u64(step.bytecode_row.rs1 as u64);
-        v_read_write_vec[4] = F::from_u64(step.bytecode_row.rs2 as u64);
-        v_read_write_vec[5] = F::from_i64(step.bytecode_row.imm as i64);
+        let a_read_write = *virtual_address as u32;
+        let mut v_read_write_vec = vec![0_u64; 5];
+        v_read_write_vec[0] = step.bytecode_row.address as u64;
+        v_read_write_vec[1] = step.bytecode_row.bitflags as u64;
+        v_read_write_vec[2] = step.bytecode_row.rd as u64;
+        v_read_write_vec[3] = step.bytecode_row.rs1 as u64;
+        v_read_write_vec[4] = step.bytecode_row.rs2 as u64;
+        let v_read_write_vec_5 = step.bytecode_row.imm as i64;
 
-        BytecodeStuff {
-            a_read_write: (a_read_write),
-            v_read_write: (v_read_write_vec),
-            t_read: (F::zero()),  // adding the dummy value
-            t_final: (F::zero()), // adding the dummy value
-            a_init_final: None,
-            v_init_final: None,
+        (a_read_write, v_read_write_vec, v_read_write_vec_5)
+    }
+}
+
+impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField>
+    StreamingOracle<I> for StreamingBytecodeStuff<'_, I, F>
+{
+    fn stream_next_shard(&mut self, shard_len: usize) {
+        let mut a_read_write_vec = vec![0u32; shard_len];
+        let mut v_read_write_0_4_vec = vec![vec![0u64; shard_len]; 5];
+        let mut v_read_write_5_vec = vec![0i64; shard_len];
+
+        for i in 0..shard_len {
+            let mut step = self.trace_iter.next().unwrap();
+
+            let (a_read_write, v_read_write, v_read_write_5) =
+                Self::generate_witness_bytecode_streaming(&mut step, self.preprocessing);
+
+            a_read_write_vec[i] = a_read_write;
+            for idx in 0..5 {
+                v_read_write_0_4_vec[idx][i] = v_read_write[idx];
+            }
+            v_read_write_5_vec[i] = v_read_write_5;
         }
+
+        self.shard.a_read_write = MultilinearPolynomial::from(a_read_write_vec);
+        for idx in 0..5 {
+            self.shard.v_read_write[idx] = MultilinearPolynomial::from(v_read_write_0_4_vec[idx].clone());
+        }
+        self.shard.v_read_write[5] = MultilinearPolynomial::from(v_read_write_5_vec);
     }
 }
 
