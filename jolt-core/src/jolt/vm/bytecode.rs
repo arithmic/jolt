@@ -70,9 +70,9 @@ impl<'a, I: Iterator + Clone, F: JoltField> StreamingBytecodeStuff<'a, I, F> {
                 v_read_write: [
                     MultilinearPolynomial::from(vec![0_u64; shard_len]),
                     MultilinearPolynomial::from(vec![0_u64; shard_len]),
-                    MultilinearPolynomial::from(vec![0_u64; shard_len]),
-                    MultilinearPolynomial::from(vec![0_u64; shard_len]),
-                    MultilinearPolynomial::from(vec![0_u64; shard_len]),
+                    MultilinearPolynomial::from(vec![0_u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0_u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0_u8; shard_len]),
                     MultilinearPolynomial::from(vec![0_i64; shard_len]),
                 ],
                 t_read: MultilinearPolynomial::from(vec![0_u32; shard_len]),
@@ -87,7 +87,7 @@ impl<'a, I: Iterator + Clone, F: JoltField> StreamingBytecodeStuff<'a, I, F> {
     pub fn generate_witness_bytecode_streaming<InstructionSet: JoltInstructionSet>(
         step: &mut JoltTraceStep<InstructionSet>,
         preprocessing: &BytecodePreprocessing<F>,
-    ) -> (u32, Vec<u64>, i64) {
+    ) -> (u32, Vec<u64>, Vec<u8>, i64) {
         if !step.bytecode_row.address.is_zero() {
             assert!(step.bytecode_row.address >= RAM_START_ADDRESS as usize);
             assert!(step.bytecode_row.address % BYTES_PER_INSTRUCTION == 0);
@@ -105,15 +105,22 @@ impl<'a, I: Iterator + Clone, F: JoltField> StreamingBytecodeStuff<'a, I, F> {
             .unwrap();
 
         let a_read_write = *virtual_address as u32;
-        let mut v_read_write_vec = vec![0_u64; 5];
-        v_read_write_vec[0] = step.bytecode_row.address as u64;
-        v_read_write_vec[1] = step.bytecode_row.bitflags as u64;
-        v_read_write_vec[2] = step.bytecode_row.rd as u64;
-        v_read_write_vec[3] = step.bytecode_row.rs1 as u64;
-        v_read_write_vec[4] = step.bytecode_row.rs2 as u64;
+        let mut v_read_write_vec_0_1 = vec![0_u64; 2];
+        let mut v_read_write_vec_2_4 = vec![0_u8; 3];
+
+        v_read_write_vec_0_1[0] = step.bytecode_row.address as u64;
+        v_read_write_vec_0_1[1] = step.bytecode_row.bitflags as u64;
+        v_read_write_vec_2_4[0] = step.bytecode_row.rd as u8;
+        v_read_write_vec_2_4[1] = step.bytecode_row.rs1 as u8;
+        v_read_write_vec_2_4[2] = step.bytecode_row.rs2 as u8;
         let v_read_write_vec_5 = step.bytecode_row.imm as i64;
 
-        (a_read_write, v_read_write_vec, v_read_write_vec_5)
+        (
+            a_read_write,
+            v_read_write_vec_0_1,
+            v_read_write_vec_2_4,
+            v_read_write_vec_5,
+        )
     }
 }
 
@@ -122,30 +129,46 @@ impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: J
 {
     fn stream_next_shard(&mut self, shard_len: usize) {
         let mut a_read_write_vec = vec![0u32; shard_len];
-        let mut v_read_write_0_4_vec = vec![vec![0u64; shard_len]; 5];
+        let mut v_read_write_0_1_vec = vec![vec![0u64; shard_len]; 2];
+        let mut v_read_write_2_4_vec = vec![vec![0u8; shard_len]; 3];
         let mut v_read_write_5_vec = vec![0i64; shard_len];
 
         for i in 0..shard_len {
             let mut step = self.trace_iter.next().unwrap();
 
-            let (a_read_write, v_read_write, v_read_write_5) =
+            let (a_read_write, v_read_write_0_1, v_read_write_2_4, v_read_write_5) =
                 Self::generate_witness_bytecode_streaming(&mut step, self.preprocessing);
 
             a_read_write_vec[i] = a_read_write;
-            for idx in 0..5 {
-                v_read_write_0_4_vec[idx][i] = v_read_write[idx];
-            }
+            v_read_write_0_1_vec
+                .iter_mut()
+                .zip(v_read_write_0_1.iter())
+                .for_each(|(v, &value)| {
+                    v[i] = value;
+                });
+
+            v_read_write_2_4_vec
+                .iter_mut()
+                .zip(v_read_write_2_4.iter())
+                .for_each(|(v, &value)| {
+                    v[i] = value;
+                });
             v_read_write_5_vec[i] = v_read_write_5;
         }
 
         self.shard.a_read_write = MultilinearPolynomial::from(a_read_write_vec);
-        for idx in 0..5 {
-            self.shard.v_read_write[idx] = MultilinearPolynomial::from(v_read_write_0_4_vec[idx].clone());
-        }
+        (0..2).for_each(|idx| {
+            self.shard.v_read_write[idx] =
+                MultilinearPolynomial::from(v_read_write_0_1_vec[idx].clone());
+        });
+
+        (0..3).for_each(|idx| {
+            self.shard.v_read_write[2 + idx] =
+                MultilinearPolynomial::from(v_read_write_2_4_vec[idx].clone());
+        });
         self.shard.v_read_write[5] = MultilinearPolynomial::from(v_read_write_5_vec);
     }
 }
-
 /// Note –– F: JoltField bound is not enforced.
 ///
 /// See issue #112792 <https://github.com/rust-lang/rust/issues/112792>.

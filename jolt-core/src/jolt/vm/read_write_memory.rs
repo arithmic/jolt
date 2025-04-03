@@ -203,7 +203,7 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
         trace_iter: I,
         shard_len: usize,
         preprocessing: &'a ReadWriteMemoryPreprocessing,
-        program_io: &'a JoltDevice
+        program_io: &'a JoltDevice,
     ) -> Self {
         let v_init = return_v_init(trace_iter.clone(), preprocessing, program_io);
 
@@ -314,13 +314,13 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
         }
 
         ReadWriteMemoryStuff {
-            a_ram: a_ram,
-            v_read_rd: v_read_rd,
-            v_read_rs1: v_read_rs1,
-            v_read_rs2: v_read_rs2,
-            v_read_ram: v_read_ram,
-            v_write_rd: v_write_rd,
-            v_write_ram: v_write_ram,
+            a_ram,
+            v_read_rd,
+            v_read_rs1,
+            v_read_rs2,
+            v_read_ram,
+            v_write_rd,
+            v_write_ram,
             v_final: 0u32,
             t_read_rd: 0u32,
             t_read_rs1: 0u32,
@@ -378,7 +378,8 @@ pub fn return_v_init(
     preprocessing: &ReadWriteMemoryPreprocessing,
     program_io: &JoltDevice,
 ) -> Vec<u32> {
-    let max_trace_address = trace_iter.clone()
+    let max_trace_address = trace_iter
+        .clone()
         .map(|step| match step.memory_ops[RAM] {
             MemoryOp::Read(a) => remap_address(a, &program_io.memory_layout),
             MemoryOp::Write(a, _) => remap_address(a, &program_io.memory_layout),
@@ -418,7 +419,6 @@ pub fn return_v_init(
 
     v_init
 }
-
 
 /// Note –– F: JoltField bound is not enforced.
 ///
