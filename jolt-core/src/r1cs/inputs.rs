@@ -6,15 +6,22 @@
 
 use crate::impl_r1cs_input_lc_conversions;
 use crate::jolt::instruction::JoltInstructionSet;
-use crate::jolt::vm::rv32i_vm::{M, RV32I};
-use crate::jolt::vm::{JoltCommitments, JoltStuff, JoltTraceStep};
+use crate::jolt::vm::bytecode::{BytecodeStuff, StreamingBytecodeStuff};
+use crate::jolt::vm::instruction_lookups::{InstructionLookupStuff, StreamingInstructionLookupStuff};
+use crate::jolt::vm::read_write_memory::{return_v_init, ReadWriteMemoryStuff, StreamingReadWriteMemoryStuff};
+use crate::jolt::vm::rv32i_vm::{M, PCS, RV32I};
+use crate::jolt::vm::timestamp_range_check::TimestampRangeCheckStuff;
+use crate::jolt::vm::{JoltCommitments, JoltPreprocessing, JoltStuff, JoltTraceStep};
 use crate::lasso::memory_checking::{Initializable, StructuredPolynomialData};
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::poly::multilinear_polynomial::MultilinearPolynomial;
 use crate::poly::opening_proof::VerifierOpeningAccumulator;
 use crate::poly::streaming_poly::StreamingOracle;
 use crate::utils::transcript::Transcript;
+use std::vec::IntoIter;
 
+use super::builder::CombinedUniformBuilder;
+use super::constraints::{JoltRV32IMConstraints, R1CSConstraints};
 use super::key::UniformSpartanKey;
 use super::spartan::{SpartanError, UniformSpartanProof};
 
@@ -22,6 +29,7 @@ use crate::field::JoltField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::log2;
 use common::rv_trace::{CircuitFlags, NUM_CIRCUIT_FLAGS};
+use tracer::JoltDevice;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use strum::IntoEnumIterator;
@@ -131,76 +139,269 @@ impl<T: CanonicalSerialize + CanonicalDeserialize> StructuredPolynomialData<T> f
     }
 }
 
-pub struct StreamingR1CSStuff<I: Iterator, F: JoltField> {
-    pub(crate) trace_iter: I,
-    pub(crate) init_iter: I,
-    // pub(crate) r1cs_builder: ,
-    // pub(crate) jolt_preprocessing: ,
-    pub(crate) shard: R1CSStuff<Vec<F>>,
+// pub struct StreamingR1CSStuff<'a, const C: usize, const M: usize, I: Iterator, F: JoltField, PCS: CommitmentScheme<ProofTranscript, Field = F>, ProofTranscript: Transcript, CI: ConstraintInput
+// > {
+//     pub(crate) trace_iter: I,
+//     pub(crate) init_iter: I,
+//     pub(crate) r1cs_builder: &'a CombinedUniformBuilder<C, F, CI>,
+//     pub(crate) jolt_preprocessing: &'a JoltPreprocessing<C, F, PCS, ProofTranscript>,
+//     pub(crate) program_io: &'a JoltDevice,
+//     pub(crate) shard: R1CSStuff<Vec<F>>,
+//     pub(crate) v_init: Vec<u32>,
+//     pub(crate) v_final: Vec<u32>,
+// }
+
+// impl<const C: usize, const M: usize, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField, PCS: CommitmentScheme<ProofTranscript, Field = F>, ProofTranscript: Transcript, CI: ConstraintInput>
+//     StreamingOracle<I> for StreamingR1CSStuff<'_, C, M, I, F, PCS, ProofTranscript, CI>
+// {
+//     fn stream_next_shard(&mut self, shard_len: usize) {
+
+//         let mut global_instruction_stuff: InstructionLookupStuff<Vec<F>> = InstructionLookupStuff::initialize(&self.jolt_preprocessing.instruction_lookups);
+//         let mut global_bytecode_stuff: BytecodeStuff<Vec<F>> = BytecodeStuff::default();
+//         let mut global_rw_mem_stuff:ReadWriteMemoryStuff<Vec<F>> = ReadWriteMemoryStuff::default();
+//         let mut global_r1cs_stuff: R1CSStuff<Vec<F>> = R1CSStuff::initialize(&C);
+//         global_bytecode_stuff.v_read_write = [vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len], vec![F::zero(); shard_len]];
+
+//         for shard in 0..shard_len {
+//             let mut step = self.trace_iter.next().unwrap();
+
+//             let inst_stuff = StreamingInstructionLookupStuff::<I, F, C, M>::generate_witness_instructionlookups_streaming(
+//                 &step,
+//                 &self.jolt_preprocessing.instruction_lookups,
+//             );
+
+//             let rw_mem_stuff = StreamingReadWriteMemoryStuff::<I, F>::generate_witness_rw_memory_streaming(
+//                 &step,
+//                 self.program_io,
+//                 &mut self.v_final
+//             );
+
+//             let bytecode_stuff = StreamingBytecodeStuff::<I, F>::generate_witness_bytecode_streaming(
+//                 &mut step,               
+//                 &self.jolt_preprocessing.bytecode,
+//             );
+
+//             // collecting in global stuffs
+//             // 1 ------------ // instruction_stuff
+//             for idx in 0..inst_stuff.dim.len() {
+//                 global_instruction_stuff.dim[idx].push(inst_stuff.dim[idx]);
+//             }
+
+
+//             for idx in 0..inst_stuff.E_polys.len() {
+//                 global_instruction_stuff.E_polys[idx].push(inst_stuff.E_polys[idx]);
+//             }
+
+//             for idx in 0..inst_stuff.instruction_flags.len() {
+//                 global_instruction_stuff.instruction_flags[idx].push(
+//                 inst_stuff.instruction_flags[idx]);
+//             }
+
+//             global_instruction_stuff.lookup_outputs.push(inst_stuff.lookup_outputs);
+//             // ------------ //
+
+//             // 2 ------------ // bytecode_stuff
+//             global_bytecode_stuff.a_read_write.push(bytecode_stuff.a_read_write);
+//             println!("bytecode_stuff.a_read_write len : {:?}", bytecode_stuff.a_read_write);
+//             global_bytecode_stuff.v_read_write[0][shard] = bytecode_stuff.v_read_write[0];
+//             global_bytecode_stuff.v_read_write[1][shard] = bytecode_stuff.v_read_write[1];
+//             global_bytecode_stuff.v_read_write[2][shard] = bytecode_stuff.v_read_write[2];
+//             global_bytecode_stuff.v_read_write[3][shard] = bytecode_stuff.v_read_write[3];
+//             global_bytecode_stuff.v_read_write[4][shard] = bytecode_stuff.v_read_write[4];
+//             global_bytecode_stuff.v_read_write[5][shard] = bytecode_stuff.v_read_write[5];
+
+//             // ------------ //
+//             // 3 ------------ // read_write_memory_stuff
+//             global_rw_mem_stuff.a_ram.push(rw_mem_stuff.a_ram);
+//             global_rw_mem_stuff.v_read_rs1.push(rw_mem_stuff.v_read_rs1);
+//             global_rw_mem_stuff.v_read_rs2.push(rw_mem_stuff.v_read_rs2);
+//             global_rw_mem_stuff.v_read_rd.push(rw_mem_stuff.v_read_rd);
+//             global_rw_mem_stuff.v_read_ram.push(rw_mem_stuff.v_read_ram);
+//             global_rw_mem_stuff.v_write_rd.push(rw_mem_stuff.v_write_rd);
+//             global_rw_mem_stuff.v_write_ram.push(rw_mem_stuff.v_write_ram);
+//             // ------------ //
+
+//             let mut chunks_x = vec![F::zero(); C];
+//             let mut chunks_y = vec![F::zero(); C];
+
+//             if let Some(instr) = &step.instruction_lookup {
+//                 let (x, y) = instr.operand_chunks(C, log2(M) as usize);
+//                 for j in 0..C {
+//                     chunks_x[j] = F::from_u8(x[j]);
+//                     chunks_y[j] = F::from_u8(y[j]);               
+//                 }
+//             }
+//             for j in 0..C {
+//                 self.shard.chunks_x[j] = chunks_x.clone();
+//                 self.shard.chunks_y[j] = chunks_y.clone();
+//                 println!("self.shard.chunks_x[j] : {:?}", self.shard.chunks_x[j].len());
+//             }
+            
+
+//             let mut circuit_flags = [F::zero(); NUM_CIRCUIT_FLAGS];
+//             for j in 0..NUM_CIRCUIT_FLAGS {
+//                 circuit_flags[j] = F::from_u8(step.circuit_flags[j] as u8);
+//                 self.shard.circuit_flags[j].push(circuit_flags[j]);
+//                 global_r1cs_stuff.circuit_flags[j].push(circuit_flags[j]);
+//             }
+            
+//         }
+
+//         let r1cs_stuff = R1CSStuff{
+//             chunks_x: self.shard.chunks_x.clone(),
+//             chunks_y: self.shard.chunks_y.clone(),
+//             circuit_flags: self.shard.circuit_flags.clone(),
+//             aux: AuxVariableStuff { left_lookup_operand: vec![F::zero(); shard_len], right_lookup_operand: vec![F::zero(); shard_len], product: vec![F::zero(); shard_len], relevant_y_chunks: vec![vec![F::zero(); shard_len]; C], write_lookup_output_to_rd: vec![F::zero(); shard_len], write_pc_to_rd: vec![F::zero(); shard_len], next_pc_jump: vec![F::zero(); shard_len], should_branch: vec![F::zero(); shard_len], next_pc: vec![F::zero(); shard_len] },
+//         };
+
+//         let mut jolt_poly = JoltStuff{
+//             bytecode: global_bytecode_stuff,
+//             read_write_memory: global_rw_mem_stuff,
+//             instruction_lookups: global_instruction_stuff,
+//             r1cs: r1cs_stuff,
+//             timestamp_range_check: TimestampRangeCheckStuff::default(),
+//         };
+
+//         let mut jolt_polynomials = convert_jolt_stuff_over_vec_to_multipoly(&jolt_poly);
+
+//         self.r1cs_builder.compute_aux(&mut jolt_polynomials);
+//     }
+// }
+
+pub fn convert_jolt_stuff_over_vec_to_multipoly<F: JoltField>(
+    jolt_stuff: &JoltStuff<Vec<F>>,
+) -> JoltStuff<MultilinearPolynomial<F>> {
+    let mut jolt_stuff_new: JoltStuff<MultilinearPolynomial<F>> =  JoltStuff::default();
+    jolt_stuff_new.bytecode.a_read_write = MultilinearPolynomial::from(jolt_stuff.bytecode.a_read_write.clone());
+        
+    jolt_stuff_new.bytecode.v_read_write = jolt_stuff
+            .bytecode
+            .v_read_write.clone()
+            .into_iter()
+            .map(MultilinearPolynomial::from)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+
+            jolt_stuff_new.read_write_memory.a_ram = MultilinearPolynomial::from(jolt_stuff.read_write_memory.a_ram.clone());
+            jolt_stuff_new.read_write_memory.v_read_rs1 = MultilinearPolynomial::from(jolt_stuff.read_write_memory.v_read_rs1.clone());
+            jolt_stuff_new.read_write_memory.v_read_rs2 = MultilinearPolynomial::from(jolt_stuff.read_write_memory.v_read_rs2.clone());
+            jolt_stuff_new.read_write_memory.v_read_rd = MultilinearPolynomial::from(jolt_stuff.read_write_memory.v_read_rd.clone());
+            jolt_stuff_new.read_write_memory.v_read_ram = MultilinearPolynomial::from(jolt_stuff.read_write_memory.v_read_ram.clone());
+            jolt_stuff_new.read_write_memory.v_write_rd = MultilinearPolynomial::from(jolt_stuff.read_write_memory.v_write_rd.clone());
+            jolt_stuff_new.read_write_memory.v_write_ram = MultilinearPolynomial::from(jolt_stuff.read_write_memory.v_write_ram.clone());
+        
+            jolt_stuff_new.instruction_lookups.dim = jolt_stuff
+            .instruction_lookups
+            .dim.clone()
+            .into_iter()
+            .map(MultilinearPolynomial::from)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+
+            jolt_stuff_new.instruction_lookups.E_polys = jolt_stuff
+            .instruction_lookups
+            .E_polys.clone()
+            .into_iter()
+            .map(MultilinearPolynomial::from)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        jolt_stuff_new.instruction_lookups.lookup_outputs = MultilinearPolynomial::from(jolt_stuff.instruction_lookups.lookup_outputs.clone());
+        jolt_stuff_new.instruction_lookups.instruction_flags = jolt_stuff
+            .instruction_lookups
+            .instruction_flags.clone()
+            .into_iter()
+            .map(MultilinearPolynomial::from)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+
+
+        jolt_stuff_new.r1cs.chunks_x = jolt_stuff
+            .r1cs
+            .chunks_x.clone()
+            .into_iter()
+            .map(MultilinearPolynomial::from)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        jolt_stuff_new.r1cs.chunks_y = jolt_stuff
+        .r1cs
+        .chunks_y.clone()
+        .into_iter()
+        .map(MultilinearPolynomial::from)
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+    jolt_stuff_new.r1cs.circuit_flags = jolt_stuff
+            .r1cs
+            .circuit_flags.clone()
+            .into_iter()
+            .map(MultilinearPolynomial::from)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+
+    // aux polys
+    jolt_stuff_new.r1cs.aux.relevant_y_chunks = jolt_stuff
+        .r1cs
+        .aux
+        .relevant_y_chunks
+        .clone()
+        .into_iter()
+        .map(MultilinearPolynomial::from)
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+
+
+            jolt_stuff_new
 }
+// impl<'a, const C: usize, const M: usize, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField, PCS: CommitmentScheme<ProofTranscript, Field = F>, ProofTranscript: Transcript, CI: ConstraintInput
+// >
+//     StreamingR1CSStuff<'a, C, M, I, F, PCS, ProofTranscript, CI>
+// {
+//     pub fn new(trace_iter: I, shard_len: usize, r1cs_builder: &'a CombinedUniformBuilder<C, F, CI>, jolt_preprocessing: &'a JoltPreprocessing<C, F, PCS, ProofTranscript>,
+//     program_io: &'a JoltDevice,
+//     ) -> Self {
+//         let v_init = return_v_init(
+//             trace_iter.clone(),
+//             &jolt_preprocessing.read_write_memory,
+//             program_io
+//         );
+//         let v_final = v_init.clone();
 
-impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField>
-    StreamingOracle<I> for StreamingR1CSStuff<I, F>
-{
-    fn stream_next_shard(&mut self, shard_len: usize) {
-        const C: usize = 4;
-
-        for i in 0..shard_len {
-            let step = self.trace_iter.next().unwrap();
-
-            for j in 0..C {
-                self.shard.chunks_x[j][i] = F::from_u8(
-                    step.instruction_lookup
-                        .clone()
-                        .unwrap()
-                        .operand_chunks(C, log2(M) as usize)
-                        .0[j],
-                );
-                self.shard.chunks_y[j][i] = F::from_u8(
-                    step.instruction_lookup
-                        .clone()
-                        .unwrap()
-                        .operand_chunks(C, log2(M) as usize)
-                        .1[j],
-                );
-            }
-            for j in 0..NUM_CIRCUIT_FLAGS {
-                self.shard.circuit_flags[j][i] = F::from_u8(step.circuit_flags[j] as u8);
-            }
-        }
-        // aux polys
-    }
-}
-
-impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField>
-    StreamingR1CSStuff<I, F>
-{
-    pub fn new(trace_iter: I, shard_len: usize) -> Self {
-        const C: usize = 4;
-        (return StreamingR1CSStuff {
-            trace_iter: trace_iter.clone(),
-            init_iter: trace_iter.clone(),
-            shard: R1CSStuff {
-                chunks_x: vec![vec![F::zero(); shard_len]; C],
-                chunks_y: vec![vec![F::zero(); shard_len]; C],
-                circuit_flags: [
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                    vec![F::zero(); shard_len],
-                ],
-                aux: AuxVariableStuff::default(),
-            },
-        });
-    }
-}
+//         (return StreamingR1CSStuff {
+//             trace_iter: trace_iter.clone(),
+//             init_iter: trace_iter.clone(),
+//             shard: R1CSStuff {
+//                 chunks_x: vec![vec![F::zero(); shard_len]; C],
+//                 chunks_y: vec![vec![F::zero(); shard_len]; C],
+//                 circuit_flags: [
+//                     vec![F::zero(); shard_len],
+//                     vec![F::zero(); shard_len],
+//                     vec![F::zero(); shard_len],
+//                     vec![F::zero(); shard_len],
+//                     vec![F::zero(); shard_len],
+//                     vec![F::zero(); shard_len],
+//                     vec![F::zero(); shard_len],
+//                     vec![F::zero(); shard_len],
+//                     vec![F::zero(); shard_len],
+//                     vec![F::zero(); shard_len],
+//                     vec![F::zero(); shard_len],
+//                 ],
+//                 aux: AuxVariableStuff::default(),
+//             },
+//             r1cs_builder: &r1cs_builder,
+//             jolt_preprocessing: &jolt_preprocessing,
+//             program_io: &program_io,
+//             v_init: v_init,
+//             v_final: v_final,
+//         });
+//     }
+// }
 
 /// Witness polynomials specific to Jolt's R1CS constraints (i.e. not used
 /// for any offline memory-checking instances).

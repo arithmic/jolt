@@ -12,7 +12,6 @@ use crate::poly::multilinear_polynomial::PolynomialEvaluation;
 use crate::poly::opening_proof::ProverOpeningAccumulator;
 use crate::poly::opening_proof::VerifierOpeningAccumulator;
 use crate::poly::split_eq_poly::SplitEqPolynomial;
-use crate::r1cs::inputs::StreamingR1CSStuff;
 use crate::r1cs::key::UniformSpartanKey;
 use crate::utils::math::Math;
 use crate::utils::thread::drop_in_background_thread;
@@ -117,18 +116,11 @@ where
         polynomials: &JoltPolynomials<F>,
         opening_accumulator: &mut ProverOpeningAccumulator<F, ProofTranscript>,
         transcript: &mut ProofTranscript,
-        trace: std::vec::IntoIter<JoltTraceStep<InstructionSet>>,
+        _trace: std::vec::IntoIter<JoltTraceStep<InstructionSet>>,
     ) -> Result<Self, SpartanError>
     where
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
-        let shard_len = 2 ^ 5;
-
-        let r1cs_stuff_new = StreamingR1CSStuff::<
-            std::vec::IntoIter<JoltTraceStep<InstructionSet>>,
-            F,
-        >::new(trace, shard_len);
-
         let flattened_polys: Vec<&MultilinearPolynomial<F>> = I::flatten::<C>()
             .iter()
             .map(|var| var.get_ref(polynomials))

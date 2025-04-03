@@ -196,6 +196,18 @@ impl<F: JoltField> MultilinearPolynomial<F> {
         }
     }
 
+    /// Gets the polynomial coefficient at the given `index`
+    pub fn coeff(&self, index: usize) -> F {
+        match self {
+            MultilinearPolynomial::LargeScalars(poly) => poly[index],
+            MultilinearPolynomial::U8Scalars(poly) => F::from_u8(poly.coeffs[index]),
+            MultilinearPolynomial::U16Scalars(poly) => F::from_u16(poly.coeffs[index]),
+            MultilinearPolynomial::U32Scalars(poly) => F::from_u32(poly.coeffs[index]),
+            MultilinearPolynomial::U64Scalars(poly) => F::from_u64(poly.coeffs[index]),
+            MultilinearPolynomial::I64Scalars(poly) => F::from_i64(poly.coeffs[index]),
+        }
+    }
+
     /// Gets the polynomial coefficient at the given `index`, as an `i64`.
     /// Panics if the polynomial is a large-scalar polynomial.
     pub fn get_coeff_i64(&self, index: usize) -> i64 {

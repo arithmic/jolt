@@ -15,7 +15,7 @@ use std::marker::PhantomData;
 use tracing::trace_span;
 
 use crate::field::JoltField;
-use crate::jolt::instruction::{JoltInstructionSet, SubtableIndices};
+use crate::jolt::instruction::{self, JoltInstructionSet, SubtableIndices};
 use crate::jolt::subtable::JoltSubtableSet;
 use crate::lasso::memory_checking::{
     Initializable, MultisetHashes, NoExogenousOpenings, StructuredPolynomialData,
@@ -73,7 +73,7 @@ pub struct StreamingInstructionLookupStuff<
     pub(crate) trace_iter: I,
     pub(crate) init_iter: I,
     pub(crate) preprocessing: &'a InstructionLookupsPreprocessing<C, F>,
-    pub(crate) shard: InstructionLookupStuff<Vec<F>>,
+    pub(crate) shard: InstructionLookupStuff<MultilinearPolynomial<F>>,
 }
 
 impl<'a, I: Iterator + Clone, F: JoltField, const C: usize, const M: usize>
@@ -88,15 +88,15 @@ impl<'a, I: Iterator + Clone, F: JoltField, const C: usize, const M: usize>
             trace_iter: trace_iter.clone(),
             init_iter: trace_iter,
             shard: InstructionLookupStuff {
-                dim: vec![vec![F::zero(); shard_len]; C],
-                read_cts: vec![vec![F::zero(); shard_len]; preprocessing.num_memories],
-                final_cts: vec![vec![F::zero(); shard_len]; preprocessing.num_memories],
-                E_polys: vec![vec![F::zero(); shard_len]; preprocessing.num_memories],
+                dim: vec![MultilinearPolynomial::from(vec![0u16; shard_len]); C],
+                read_cts: vec![MultilinearPolynomial::from(vec![0u32; shard_len]); preprocessing.num_memories],
+                final_cts: vec![MultilinearPolynomial::from(vec![0u32; shard_len]); preprocessing.num_memories],
+                E_polys: vec![MultilinearPolynomial::from(vec![0u32; shard_len]); preprocessing.num_memories],
                 instruction_flags: vec![
-                    vec![F::zero(); shard_len];
+                    MultilinearPolynomial::from(vec![0u8; shard_len]);
                     preprocessing.instruction_to_memory_indices.len()
                 ],
-                lookup_outputs: vec![F::zero(); shard_len],
+                lookup_outputs: MultilinearPolynomial::from(vec![0u32; shard_len]),
                 a_init_final: None,
                 v_init_final: None,
             },
@@ -105,21 +105,19 @@ impl<'a, I: Iterator + Clone, F: JoltField, const C: usize, const M: usize>
     }
 
     pub fn generate_witness_instructionlookups_streaming<InstructionSet: JoltInstructionSet>(
-        step: &mut JoltTraceStep<InstructionSet>,
+        step: &JoltTraceStep<InstructionSet>,
         preprocessing: &InstructionLookupsPreprocessing<C, F>,
-    ) -> InstructionLookupStuff<F> {
-        //Computing subtable_lookup_indices
+    ) -> (Vec<u16>, Vec<u32>, Vec<u8>, u32){
         let subtable_lookup_indices = Self::subtable_lookup_indices(step);
 
         //Computing dim
-        let dim: Vec<F> = subtable_lookup_indices
+        let dim: Vec<u16> = subtable_lookup_indices
             .clone()
             .into_par_iter()
-            .map(F::from_u16)
             .collect();
 
         //Computing E_polys
-        let E_polynomials: Vec<F> = (0..preprocessing.num_memories)
+        let E_polynomials: Vec<u32> = (0..preprocessing.num_memories)
             .into_par_iter()
             .map(|memory_index| {
                 let dim_index = preprocessing.memory_to_dimension_index[memory_index];
@@ -136,34 +134,35 @@ impl<'a, I: Iterator + Clone, F: JoltField, const C: usize, const M: usize>
                             preprocessing.materialized_subtables[subtable_index][memory_address];
                     }
                 }
-                F::from_u32(subtable_lookups)
+                subtable_lookups
             })
             .collect();
 
         // Computing instruction_flags
-        let mut instruction_flag_bitvectors: Vec<F> =
-            vec![F::zero(); preprocessing.instruction_to_memory_indices.len()];
+        let mut instruction_flag_bitvectors: Vec<u8> =
+            vec![0u8; preprocessing.instruction_to_memory_indices.len()];
         if let Some(instr) = &step.instruction_lookup {
-            instruction_flag_bitvectors[InstructionSet::enum_index(instr)] = F::one();
+            instruction_flag_bitvectors[InstructionSet::enum_index(instr)] = 1u8;
         }
 
         // Computing instruction lookups
         let lookup_outputs = if let Some(instr) = &step.instruction_lookup {
-            F::from_u32(instr.lookup_entry() as u32)
+            instr.lookup_entry() as u32
         } else {
-            F::zero()
+            0u32
         };
 
-        InstructionLookupStuff {
-            dim,
-            read_cts: vec![F::zero()],
-            final_cts: vec![F::zero()],
-            E_polys: E_polynomials,
-            instruction_flags: instruction_flag_bitvectors,
-            lookup_outputs,
-            a_init_final: None,
-            v_init_final: None,
-        }
+        (dim, E_polynomials, instruction_flag_bitvectors, lookup_outputs)
+        // InstructionLookupStuff {
+        //     dim,
+        //     read_cts: vec![F::zero()],
+        //     final_cts: vec![F::zero()],
+        //     E_polys: E_polynomials,
+        //     instruction_flags: instruction_flag_bitvectors,
+        //     lookup_outputs,
+        //     a_init_final: None,
+        //     v_init_final: None,
+        // }
     }
 
     pub fn subtable_lookup_indices<InstructionSet: JoltInstructionSet>(
@@ -197,26 +196,38 @@ impl<
     > StreamingOracle<I> for StreamingInstructionLookupStuff<'a, I, F, C, M>
 {
     fn stream_next_shard(&mut self, shard_len: usize) {
+        let mut dim_poly = vec![vec![0u16; shard_len]; C];
+        let mut E_polys_poly = vec![vec![0u32; shard_len]; self.shard.E_polys.len()];
+        let mut instruction_flags_poly = vec![vec![0u8; shard_len]; self.shard.instruction_flags.len()];
+        let mut lookup_outputs_poly = vec![0u32; shard_len];
+
         for i in 0..shard_len {
             let mut step = self.trace_iter.next().unwrap();
-            let instruction_lookup_stuff =
+            let (dim, E_polys, instruction_flags, lookup_outputs) =
                 Self::generate_witness_instructionlookups_streaming(&mut step, self.preprocessing);
 
+            
             for idx in 0..self.shard.dim.len() {
-                self.shard.dim[idx][i] = instruction_lookup_stuff.dim[idx];
+                dim_poly[idx][i] = dim[idx];
             }
 
             for idx in 0..self.shard.E_polys.len() {
-                self.shard.E_polys[idx][i] = instruction_lookup_stuff.E_polys[idx];
+                E_polys_poly[idx][i] = E_polys[idx];
             }
 
             for idx in 0..self.shard.instruction_flags.len() {
-                self.shard.instruction_flags[idx][i] =
-                    instruction_lookup_stuff.instruction_flags[idx];
+                instruction_flags_poly[idx][i] =
+                    instruction_flags[idx];
             }
 
-            self.shard.lookup_outputs[i] = instruction_lookup_stuff.lookup_outputs;
+            lookup_outputs_poly[i] = lookup_outputs;
         }
+
+        self.shard.dim = dim_poly.into_par_iter().map(MultilinearPolynomial::from).collect();
+        self.shard.E_polys = E_polys_poly.into_par_iter().map(MultilinearPolynomial::from).collect();
+        self.shard.instruction_flags = instruction_flags_poly.into_par_iter().map(MultilinearPolynomial::from).collect();
+        self.shard.lookup_outputs = MultilinearPolynomial::from(lookup_outputs_poly);
+
     }
 }
 

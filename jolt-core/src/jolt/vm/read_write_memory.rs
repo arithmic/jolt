@@ -203,46 +203,9 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
         trace_iter: I,
         shard_len: usize,
         preprocessing: &'a ReadWriteMemoryPreprocessing,
-        program_io: &'a JoltDevice,
+        program_io: &'a JoltDevice
     ) -> Self {
-        let max_trace_address = trace_iter
-            .clone()
-            .map(|step| match step.memory_ops[RAM] {
-                MemoryOp::Read(a) => remap_address(a, &program_io.memory_layout),
-                MemoryOp::Write(a, _) => remap_address(a, &program_io.memory_layout),
-            })
-            .max()
-            .unwrap();
-
-        let memory_size = max_trace_address.next_power_of_two() as usize;
-        let mut v_init: Vec<u32> = vec![0; memory_size];
-
-        // Copy bytecode
-        let mut v_init_index = memory_address_to_witness_index(
-            preprocessing.min_bytecode_address,
-            &program_io.memory_layout,
-        );
-
-        for word in preprocessing.bytecode_words.iter() {
-            v_init[v_init_index] = *word;
-            v_init_index += 1;
-        }
-        // Copy input bytes
-        v_init_index = memory_address_to_witness_index(
-            program_io.memory_layout.input_start,
-            &program_io.memory_layout,
-        );
-
-        // Convert input bytes into words and populate `v_init`
-        for chunk in program_io.inputs.chunks(4) {
-            let mut word = [0u8; 4];
-            for (i, byte) in chunk.iter().enumerate() {
-                word[i] = *byte;
-            }
-            let word = u32::from_le_bytes(word);
-            v_init[v_init_index] = word;
-            v_init_index += 1;
-        }
+        let v_init = return_v_init(trace_iter.clone(), preprocessing, program_io);
 
         let v_final = v_init.clone();
 
@@ -275,8 +238,8 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
     }
 
     pub fn generate_witness_rw_memory_streaming<InstructionSet: JoltInstructionSet>(
-        step: JoltTraceStep<InstructionSet>,
-        program_io: JoltDevice,
+        step: &JoltTraceStep<InstructionSet>,
+        program_io: &JoltDevice,
         v_final: &mut Vec<u32>,
     ) -> ReadWriteMemoryStuff<F> {
         let a_ram;
@@ -378,8 +341,8 @@ impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: J
         for shards in 0..shard_len {
             let step = self.trace_iter.next().unwrap();
             let read_mem_stuff = Self::generate_witness_rw_memory_streaming(
-                step,
-                self.program_io.clone(),
+                &step,
+                self.program_io,
                 &mut self.v_final,
             );
 
@@ -393,6 +356,54 @@ impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: J
         }
     }
 }
+
+/// function which takes trace_iter, preprocessing and program_io and return v_init
+pub fn return_v_init(
+    trace_iter: impl Iterator<Item = JoltTraceStep<impl JoltInstructionSet>> + Clone,
+    preprocessing: &ReadWriteMemoryPreprocessing,
+    program_io: &JoltDevice,
+) -> Vec<u32> {
+    let max_trace_address = trace_iter.clone()
+        .map(|step| match step.memory_ops[RAM] {
+            MemoryOp::Read(a) => remap_address(a, &program_io.memory_layout),
+            MemoryOp::Write(a, _) => remap_address(a, &program_io.memory_layout),
+        })
+        .max()
+        .unwrap();
+
+    let memory_size = max_trace_address.next_power_of_two() as usize;
+    let mut v_init: Vec<u32> = vec![0; memory_size];
+
+    // Copy bytecode
+    let mut v_init_index = memory_address_to_witness_index(
+        preprocessing.min_bytecode_address,
+        &program_io.memory_layout,
+    );
+
+    for word in preprocessing.bytecode_words.iter() {
+        v_init[v_init_index] = *word;
+        v_init_index += 1;
+    }
+    // Copy input bytes
+    v_init_index = memory_address_to_witness_index(
+        program_io.memory_layout.input_start,
+        &program_io.memory_layout,
+    );
+
+    // Convert input bytes into words and populate `v_init`
+    for chunk in program_io.inputs.chunks(4) {
+        let mut word = [0u8; 4];
+        for (i, byte) in chunk.iter().enumerate() {
+            word[i] = *byte;
+        }
+        let word = u32::from_le_bytes(word);
+        v_init[v_init_index] = word;
+        v_init_index += 1;
+    }
+
+    v_init
+}
+
 
 /// Note –– F: JoltField bound is not enforced.
 ///
