@@ -125,63 +125,6 @@ impl<F: JoltField> AuxComputation<F> {
         }
     }
 
-    fn compute_aux_poly_<const C: usize, I: ConstraintInput>(
-        &self,
-        jolt_polynomials: &JoltPolynomials<F>,
-        poly_len: usize,
-    ) -> MultilinearPolynomial<F> {
-        let flattened_polys: Vec<&MultilinearPolynomial<F>> = I::flatten::<C>()
-            .iter()
-            .map(|var| var.get_ref(jolt_polynomials))
-            .collect();
-
-        let mut aux_poly: Vec<i64> = vec![0; poly_len];
-        let num_threads = rayon::current_num_threads();
-        let chunk_size = poly_len.div_ceil(num_threads);
-        let contains_negative_values = AtomicBool::new(false);
-
-        aux_poly
-            .par_chunks_mut(chunk_size)
-            .enumerate()
-            .for_each(|(chunk_index, chunk)| {
-                chunk.iter_mut().enumerate().for_each(|(offset, result)| {
-                    let global_index = chunk_index * chunk_size + offset;
-                    let compute_inputs: Vec<_> = self
-                        .symbolic_inputs
-                        .iter()
-                        .map(|lc| {
-                            let mut input = 0;
-                            for term in lc.terms().iter() {
-                                match term.0 {
-                                    Variable::Input(index) | Variable::Auxiliary(index) => {
-                                        // println!("index is {index}");
-                                        // println!("global_index is {global_index}");
-                                        input += flattened_polys[index]
-                                            .get_coeff_i128(global_index)
-                                            * term.1 as i128;
-                                    }
-                                    Variable::Constant => input += term.1 as i128,
-                                }
-                            }
-                            input
-                        })
-                        .collect();
-                    let aux_value = (self.compute)(&compute_inputs);
-                    if aux_value.is_negative() {
-                        contains_negative_values.store(true, Ordering::Relaxed);
-                    }
-                    *result = aux_value as i64;
-                });
-            });
-
-        if contains_negative_values.into_inner() {
-            MultilinearPolynomial::from(aux_poly)
-        } else {
-            let aux_poly: Vec<_> = aux_poly.into_iter().map(|x| x as u64).collect();
-            MultilinearPolynomial::from(aux_poly)
-        }
-    }
-
     fn compute_aux_poly<const C: usize, I: ConstraintInput>(
         &self,
         jolt_polynomials: &JoltPolynomials<F>,
@@ -594,11 +537,11 @@ impl<const C: usize, F: JoltField, I: ConstraintInput> CombinedUniformBuilder<C,
         }
     }
 
-    pub fn compute_aux_(&self, jolt_polynomials: &mut JoltPolynomials<F>) {
+    pub fn compute_aux_(&self, jolt_polynomials: &mut JoltPolynomials<F>, shard_len: usize) {
         let flattened_vars = I::flatten::<C>();
         for (aux_index, aux_compute) in self.uniform_builder.aux_computations.iter() {
             *flattened_vars[*aux_index].get_ref_mut(jolt_polynomials) =
-                aux_compute.compute_aux_poly_::<C, I>(jolt_polynomials, 32);
+                aux_compute.compute_aux_poly::<C, I>(jolt_polynomials, shard_len);
         }
     }
 

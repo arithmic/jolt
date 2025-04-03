@@ -270,91 +270,92 @@ impl<
         let mut circuit_flags = vec![vec![0u8; shard_len]; NUM_CIRCUIT_FLAGS];
 
         for shard in 0..shard_len {
-            let mut step = self.trace_iter.next().unwrap();
-
-            let (dim_temp, E_polys_temp, instruction_flags_temp, lookup_outputs_temp) = StreamingInstructionLookupStuff::<I, F, C, M>::generate_witness_instructionlookups_streaming(
-                &step,
-                &self.jolt_preprocessing.instruction_lookups,
-            );
-
-            let rw_mem_stuff =
-                StreamingReadWriteMemoryStuff::<I, F>::generate_witness_rw_memory_streaming(
+            if let Some(mut step) = self.trace_iter.next()
+            {
+                let (dim_temp, E_polys_temp, instruction_flags_temp, lookup_outputs_temp) = StreamingInstructionLookupStuff::<I, F, C, M>::generate_witness_instructionlookups_streaming(
                     &step,
-                    self.program_io,
-                    &mut self.v_final,
+                    &self.jolt_preprocessing.instruction_lookups,
                 );
 
-            let (
-                a_read_write_temp,
-                v_read_write_0_1_temp,
-                v_read_write_2_4_temp,
-                v_read_write_5_temp,
-            ) = StreamingBytecodeStuff::<I, F>::generate_witness_bytecode_streaming(
-                &mut step,
-                &self.jolt_preprocessing.bytecode,
-            );
+                let rw_mem_stuff =
+                    StreamingReadWriteMemoryStuff::<I, F>::generate_witness_rw_memory_streaming(
+                        &step,
+                        self.program_io,
+                        &mut self.v_final,
+                    );
 
-            // collecting in global stuffs
-            // 1 ------------ // instruction_stuff
-            for idx in 0..dim_temp.len() {
-                dim[idx][shard] = dim_temp[idx];
-            }
+                let (
+                    a_read_write_temp,
+                    v_read_write_0_1_temp,
+                    v_read_write_2_4_temp,
+                    v_read_write_5_temp,
+                ) = StreamingBytecodeStuff::<I, F>::generate_witness_bytecode_streaming(
+                    &mut step,
+                    &self.jolt_preprocessing.bytecode,
+                );
 
-            for idx in 0..E_polys_temp.len() {
-                E_polys[idx][shard] = E_polys_temp[idx];
-            }
-
-            for idx in 0..instruction_flags_temp.len() {
-                instruction_flags[idx][shard] = instruction_flags_temp[idx];
-            }
-
-            lookup_outputs[shard] = lookup_outputs_temp;
-            // ------------ //
-
-            // 2 ------------ // bytecode_stuff
-            // global_bytecode_stuff.a_read_write.push(bytecode_stuff.a_read_write);
-            a_read_write[shard] = a_read_write_temp;
-
-            v_read_write_0_1_vec[0][shard] = v_read_write_0_1_temp[0];
-            v_read_write_0_1_vec[1][shard] = v_read_write_0_1_temp[1];
-            v_read_write_2_4_vec[0][shard] = v_read_write_2_4_temp[0];
-            v_read_write_2_4_vec[1][shard] = v_read_write_2_4_temp[1];
-            v_read_write_2_4_vec[2][shard] = v_read_write_2_4_temp[2];
-            v_read_write_5_vec[shard] = v_read_write_5_temp;
-
-            // ------------ //
-            // 3 ------------ // read_write_memory_stuff
-            a_ram[shard] = rw_mem_stuff.a_ram;
-            v_read_rs1[shard] = rw_mem_stuff.v_read_rs1;
-            v_read_rs2[shard] = rw_mem_stuff.v_read_rs2;
-            v_read_rd[shard] = rw_mem_stuff.v_read_rd;
-            v_read_ram[shard] = rw_mem_stuff.v_read_ram;
-            v_write_rd[shard] = rw_mem_stuff.v_write_rd;
-            v_write_ram[shard] = rw_mem_stuff.v_write_ram;
-            // ------------ //
-
-            let mut chunks_x_temp = vec![0u8; C];
-            let mut chunks_y_temp = vec![0u8; C];
-
-            if let Some(instr) = &step.instruction_lookup {
-                let (x, y) = instr.operand_chunks(C, log2(M) as usize);
-                for j in 0..C {
-                    chunks_x_temp[j] = x[j];
-                    chunks_y_temp[j] = y[j];
+                // collecting in global stuffs
+                // 1 ------------ // instruction_stuff
+                for idx in 0..dim_temp.len() {
+                    dim[idx][shard] = dim_temp[idx];
                 }
-            }
 
-            for j in 0..C {
-                chunks_x[j][shard] = chunks_x_temp.clone()[j];
-                chunks_y[j][shard] = chunks_y_temp.clone()[j];
-            }
+                for idx in 0..E_polys_temp.len() {
+                    E_polys[idx][shard] = E_polys_temp[idx];
+                }
 
-            let mut circuit_flags_temp = [0u8; NUM_CIRCUIT_FLAGS];
-            for j in 0..NUM_CIRCUIT_FLAGS {
-                circuit_flags_temp[j] = step.circuit_flags[j] as u8;
-            }
-            for j in 0..NUM_CIRCUIT_FLAGS {
-                circuit_flags[j][shard] = circuit_flags_temp[j];
+                for idx in 0..instruction_flags_temp.len() {
+                    instruction_flags[idx][shard] = instruction_flags_temp[idx];
+                }
+
+                lookup_outputs[shard] = lookup_outputs_temp;
+                // ------------ //
+
+                // 2 ------------ // bytecode_stuff
+                // global_bytecode_stuff.a_read_write.push(bytecode_stuff.a_read_write);
+                a_read_write[shard] = a_read_write_temp;
+
+                v_read_write_0_1_vec[0][shard] = v_read_write_0_1_temp[0];
+                v_read_write_0_1_vec[1][shard] = v_read_write_0_1_temp[1];
+                v_read_write_2_4_vec[0][shard] = v_read_write_2_4_temp[0];
+                v_read_write_2_4_vec[1][shard] = v_read_write_2_4_temp[1];
+                v_read_write_2_4_vec[2][shard] = v_read_write_2_4_temp[2];
+                v_read_write_5_vec[shard] = v_read_write_5_temp;
+
+                // ------------ //
+                // 3 ------------ // read_write_memory_stuff
+                a_ram[shard] = rw_mem_stuff.a_ram;
+                v_read_rs1[shard] = rw_mem_stuff.v_read_rs1;
+                v_read_rs2[shard] = rw_mem_stuff.v_read_rs2;
+                v_read_rd[shard] = rw_mem_stuff.v_read_rd;
+                v_read_ram[shard] = rw_mem_stuff.v_read_ram;
+                v_write_rd[shard] = rw_mem_stuff.v_write_rd;
+                v_write_ram[shard] = rw_mem_stuff.v_write_ram;
+                // ------------ //
+
+                let mut chunks_x_temp = vec![0u8; C];
+                let mut chunks_y_temp = vec![0u8; C];
+
+                if let Some(instr) = &step.instruction_lookup {
+                    let (x, y) = instr.operand_chunks(C, log2(M) as usize);
+                    for j in 0..C {
+                        chunks_x_temp[j] = x[j];
+                        chunks_y_temp[j] = y[j];
+                    }
+                }
+
+                for j in 0..C {
+                    chunks_x[j][shard] = chunks_x_temp.clone()[j];
+                    chunks_y[j][shard] = chunks_y_temp.clone()[j];
+                }
+
+                let mut circuit_flags_temp = [0u8; NUM_CIRCUIT_FLAGS];
+                for j in 0..NUM_CIRCUIT_FLAGS {
+                    circuit_flags_temp[j] = step.circuit_flags[j] as u8;
+                }
+                for j in 0..NUM_CIRCUIT_FLAGS {
+                    circuit_flags[j][shard] = circuit_flags_temp[j];
+                }
             }
         }
 
@@ -424,7 +425,7 @@ impl<
             timestamp_range_check: TimestampRangeCheckStuff::default(),
         };
 
-        self.r1cs_builder.compute_aux_(&mut jolt_poly);
+        self.r1cs_builder.compute_aux_(&mut jolt_poly, shard_len);
         self.shard.aux = jolt_poly.r1cs.aux;
     }
 }

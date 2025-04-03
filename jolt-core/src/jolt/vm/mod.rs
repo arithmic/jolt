@@ -408,7 +408,9 @@ where
         );
 
         ///////////////////////////////////////////////////////
-        let shard_len = 32;
+        let shard_len = padded_trace_length;
+        let no_of_shards = padded_trace_length/shard_len;
+        
         let mut instruction_streaming_polynomials = StreamingInstructionLookupStuff::<
             IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
             F,
@@ -432,7 +434,7 @@ where
                 ProofTranscript,
             >::generate_witness(&preprocessing.instruction_lookups, &trace);
 
-        for n in 0..5 {
+        for n in 0..no_of_shards {
             instruction_streaming_polynomials.stream_next_shard(shard_len);
             for i in 0..shard_len {
                 for poly_index in 0..instruction_polynomials.dim.len() {
@@ -467,6 +469,8 @@ where
                         .get_coeff(n * shard_len + i)
                 );
             }
+            println!("Streaming for Instruction polynomials passing for {n}th shard");
+
         }
         let memory_polynomials = ReadWriteMemoryPolynomials::generate_witness(
             &program_io,
@@ -498,7 +502,7 @@ where
         );
 
         // testing the streaming polynomials for memory_polynomials
-        for n in 0..5 {
+        for n in 0..no_of_shards {
             streaming_mem_rw_polynomials.stream_next_shard(shard_len);
             for i in 0..shard_len {
                 assert_eq!(
@@ -572,7 +576,7 @@ where
             },
         );
 
-        for n in 0..5 {
+        for n in 0..no_of_shards {
             bytecode_streaming_polynomial.stream_next_shard(shard_len);
             for i in 0..shard_len {
                 assert_eq!(
@@ -621,7 +625,7 @@ where
 
         r1cs_builder.compute_aux(&mut jolt_polynomials);
 
-        for n in 0..5 {
+        for n in 0..no_of_shards {
             streaming_r1cs_polynomials.stream_next_shard(shard_len);
             for shard in 0..shard_len {
                 for i in 0..C {

@@ -347,7 +347,8 @@ impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: J
         let mut v_write_ram = vec![0u32; shard_len];
 
         for shards in 0..shard_len {
-            let step = self.trace_iter.next().unwrap();
+            if let Some(step) = self.trace_iter.next()
+            {
             let read_mem_stuff = Self::generate_witness_rw_memory_streaming(
                 &step,
                 self.program_io,
@@ -361,6 +362,7 @@ impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: J
             v_read_ram[shards] = read_mem_stuff.v_read_ram;
             v_write_rd[shards] = read_mem_stuff.v_write_rd;
             v_write_ram[shards] = read_mem_stuff.v_write_ram;
+        }
         }
         self.shard.a_ram = MultilinearPolynomial::from(a_ram);
         self.shard.v_read_rd = MultilinearPolynomial::from(v_read_rd);
