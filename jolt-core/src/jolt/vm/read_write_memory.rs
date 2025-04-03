@@ -193,7 +193,7 @@ pub struct StreamingReadWriteMemoryStuff<'a, I: Iterator, F: JoltField> {
     pub(crate) v_init: Vec<u32>,
     pub(crate) v_final: Vec<u32>,
     preprocessing: &'a ReadWriteMemoryPreprocessing,
-    pub(crate) shard: ReadWriteMemoryStuff<Vec<F>>,
+    pub(crate) shard: ReadWriteMemoryStuff<MultilinearPolynomial<F>>,
 }
 
 impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField>
@@ -213,19 +213,19 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
             trace_iter: trace_iter.clone(),
             init_iter: trace_iter.clone(),
             shard: ReadWriteMemoryStuff {
-                a_ram: vec![F::zero(); shard_len],
-                v_read_rd: vec![F::zero(); shard_len],
-                v_read_rs1: vec![F::zero(); shard_len],
-                v_read_rs2: vec![F::zero(); shard_len],
-                v_read_ram: vec![F::zero(); shard_len],
-                v_write_rd: vec![F::zero(); shard_len],
-                v_write_ram: vec![F::zero(); shard_len],
-                v_final: vec![F::zero(); shard_len],
-                t_read_rd: vec![F::zero(); shard_len],
-                t_read_rs1: vec![F::zero(); shard_len],
-                t_read_rs2: vec![F::zero(); shard_len],
-                t_read_ram: vec![F::zero(); shard_len],
-                t_final: vec![F::zero(); shard_len],
+                a_ram: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                v_read_rd: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                v_read_rs1: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                v_read_rs2: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                v_read_ram: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                v_write_rd: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                v_write_ram: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                v_final: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                t_read_rd: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                t_read_rs1: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                t_read_rs2: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                t_read_ram: MultilinearPolynomial::from(vec![0u32; shard_len]),
+                t_final: MultilinearPolynomial::from(vec![0u32; shard_len]),
                 a_init_final: None,
                 v_init: None,
                 identity: None,
@@ -241,7 +241,7 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
         step: &JoltTraceStep<InstructionSet>,
         program_io: &JoltDevice,
         v_final: &mut Vec<u32>,
-    ) -> ReadWriteMemoryStuff<F> {
+    ) -> ReadWriteMemoryStuff<u32> {
         let a_ram;
         let v_read_rd;
         let v_read_rs1;
@@ -314,19 +314,19 @@ impl<'a, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, 
         }
 
         ReadWriteMemoryStuff {
-            a_ram: F::from_u32(a_ram),
-            v_read_rd: F::from_u32(v_read_rd),
-            v_read_rs1: F::from_u32(v_read_rs1),
-            v_read_rs2: F::from_u32(v_read_rs2),
-            v_read_ram: F::from_u32(v_read_ram),
-            v_write_rd: F::from_u32(v_write_rd),
-            v_write_ram: F::from_u32(v_write_ram),
-            v_final: F::zero(),
-            t_read_rd: F::zero(),
-            t_read_rs1: F::zero(),
-            t_read_rs2: F::zero(),
-            t_read_ram: F::zero(),
-            t_final: F::zero(),
+            a_ram: a_ram,
+            v_read_rd: v_read_rd,
+            v_read_rs1: v_read_rs1,
+            v_read_rs2: v_read_rs2,
+            v_read_ram: v_read_ram,
+            v_write_rd: v_write_rd,
+            v_write_ram: v_write_ram,
+            v_final: 0u32,
+            t_read_rd: 0u32,
+            t_read_rs1: 0u32,
+            t_read_rs2: 0u32,
+            t_read_ram: 0u32,
+            t_final: 0u32,
             a_init_final: None,
             v_init: None,
             identity: None,
@@ -338,6 +338,14 @@ impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: J
     StreamingOracle<I> for StreamingReadWriteMemoryStuff<'_, I, F>
 {
     fn stream_next_shard(&mut self, shard_len: usize) {
+        let mut a_ram = vec![0u32; shard_len];
+        let mut v_read_rd = vec![0u32; shard_len];
+        let mut v_read_rs1 = vec![0u32; shard_len];
+        let mut v_read_rs2 = vec![0u32; shard_len];
+        let mut v_read_ram = vec![0u32; shard_len];
+        let mut v_write_rd = vec![0u32; shard_len];
+        let mut v_write_ram = vec![0u32; shard_len];
+
         for shards in 0..shard_len {
             let step = self.trace_iter.next().unwrap();
             let read_mem_stuff = Self::generate_witness_rw_memory_streaming(
@@ -346,14 +354,21 @@ impl<IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: J
                 &mut self.v_final,
             );
 
-            self.shard.a_ram[shards] = read_mem_stuff.a_ram;
-            self.shard.v_read_rd[shards] = read_mem_stuff.v_read_rd;
-            self.shard.v_read_rs1[shards] = read_mem_stuff.v_read_rs1;
-            self.shard.v_read_rs2[shards] = read_mem_stuff.v_read_rs2;
-            self.shard.v_read_ram[shards] = read_mem_stuff.v_read_ram;
-            self.shard.v_write_rd[shards] = read_mem_stuff.v_write_rd;
-            self.shard.v_write_ram[shards] = read_mem_stuff.v_write_ram;
+            a_ram[shards] = read_mem_stuff.a_ram;
+            v_read_rd[shards] = read_mem_stuff.v_read_rd;
+            v_read_rs1[shards] = read_mem_stuff.v_read_rs1;
+            v_read_rs2[shards] = read_mem_stuff.v_read_rs2;
+            v_read_ram[shards] = read_mem_stuff.v_read_ram;
+            v_write_rd[shards] = read_mem_stuff.v_write_rd;
+            v_write_ram[shards] = read_mem_stuff.v_write_ram;
         }
+        self.shard.a_ram = MultilinearPolynomial::from(a_ram);
+        self.shard.v_read_rd = MultilinearPolynomial::from(v_read_rd);
+        self.shard.v_read_rs1 = MultilinearPolynomial::from(v_read_rs1);
+        self.shard.v_read_rs2 = MultilinearPolynomial::from(v_read_rs2);
+        self.shard.v_read_ram = MultilinearPolynomial::from(v_read_ram);
+        self.shard.v_write_rd = MultilinearPolynomial::from(v_write_rd);
+        self.shard.v_write_ram = MultilinearPolynomial::from(v_write_ram);
     }
 }
 

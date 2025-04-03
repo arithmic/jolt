@@ -438,7 +438,7 @@ where
                 for i in 0..shard_len{
                     assert_eq!(instruction_streaming_polynomials.shard.lookup_outputs.get_coeff(i), instruction_polynomials.lookup_outputs.get_coeff(n * shard_len + i));
                 }
-                println!("passing for shard number {}", n); 
+                println!("Streaming for Instructions polynomials passing for {}th shard", n); 
             }
         let memory_polynomials = ReadWriteMemoryPolynomials::generate_witness(
             &program_io,
@@ -461,51 +461,51 @@ where
         // );
         // bytecode_streaming_polynomial.stream_next_shard(shard_len);
 
-        // let mut streaming_mem_rw_polynomials = StreamingReadWriteMemoryStuff::<
-        //     IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
-        //     F,
-        // >::new(
-        //     trace.clone().into_iter(),
-        //     shard_len,
-        //     &preprocessing.read_write_memory,
-        //     &program_io,
-        // );
+        let mut streaming_mem_rw_polynomials = StreamingReadWriteMemoryStuff::<
+            IntoIter<JoltTraceStep<<Self as Jolt<F, PCS, C, M, ProofTranscript>>::InstructionSet>>,
+            F,
+        >::new(
+            trace.clone().into_iter(),
+            shard_len,
+            &preprocessing.read_write_memory,
+            &program_io,
+        );
 
-        // // testing the streaming polynomials for memory_polynomials
-        // for n in 0..5 {
-        //     streaming_mem_rw_polynomials.stream_next_shard(shard_len);
-        //     for i in 0..shard_len {
-        //         assert_eq!(
-        //             streaming_mem_rw_polynomials.shard.a_ram[i],
-        //             memory_polynomials.a_ram.get_coeff(n * shard_len + i)
-        //         );
-        //         assert_eq!(
-        //             streaming_mem_rw_polynomials.shard.v_read_rs1[i],
-        //             memory_polynomials.v_read_rs1.get_coeff(n * shard_len + i)
-        //         );
-        //         assert_eq!(
-        //             streaming_mem_rw_polynomials.shard.v_read_rs2[i],
-        //             memory_polynomials.v_read_rs2.get_coeff(n * shard_len + i)
-        //         );
-        //         assert_eq!(
-        //             streaming_mem_rw_polynomials.shard.v_read_rd[i],
-        //             memory_polynomials.v_read_rd.get_coeff(n * shard_len + i)
-        //         );
-        //         assert_eq!(
-        //             streaming_mem_rw_polynomials.shard.v_write_rd[i],
-        //             memory_polynomials.v_write_rd.get_coeff(n * shard_len + i)
-        //         );
-        //         assert_eq!(
-        //             streaming_mem_rw_polynomials.shard.v_read_ram[i],
-        //             memory_polynomials.v_read_ram.get_coeff(n * shard_len + i)
-        //         );
-        //         assert_eq!(
-        //             streaming_mem_rw_polynomials.shard.v_write_ram[i],
-        //             memory_polynomials.v_write_ram.get_coeff(n * shard_len + i)
-        //         );
-        //     }
-        //     println!("Streaming for Memory polynomials passing for {n}th shard");
-        // }
+        // testing the streaming polynomials for memory_polynomials
+        for n in 0..5 {
+            streaming_mem_rw_polynomials.stream_next_shard(shard_len);
+            for i in 0..shard_len {
+                assert_eq!(
+                    streaming_mem_rw_polynomials.shard.a_ram.get_coeff(i),
+                    memory_polynomials.a_ram.get_coeff(n * shard_len + i)
+                );
+                assert_eq!(
+                    streaming_mem_rw_polynomials.shard.v_read_rs1.get_coeff(i),
+                    memory_polynomials.v_read_rs1.get_coeff(n * shard_len + i)
+                );
+                assert_eq!(
+                    streaming_mem_rw_polynomials.shard.v_read_rs2.get_coeff(i),
+                    memory_polynomials.v_read_rs2.get_coeff(n * shard_len + i)
+                );
+                assert_eq!(
+                    streaming_mem_rw_polynomials.shard.v_read_rd.get_coeff(i),
+                    memory_polynomials.v_read_rd.get_coeff(n * shard_len + i)
+                );
+                assert_eq!(
+                    streaming_mem_rw_polynomials.shard.v_write_rd.get_coeff(i),
+                    memory_polynomials.v_write_rd.get_coeff(n * shard_len + i)
+                );
+                assert_eq!(
+                    streaming_mem_rw_polynomials.shard.v_read_ram.get_coeff(i),
+                    memory_polynomials.v_read_ram.get_coeff(n * shard_len + i)
+                );
+                assert_eq!(
+                    streaming_mem_rw_polynomials.shard.v_write_ram.get_coeff(i),
+                    memory_polynomials.v_write_ram.get_coeff(n * shard_len + i)
+                );
+            }
+            println!("Streaming for Memory polynomials passing for {n}th shard");
+        }
 
         let r1cs_builder: crate::r1cs::builder::CombinedUniformBuilder<C, F, <<Self as Jolt<F, PCS, C, M, ProofTranscript>>::Constraints as R1CSConstraints<C, F>>::Inputs> = Self::Constraints::construct_constraints(
             padded_trace_length,

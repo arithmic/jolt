@@ -139,17 +139,62 @@ impl<T: CanonicalSerialize + CanonicalDeserialize> StructuredPolynomialData<T> f
     }
 }
 
-// pub struct StreamingR1CSStuff<'a, const C: usize, const M: usize, I: Iterator, F: JoltField, PCS: CommitmentScheme<ProofTranscript, Field = F>, ProofTranscript: Transcript, CI: ConstraintInput
-// > {
-//     pub(crate) trace_iter: I,
-//     pub(crate) init_iter: I,
-//     pub(crate) r1cs_builder: &'a CombinedUniformBuilder<C, F, CI>,
-//     pub(crate) jolt_preprocessing: &'a JoltPreprocessing<C, F, PCS, ProofTranscript>,
-//     pub(crate) program_io: &'a JoltDevice,
-//     pub(crate) shard: R1CSStuff<Vec<F>>,
-//     pub(crate) v_init: Vec<u32>,
-//     pub(crate) v_final: Vec<u32>,
-// }
+pub struct StreamingR1CSStuff<'a, const C: usize, const M: usize, I: Iterator, F: JoltField, PCS: CommitmentScheme<ProofTranscript, Field = F>, ProofTranscript: Transcript, CI: ConstraintInput
+> {
+    pub(crate) trace_iter: I,
+    pub(crate) init_iter: I,
+    pub(crate) r1cs_builder: &'a CombinedUniformBuilder<C, F, CI>,
+    pub(crate) jolt_preprocessing: &'a JoltPreprocessing<C, F, PCS, ProofTranscript>,
+    pub(crate) program_io: &'a JoltDevice,
+    pub(crate) shard: R1CSStuff<MultilinearPolynomial<F>>,
+    pub(crate) v_init: Vec<u32>,
+    pub(crate) v_final: Vec<u32>,
+}
+
+impl<'a, const C: usize, const M: usize, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField, PCS: CommitmentScheme<ProofTranscript, Field = F>, ProofTranscript: Transcript, CI: ConstraintInput
+>
+    StreamingR1CSStuff<'a, C, M, I, F, PCS, ProofTranscript, CI>
+{
+    pub fn new(trace_iter: I, shard_len: usize, r1cs_builder: &'a CombinedUniformBuilder<C, F, CI>, jolt_preprocessing: &'a JoltPreprocessing<C, F, PCS, ProofTranscript>,
+    program_io: &'a JoltDevice,
+    ) -> Self {
+        let v_init = return_v_init(
+            trace_iter.clone(),
+            &jolt_preprocessing.read_write_memory,
+            program_io
+        );
+        let v_final = v_init.clone();
+
+        (return StreamingR1CSStuff {
+            trace_iter: trace_iter.clone(),
+            init_iter: trace_iter.clone(),
+            shard: R1CSStuff {
+                chunks_x: vec![MultilinearPolynomial::from(vec![0u8; shard_len]); C],
+                chunks_y: vec![MultilinearPolynomial::from(vec![0u8; shard_len]); C],
+                circuit_flags: [
+                    MultilinearPolynomial::from(vec![0u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0u8; shard_len]),
+                    MultilinearPolynomial::from(vec![0u8; shard_len]),
+                ],
+                aux: AuxVariableStuff::default(),
+            },
+            r1cs_builder: &r1cs_builder,
+            jolt_preprocessing: &jolt_preprocessing,
+            program_io: &program_io,
+            v_init: v_init,
+            v_final: v_final,
+        });
+    }
+}
+
 
 // impl<const C: usize, const M: usize, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField, PCS: CommitmentScheme<ProofTranscript, Field = F>, ProofTranscript: Transcript, CI: ConstraintInput>
 //     StreamingOracle<I> for StreamingR1CSStuff<'_, C, M, I, F, PCS, ProofTranscript, CI>
@@ -359,49 +404,6 @@ pub fn convert_jolt_stuff_over_vec_to_multipoly<F: JoltField>(
 
             jolt_stuff_new
 }
-// impl<'a, const C: usize, const M: usize, IS: JoltInstructionSet, I: Iterator<Item = JoltTraceStep<IS>> + Clone, F: JoltField, PCS: CommitmentScheme<ProofTranscript, Field = F>, ProofTranscript: Transcript, CI: ConstraintInput
-// >
-//     StreamingR1CSStuff<'a, C, M, I, F, PCS, ProofTranscript, CI>
-// {
-//     pub fn new(trace_iter: I, shard_len: usize, r1cs_builder: &'a CombinedUniformBuilder<C, F, CI>, jolt_preprocessing: &'a JoltPreprocessing<C, F, PCS, ProofTranscript>,
-//     program_io: &'a JoltDevice,
-//     ) -> Self {
-//         let v_init = return_v_init(
-//             trace_iter.clone(),
-//             &jolt_preprocessing.read_write_memory,
-//             program_io
-//         );
-//         let v_final = v_init.clone();
-
-//         (return StreamingR1CSStuff {
-//             trace_iter: trace_iter.clone(),
-//             init_iter: trace_iter.clone(),
-//             shard: R1CSStuff {
-//                 chunks_x: vec![vec![F::zero(); shard_len]; C],
-//                 chunks_y: vec![vec![F::zero(); shard_len]; C],
-//                 circuit_flags: [
-//                     vec![F::zero(); shard_len],
-//                     vec![F::zero(); shard_len],
-//                     vec![F::zero(); shard_len],
-//                     vec![F::zero(); shard_len],
-//                     vec![F::zero(); shard_len],
-//                     vec![F::zero(); shard_len],
-//                     vec![F::zero(); shard_len],
-//                     vec![F::zero(); shard_len],
-//                     vec![F::zero(); shard_len],
-//                     vec![F::zero(); shard_len],
-//                     vec![F::zero(); shard_len],
-//                 ],
-//                 aux: AuxVariableStuff::default(),
-//             },
-//             r1cs_builder: &r1cs_builder,
-//             jolt_preprocessing: &jolt_preprocessing,
-//             program_io: &program_io,
-//             v_init: v_init,
-//             v_final: v_final,
-//         });
-//     }
-// }
 
 /// Witness polynomials specific to Jolt's R1CS constraints (i.e. not used
 /// for any offline memory-checking instances).
