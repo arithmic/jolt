@@ -5,8 +5,8 @@ use sha3::Sha3_256;
 
 use crate::{
     field::JoltField,
-    poly::eq_poly::EqPolynomial,
-    utils::{index_to_field_bitvector, mul_0_1_optimized, thread::unsafe_allocate_zero_vec},
+    poly::{eq_poly::EqPolynomial, multilinear_polynomial::MultilinearPolynomial},
+    utils::{index_to_field_bitvector, mul_0_1_optimized, streaming::Oracle, thread::unsafe_allocate_zero_vec},
 };
 
 use super::{builder::CombinedUniformBuilder, inputs::ConstraintInput};
@@ -439,5 +439,153 @@ impl<const C: usize, F: JoltField, I: ConstraintInput> UniformSpartanKey<C, I, F
             digest
         };
         map_to_field(&hasher.finalize())
+    }
+}
+
+
+pub struct EvaluateMatrixMlePartial<'a, const C: usize, F: JoltField, I: ConstraintInput>{
+    pub r_constr: &'a [F],
+    pub r_step: &'a [F],
+    pub r_rlc: F,
+    pub counter: usize,
+
+    pub uni_spartan_key: &'a UniformSpartanKey<C, I, F>,
+
+    pub func: Box<
+        dyn Fn(&[F], &[F], F, usize, usize) -> MultilinearPolynomial<F> + 'a
+>
+}
+
+// impl trait Oracle for EvalauteMatrixMlePartial
+impl<'a, const C: usize, F: JoltField, I: ConstraintInput> Oracle for EvaluateMatrixMlePartial<'a, C, F, I> {
+    type Item = MultilinearPolynomial<F>;
+
+    fn next_shard(&mut self, shard_len: usize) -> Self::Item {
+        println!("called next for EvalauteMatrixMlePartial");
+        (self.func)(&self.r_constr, &self.r_step, self.r_rlc, shard_len, self.counter)
+        // self.counter += 1;
+
+    }
+
+    fn reset_oracle(&mut self) {
+        Self::new(self.r_constr, self.r_step, self.r_rlc, self.uni_spartan_key);
+    }
+
+    fn peek(&mut self) -> Self::Item {
+        todo!()
+    }
+
+    fn get_len(&self) -> usize {
+        todo!()
+    }
+
+    fn get_step(&self) -> usize {
+        todo!()
+    }
+}
+
+impl <'a, const C: usize, F: JoltField, I: ConstraintInput> EvaluateMatrixMlePartial<'a, C, F, I> {
+    pub fn new(
+        r_constr: &'a [F],
+        r_step: &'a [F], 
+        r_rlc: F,
+        uni_spartan_key: &'a UniformSpartanKey<C, I, F>,
+    ) -> Self {
+
+        let poly_stream = (|r_constr: &[F], r_step: &[F], r_rlc: F, shard_len: usize, counter: usize| {
+            assert_eq!(
+                r_constr.len(),
+                (uni_spartan_key.uniform_r1cs.num_rows + 1).next_power_of_two().log_2()
+            );
+    
+            assert_eq!(r_step.len(), uni_spartan_key.num_steps.log_2());
+    
+            // TODO: streaming of evals
+            let eq_rx_constr = EqPolynomial::evals(r_constr);
+    
+            let first_cross_step_row = uni_spartan_key.uniform_r1cs.num_rows;
+            let constant_column = uni_spartan_key.uniform_r1cs.num_vars.next_power_of_two();
+    
+            let compute_repeated =
+                |constraints: &SparseConstraints<F>, cross_step_constants: Option<Vec<F>>| -> Vec<F> {
+                    // evals structure: [inputs, aux ... 1, cross_inputs, cross_aux ...] where ... indicates padding to next power of 2
+                    
+                    // TODO: check if size need to be changed
+                    let mut evals =
+                        unsafe_allocate_zero_vec(uni_spartan_key.uniform_r1cs.num_vars.next_power_of_two() * 4); // *4 instead of *2 to accommodate cross-step constraints
+                    for (row, col, val) in constraints.vars.iter() {
+                        if (counter * shard_len >= *col) && (*col < (counter + 1) * shard_len) {
+                            evals[*col] += mul_0_1_optimized(val, &eq_rx_constr[*row]);
+                        }
+                    }
+
+                    for (row, val) in constraints.consts.iter() {
+                        // TODO: Correct it
+                        if (counter * shard_len >= constant_column) && (constant_column < (counter + 1) * shard_len) {
+                            evals[constant_column] += mul_0_1_optimized(val, &eq_rx_constr[*row]);
+                        }
+                    }
+    
+                    if let Some(cross_step_constants) = cross_step_constants {
+                        for (i, cross_step_constant) in cross_step_constants.iter().enumerate() {
+                            // TODO: Correct it
+                            if (counter * shard_len >= constant_column) && (constant_column < (counter + 1) * shard_len) {
+                                evals[constant_column] +=
+                                    eq_rx_constr[first_cross_step_row + i] * cross_step_constant;
+                            }
+                        }
+                    }
+    
+                    evals
+                };
+    
+                let (eq_constants, condition_constants) = uni_spartan_key.offset_eq_r1cs.constants();
+                let sm_a_r = compute_repeated(&uni_spartan_key.uniform_r1cs.a, Some(eq_constants));
+                let sm_b_r = compute_repeated(&uni_spartan_key.uniform_r1cs.b, Some(condition_constants));
+                let sm_c_r = compute_repeated(&uni_spartan_key.uniform_r1cs.c, None);
+        
+                let r_rlc_sq = r_rlc.square();
+                let mut sm_rlc = sm_a_r
+                .iter()
+                .zip(sm_b_r.iter())
+                .zip(sm_c_r.iter())
+                .map(|((a, b), c)| *a + mul_0_1_optimized(b, &r_rlc) + mul_0_1_optimized(c, &r_rlc_sq))
+                .collect::<Vec<F>>();
+    
+            // 3. Add non-constant variables from cross-step constraints here,
+            // depending on which type of variables (current step or next) they involve.
+            let update_cross_step = |rlc: &mut Vec<F>,
+                                     offset: &SparseEqualityItem<F>,
+                                     cross_step_constraint_index: usize,
+                                     r: F| {
+                for (col, is_offset, coeff) in offset.offset_vars.iter() {
+                    let offset = if *is_offset { 1 } else { 0 };
+                    let col = *col + offset * constant_column * 2;
+    
+                    if (counter * shard_len >= col) && (col < (counter + 1) * shard_len) {
+                    rlc[col] += mul_0_1_optimized(&r, coeff)
+                        * eq_rx_constr[first_cross_step_row + cross_step_constraint_index];
+                    }
+                }
+            };
+    
+            for (i, constraint) in uni_spartan_key.offset_eq_r1cs.constraints.iter().enumerate() {
+                update_cross_step(&mut sm_rlc, &constraint.eq, i, F::one());
+                update_cross_step(&mut sm_rlc, &constraint.condition, i, r_rlc);
+            }
+
+        MultilinearPolynomial::from(sm_rlc)
+    });
+
+        let func = Box::new(poly_stream);
+
+        Self { 
+            func,
+            uni_spartan_key,
+            r_constr,
+            r_step: r_step,
+            r_rlc,
+            counter: 0,
+        }
     }
 }

@@ -19,6 +19,7 @@ use crate::poly::multilinear_polynomial::PolynomialEvaluation;
 use crate::poly::opening_proof::ProverOpeningAccumulator;
 use crate::poly::opening_proof::VerifierOpeningAccumulator;
 use crate::poly::split_eq_poly::SplitEqPolynomial;
+use crate::r1cs::key::EvaluateMatrixMlePartial;
 use crate::r1cs::key::UniformSpartanKey;
 use crate::utils::math::Math;
 use crate::utils::streaming::Oracle;
@@ -377,6 +378,16 @@ where
             rx_step,
             inner_sumcheck_RLC,
         ));
+
+        let mut new_oracle = EvaluateMatrixMlePartial::new(rx_constr, rx_step, inner_sumcheck_RLC, key);
+        let shard_len = 256;
+
+        let new_poly_ABC = new_oracle.next_shard(shard_len);
+        for i in 0..shard_len{
+            assert_eq!(new_poly_ABC.get_coeff(i),
+            poly_ABC.Z[i], "failing at index: {}", i);
+        };
+
 
         // Binding z and z_shift polynomials at point rx_step
         let span = span!(Level::INFO, "binding_z_and_shift_z");
