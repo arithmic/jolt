@@ -5,8 +5,15 @@ use ark_serialize::CanonicalDeserialize;
 use ark_serialize::CanonicalSerialize;
 use rayon::prelude::*;
 use thiserror::Error;
-use tracing::{span, Level};
+use tracing::{Level, span};
 
+use crate::{
+    poly::{
+        dense_mlpoly::DensePolynomial,
+        eq_poly::{EqPlusOnePolynomial, EqPolynomial},
+    },
+    subprotocols::sumcheck::SumcheckInstanceProof,
+};
 use crate::field::JoltField;
 use crate::jolt::instruction::JoltInstructionSet;
 use crate::jolt::vm::JoltCommitments;
@@ -25,16 +32,9 @@ use crate::utils::math::Math;
 use crate::utils::streaming::Oracle;
 use crate::utils::thread::drop_in_background_thread;
 use crate::utils::transcript::Transcript;
-use crate::{
-    poly::{
-        dense_mlpoly::DensePolynomial,
-        eq_poly::{EqPlusOnePolynomial, EqPolynomial},
-    },
-    subprotocols::sumcheck::SumcheckInstanceProof,
-};
 
-use super::builder::eval_offset_lc;
 use super::builder::CombinedUniformBuilder;
+use super::builder::eval_offset_lc;
 use super::inputs::ConstraintInput;
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
@@ -379,16 +379,28 @@ where
             inner_sumcheck_RLC,
         ));
 
-        let mut new_oracle = EvaluateMatrixMlePartial::new(rx_constr, rx_step, inner_sumcheck_RLC, key);
-        let shard_len = 256;
-
-        let new_poly_ABC = new_oracle.next_shard(shard_len);
-        for i in 0..shard_len{
-            assert_eq!(new_poly_ABC.get_coeff(i),
-            poly_ABC.Z[i], "failing at index: {}", i);
-        };
-
-
+        #[cfg(test)]
+        {
+            let mut stream_poly_ABC =
+                EvaluateMatrixMlePartial::new(rx_constr, rx_step, inner_sumcheck_RLC, key);
+            let num_shards = 4;
+            let shard_len = poly_ABC.len() / num_shards;
+            for repetation in 0..2 {
+                for shard in 0..num_shards {
+                    let partial_mle_eval_shard = stream_poly_ABC.next_shard(shard_len);
+                    for idx in 0..shard_len {
+                        assert_eq!(
+                            partial_mle_eval_shard.get_coeff(idx),
+                            poly_ABC.Z[idx + shard_len * shard],
+                            "failing for shard {} at index: {}",
+                            shard,
+                            idx
+                        );
+                    }
+                }
+                stream_poly_ABC.reset_oracle();
+            }
+        }
         // Binding z and z_shift polynomials at point rx_step
         let span = span!(Level::INFO, "binding_z_and_shift_z");
         let _guard = span.enter();
@@ -776,7 +788,6 @@ where
     //     //     _marker: PhantomData,
     //     // })
     // }
-
     #[tracing::instrument(skip_all, name = "Spartan::verify")]
     pub fn verify<PCS>(
         &self,
