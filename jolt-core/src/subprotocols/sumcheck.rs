@@ -223,29 +223,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         )
     }
 
-    pub fn prove_spartan_cubic_(
-        num_rounds: usize,
-        eq_poly: &mut SplitEqPolynomial<F>,
-        az_bz_cz_poly: &mut SpartanInterleavedPolynomial<F>,
-        transcript: &mut ProofTranscript,
-    ) -> Vec<[[F; 4]; 4]> {
-        let mut r: Vec<F> = Vec::new();
-        let mut polys: Vec<CompressedUniPoly<F>> = Vec::new();
-        let mut claim = F::zero();
-        let mut result = Vec::new();
-        for round in 0..1 {
-            if round == 0 {
-                result = az_bz_cz_poly
-                    .first_sumcheck_round_(eq_poly, transcript, &mut r, &mut polys, &mut claim);
-            } else {
-                az_bz_cz_poly
-                    .subsequent_sumcheck_round(eq_poly, transcript, &mut r, &mut polys, &mut claim);
-            }
-        }
-        // println!("Non streaming prover complressed polys = {:?}", polys);
-        result
-    }
-
     #[tracing::instrument(skip_all)]
     // A specialized sumcheck implementation with the 0th round unrolled from the rest of the
     // `for` loop. This allows us to pass in `witness_polynomials` by reference instead of
@@ -433,129 +410,208 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
     where
         O: Oracle<Item = AzBzCz>,
     {
-        let eq_tau = SplitEqPolynomial::new(&tau);
-        let E1_evals: Vec<_> = eq_tau.E1[..eq_tau.E1_len]
-            .par_chunks(2)
-            .map(|E1_chunk| {
-                let eval_point_0 = E1_chunk[0];
-                let m_eq = E1_chunk[1] - E1_chunk[0];
-                let eval_point_2 = E1_chunk[1] + m_eq;
-                let eval_point_3 = eval_point_2 + m_eq;
-                (eval_point_0, E1_chunk[1], eval_point_2, eval_point_3)
-            })
-            .collect();
-        let num_x1_bits = eq_tau.E1_len.log_2() - 1;
-        let x1_bitmask = (1 << num_x1_bits) - 1;
-
-        // let tau: Vec<F> = tau.into_iter().rev().collect();
-        // println!("tau[1] in the streaming prover: {}", tau[1]);
-        // println!("tau[l - 2] in the streaming prover: {}", tau[tau.len() - 2]);
+        let mut eq_tau = SplitEqPolynomial::new(&tau);
         let mut r: Vec<F> = Vec::new();
         let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::new();
         let mut uni_polys: Vec<UniPoly<F>> = Vec::new();
         let mut witness_eval_for_final_eval = vec![vec![F::zero(); 2]; 4];
         let mut final_eval = vec![F::zero(); 3];
         let eq_shard_len = shard_length * padded_num_constraints;
-        for i in 0..num_rounds {
+
+        for round in 0..num_rounds {
             let mut accumulator = vec![F::zero(); 4];
-            let mut current_window_ub = 1 << (i + 1);
+            if eq_tau.E1_len == 1 {
+                let eq_evals: Vec<[F; 4]> = eq_tau.E2[..eq_tau.E2_len]
+                    .par_chunks(2)
+                    .map(|eq_chunk| {
+                        let eval_point_0 = eq_chunk[0];
+                        let m_eq = eq_chunk[1] - eq_chunk[0];
+                        let eval_point_2 = eq_chunk[1] + m_eq;
+                        let eval_point_3 = eval_point_2 + m_eq;
+                        [eval_point_0, eq_chunk[1], eval_point_2, eval_point_3]
+                    })
+                    .collect();
+                let mut current_window_ub = 1 << (round + 1);
 
-            let mut witness_eval = vec![vec![F::zero(); 4]; 4];
-            // let mut eq_tau = StreamingEqPolynomial::new(tau.clone(), num_rounds, None, true);
-            let mut eq_poly = StreamingEqPolynomial::new(r.clone(), num_rounds, None, true);
+                let mut witness_eval = vec![vec![F::zero(); 4]; 4];
+                let mut eq_poly = StreamingEqPolynomial::new(r.clone(), num_rounds, None, true);
 
-            for l in 0..num_shards {
-                let az_bz_cz_shard = interleaved_az_bz_cz
-                    .next_shard(shard_length)
-                    .interleaved_az_bz_cz;
-                let blocks = az_bz_cz_shard.chunk_by(|a, b| a.0 / 3 == b.0 / 3);
-                // let eq_tau_shard = eq_tau.next_shard(eq_shard_len);
+                for _ in 0..num_shards {
+                    let az_bz_cz_shard = interleaved_az_bz_cz
+                        .next_shard(shard_length)
+                        .interleaved_az_bz_cz;
+                    let blocks = az_bz_cz_shard.chunk_by(|a, b| a.0 / 3 == b.0 / 3);
 
-                let eq_shard = eq_poly.next_shard(eq_shard_len);
+                    let mut prev_idx = 0;
+                    let eq_shard = eq_poly.next_shard(eq_shard_len);
+                    for block in blocks {
+                        let idx = block[0].0 / 3;
+                        if idx >= current_window_ub {
+                            witness_eval[0] = eq_evals[prev_idx / (1 << (round + 1))].to_vec();
+                            for s in 0..=3 {
+                                let eval = witness_eval[0][s]
+                                    * (witness_eval[1][s] * witness_eval[2][s]
+                                        - witness_eval[3][s]);
+                                accumulator[s] += eval;
+                            }
+                            witness_eval = vec![vec![F::zero(); 4]; 4];
+                            current_window_ub =
+                                idx - (idx % (1 << (round + 1))) + (1 << (round + 1));
+                        }
 
-                for block in blocks {
-                    let idx = block[0].0 / 3;
-                    let x1 = idx & x1_bitmask;
-                    let E1_evals = [
-                        E1_evals[x1].0,
-                        E1_evals[x1].1,
-                        E1_evals[x1].2,
-                        E1_evals[x1].3,
-                    ];
-                    let x2 = idx >> num_x1_bits;
+                        let mut az_eval = 0;
+                        let mut bz_eval = 0;
+                        let mut cz_eval = 0;
 
-                    // println!("Shard = {i}, idx = {idx}");
+                        for b in block {
+                            if b.0 % 3 == 0 {
+                                az_eval = b.1;
+                            }
+                            if b.0 % 3 == 1 {
+                                bz_eval = b.1;
+                            }
+                            if b.0 % 3 == 2 {
+                                cz_eval = b.1;
+                            }
+                        }
+
+                        let bit = (idx >> round) & 1;
+
+                        for s in 0..=3 {
+                            let val = F::from_u64(s as u64);
+                            let eq_eval_idx_s = if bit == 0 { F::one() - val } else { val };
+                            witness_eval[1][s] += eq_shard[idx % eq_shard_len]
+                                * eq_eval_idx_s
+                                * F::from_i128(az_eval);
+                            witness_eval[2][s] += eq_shard[idx % eq_shard_len]
+                                * eq_eval_idx_s
+                                * F::from_i128(bz_eval);
+                            witness_eval[3][s] += eq_shard[idx % eq_shard_len]
+                                * eq_eval_idx_s
+                                * F::from_i128(cz_eval);
+                        }
+                        prev_idx = idx
+                    }
+
+                    let idx = interleaved_az_bz_cz.get_step() * padded_num_constraints;
+                    if round == num_rounds - 1 && idx == (1 << num_rounds) {
+                        for k in 0..=3 {
+                            witness_eval_for_final_eval[k][0] = witness_eval[k][0];
+                            witness_eval_for_final_eval[k][1] = witness_eval[k][1];
+                        }
+                    }
+
                     if idx >= current_window_ub {
+                        witness_eval[0] =
+                            eq_evals[(current_window_ub - 1) / (1 << (round + 1))].to_vec();
                         for s in 0..=3 {
                             let eval = witness_eval[0][s]
                                 * (witness_eval[1][s] * witness_eval[2][s] - witness_eval[3][s]);
                             accumulator[s] += eval;
                         }
-                        // println!("Added to accumulator by index: {:?}", idx);
                         witness_eval = vec![vec![F::zero(); 4]; 4];
-                        current_window_ub = idx - (idx % (1 << (i + 1))) + (1 << (i + 1));
-                    }
-
-                    let mut az_eval = 0;
-                    let mut bz_eval = 0;
-                    let mut cz_eval = 0;
-
-                    for b in block {
-                        if b.0 % 3 == 0 {
-                            az_eval = b.1;
-                        }
-                        if b.0 % 3 == 1 {
-                            bz_eval = b.1;
-                        }
-                        if b.0 % 3 == 2 {
-                            cz_eval = b.1;
-                        }
-                    }
-
-                    let bit = (idx >> i) & 1;
-
-                    for s in 0..=3 {
-                        let val = F::from_u64(s as u64);
-                        let eq_eval_idx_s = if bit == 0 { F::one() - val } else { val };
-                        witness_eval[0][s] +=
-                            eq_shard[idx % eq_shard_len] * E1_evals[s] * eq_tau.E2[x2];
-                        witness_eval[1][s] +=
-                            eq_shard[idx % eq_shard_len] * eq_eval_idx_s * F::from_i128(az_eval);
-                        witness_eval[2][s] +=
-                            eq_shard[idx % eq_shard_len] * eq_eval_idx_s * F::from_i128(bz_eval);
-                        witness_eval[3][s] +=
-                            eq_shard[idx % eq_shard_len] * eq_eval_idx_s * F::from_i128(cz_eval);
-                        // println!("idx = {}", idx);
-                        // println!(
-                        //     "witness_evals at {s} = {}, {}, {}",
-                        //     witness_eval[1][s], witness_eval[2][s], witness_eval[3][s]
-                        // );
+                        current_window_ub = idx - (idx % (1 << (round + 1))) + (1 << (round + 1));
                     }
                 }
+            } else {
+                let num_x1_bits = eq_tau.E1_len.log_2();
+                let x1_bitmask = (1 << (num_x1_bits + round)) - 1;
+                let E1_evals: Vec<_> = eq_tau.E1[..eq_tau.E1_len]
+                    .par_chunks(2)
+                    .map(|E1_chunk| {
+                        let eval_point_0 = E1_chunk[0];
+                        let m_eq = E1_chunk[1] - E1_chunk[0];
+                        let eval_point_2 = E1_chunk[1] + m_eq;
+                        let eval_point_3 = eval_point_2 + m_eq;
+                        [eval_point_0, E1_chunk[1], eval_point_2, eval_point_3]
+                    })
+                    .collect();
+                let mut current_window_ub = 1 << (round + 1);
 
-                let idx = interleaved_az_bz_cz.get_step() * padded_num_constraints;
-                if i == num_rounds - 1 && idx == (1 << num_rounds) {
-                    for k in 0..=3 {
-                        witness_eval_for_final_eval[k][0] = witness_eval[k][0];
-                        witness_eval_for_final_eval[k][1] = witness_eval[k][1];
-                    }
-                }
+                let mut witness_eval = vec![vec![F::zero(); 4]; 4];
+                let mut eq_poly = StreamingEqPolynomial::new(r.clone(), num_rounds, None, true);
 
-                // println!("round = {i}, shard = {l}, idx = {idx}");
-                if idx >= current_window_ub {
-                    for s in 0..=3 {
-                        let eval = witness_eval[0][s]
-                            * (witness_eval[1][s] * witness_eval[2][s] - witness_eval[3][s]);
-                        // println!("Eval at end of shard = {}", eval);
-                        accumulator[s] += eval;
+                for _ in 0..num_shards {
+                    let az_bz_cz_shard = interleaved_az_bz_cz
+                        .next_shard(shard_length)
+                        .interleaved_az_bz_cz;
+                    let blocks = az_bz_cz_shard.chunk_by(|a, b| a.0 / 3 == b.0 / 3);
+                    let mut prev_idx = 0;
+                    let eq_shard = eq_poly.next_shard(eq_shard_len);
+                    for block in blocks {
+                        let idx = block[0].0 / 3;
+                        if idx >= current_window_ub {
+                            let x1 = (prev_idx & x1_bitmask) >> (round + 1);
+                            let x2 = (prev_idx >> (num_x1_bits + round));
+                            for s in 0..=3 {
+                                witness_eval[0][s] = (E1_evals[x1][s] * eq_tau.E2[x2]);
+                                let eval = witness_eval[0][s]
+                                    * (witness_eval[1][s] * witness_eval[2][s]
+                                        - witness_eval[3][s]);
+                                accumulator[s] += eval;
+                            }
+                            witness_eval = vec![vec![F::zero(); 4]; 4];
+                            current_window_ub =
+                                idx - (idx % (1 << (round + 1))) + (1 << (round + 1));
+                        }
+
+                        let mut az_eval = 0;
+                        let mut bz_eval = 0;
+                        let mut cz_eval = 0;
+
+                        for b in block {
+                            if b.0 % 3 == 0 {
+                                az_eval = b.1;
+                            }
+                            if b.0 % 3 == 1 {
+                                bz_eval = b.1;
+                            }
+                            if b.0 % 3 == 2 {
+                                cz_eval = b.1;
+                            }
+                        }
+
+                        let bit = (idx >> round) & 1;
+
+                        for s in 0..=3 {
+                            let val = F::from_u64(s as u64);
+                            let eq_eval_idx_s = if bit == 0 { F::one() - val } else { val };
+                            witness_eval[1][s] += eq_shard[idx % eq_shard_len]
+                                * eq_eval_idx_s
+                                * F::from_i128(az_eval);
+                            witness_eval[2][s] += eq_shard[idx % eq_shard_len]
+                                * eq_eval_idx_s
+                                * F::from_i128(bz_eval);
+                            witness_eval[3][s] += eq_shard[idx % eq_shard_len]
+                                * eq_eval_idx_s
+                                * F::from_i128(cz_eval);
+                        }
+                        prev_idx = idx
                     }
-                    // println!("Added to accumulator by index: {}", idx);
-                    witness_eval = vec![vec![F::zero(); 4]; 4];
-                    current_window_ub = idx - (idx % (1 << (i + 1))) + (1 << (i + 1));
+
+                    let idx = interleaved_az_bz_cz.get_step() * padded_num_constraints;
+                    if round == num_rounds - 1 && idx == (1 << num_rounds) {
+                        for k in 0..=3 {
+                            witness_eval_for_final_eval[k][0] = witness_eval[k][0];
+                            witness_eval_for_final_eval[k][1] = witness_eval[k][1];
+                        }
+                    }
+
+                    if idx >= current_window_ub {
+                        for s in 0..=3 {
+                            let x1 = ((current_window_ub - 1) & x1_bitmask) >> (round + 1);
+                            let x2 = ((current_window_ub - 1) >> (num_x1_bits + round));
+
+                            witness_eval[0][s] = (E1_evals[x1][s] * eq_tau.E2[x2]);
+                            let eval = witness_eval[0][s]
+                                * (witness_eval[1][s] * witness_eval[2][s] - witness_eval[3][s]);
+                            accumulator[s] += eval;
+                        }
+                        witness_eval = vec![vec![F::zero(); 4]; 4];
+                        current_window_ub = idx - (idx % (1 << (round + 1))) + (1 << (round + 1));
+                    }
                 }
             }
-
-            println!("Round = {i}, accumulator = {:?}", accumulator);
             let univariate_poly = UniPoly::from_evals(&accumulator);
             let compressed_poly = univariate_poly.compress();
             compressed_poly.append_to_transcript(transcript);
@@ -565,20 +621,14 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             compressed_polys.push(compressed_poly);
             uni_polys.push(univariate_poly);
 
-            if i == num_rounds - 1 {
-                final_eval = (0..=3)
-                    .map(|i| {
-                        (F::one() - r_i) * witness_eval_for_final_eval[i][0]
-                            + r_i * witness_eval_for_final_eval[i][1]
-                    })
-                    .collect();
-            }
+            // Bind polynomials
+            eq_tau.bind(r_i);
+
             interleaved_az_bz_cz.reset();
         }
 
         #[cfg(test)]
         {
-            println!("Streaming prover compressed polys = {:?}", compressed_polys);
             let mut e = F::zero();
             for i in 0..uni_polys.len() {
                 // check if G_k(0) + G_k(1) = e
@@ -587,241 +637,19 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                     e,
                     "failed at round {i}"
                 );
-                // println!("Round = {i}");
                 // evaluate the claimed degree-ell polynomial at r_i using the hint
                 e = uni_polys[i].evaluate(&r[i]);
             }
-            assert_eq!(
-                e,
-                final_eval[0] * (final_eval[1] * final_eval[2] - final_eval[3])
-            );
         }
+
+        final_eval = (1..=3)
+            .map(|i| {
+                (F::one() - r[num_rounds - 1]) * witness_eval_for_final_eval[i][0]
+                    + r[num_rounds - 1] * witness_eval_for_final_eval[i][1]
+            })
+            .collect();
 
         (SumcheckInstanceProof::new(compressed_polys), r, final_eval)
-    }
-
-    pub fn stream_prove_cubic_<O>(
-        num_shards: usize,
-        num_rounds: usize,
-        interleaved_az_bz_cz: &mut O,
-        shard_length: usize,
-        padded_num_constraints: usize,
-        tau: Vec<F>,
-        transcript: &mut ProofTranscript,
-    ) -> (Self, Vec<F>, Vec<F>, Vec<Vec<Vec<F>>>)
-    where
-        O: Oracle<Item = AzBzCz>,
-    {
-        // println!("shard length = {}", shard_length);
-
-        // let tau: Vec<F> = tau.into_iter().rev().collect();
-        // println!("tau[1] in the streaming prover: {}", tau[1]);
-        // println!("tau[l - 2] in the streaming prover: {}", tau[tau.len() - 2]);
-        let eq_tau = SplitEqPolynomial::new(&tau);
-        let E1_evals: Vec<_> = eq_tau.E1[..eq_tau.E1_len]
-            .par_chunks(2)
-            .map(|E1_chunk| {
-                let eval_point_0 = E1_chunk[0];
-                let m_eq = E1_chunk[1] - E1_chunk[0];
-                let eval_point_2 = E1_chunk[1] + m_eq;
-                let eval_point_3 = eval_point_2 + m_eq;
-                (eval_point_0, E1_chunk[1], eval_point_2, eval_point_3)
-            })
-            .collect();
-        println!("e1 len {}, e2 len {}", eq_tau.E1_len, eq_tau.E2_len);
-        let num_x1_bits = eq_tau.E1_len.log_2();
-        let x1_bitmask = (1 << num_x1_bits) - 1;
-
-        let mut r: Vec<F> = Vec::new();
-        let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::new();
-        let mut uni_polys: Vec<UniPoly<F>> = Vec::new();
-        let mut witness_eval_for_final_eval = vec![vec![F::zero(); 2]; 4];
-        let mut final_eval = vec![F::zero(); 3];
-        let eq_shard_len = shard_length * padded_num_constraints;
-        let mut return_vec = Vec::new();
-
-        // println!("num_shards = {}", num_shards);
-        for i in 0..num_rounds {
-            let mut accumulator = vec![F::zero(); 4];
-            let mut current_window_ub = 1 << (i + 1);
-
-            let mut witness_eval = vec![vec![F::zero(); 4]; 4];
-            // let mut eq_tau = StreamingEqPolynomial::new(tau.clone(), num_rounds, None, true);
-            let mut eq_poly = StreamingEqPolynomial::new(r.clone(), num_rounds, None, true);
-
-            for l in 0..num_shards {
-                let az_bz_cz_shard = interleaved_az_bz_cz
-                    .next_shard(shard_length)
-                    .interleaved_az_bz_cz;
-                let blocks = az_bz_cz_shard.chunk_by(|a, b| a.0 / 3 == b.0 / 3);
-                // let eq_tau_shard = eq_tau.next_shard(eq_shard_len);
-
-                let mut prev_idx = 0;
-                let eq_shard = eq_poly.next_shard(eq_shard_len);
-                for block in blocks {
-                    let idx = block[0].0 / 3;
-                    // println!("idx = {}",idx);
-                    if idx >= current_window_ub {
-                        let x1 = (prev_idx & x1_bitmask) >> 1;
-                        let E1_evals = [
-                            E1_evals[x1].0,
-                            E1_evals[x1].1,
-                            E1_evals[x1].2,
-                            E1_evals[x1].3,
-                        ];
-                        let x2 = prev_idx >> num_x1_bits;
-
-                        for s in 0..=3 {
-                            // Compute eq_tau's evals at 0, 1, 2, 3 for the window containing prev_idx.
-                            // Use them instead of witness_eval[0][s].
-                            // prev_idx = idx;
-                            witness_eval[0][s] = (E1_evals[s] * eq_tau.E2[x2]);
-                            let eval = witness_eval[0][s]
-                                * (witness_eval[1][s] * witness_eval[2][s] - witness_eval[3][s]);
-                            accumulator[s] += eval;
-                        }
-                        return_vec.push(vec![
-                            vec![F::from_u64(idx as u64); 1],
-                            witness_eval[0].clone(),
-                            witness_eval[1].clone(),
-                            witness_eval[2].clone(),
-                            witness_eval[3].clone(),
-                        ]);
-                        // println!("Added to accumulator by index: {:?}", idx);
-                        witness_eval = vec![vec![F::zero(); 4]; 4];
-                        current_window_ub = idx - (idx % (1 << (i + 1))) + (1 << (i + 1));
-                    }
-
-                    let mut az_eval = 0;
-                    let mut bz_eval = 0;
-                    let mut cz_eval = 0;
-
-                    for b in block {
-                        if b.0 % 3 == 0 {
-                            az_eval = b.1;
-                        }
-                        if b.0 % 3 == 1 {
-                            bz_eval = b.1;
-                        }
-                        if b.0 % 3 == 2 {
-                            cz_eval = b.1;
-                        }
-                    }
-
-                    let bit = (idx >> i) & 1;
-
-                    for s in 0..=3 {
-                        // println!("Index = {idx}, bit = {bit}");
-                        let val = F::from_u64(s as u64);
-                        let eq_eval_idx_s = if bit == 0 { F::one() - val } else { val };
-                        // witness_eval[0][s] +=
-                        //     eq_shard[idx % eq_shard_len] *
-                        //         E1_evals[s] * eq_tau.E2[x2];
-                        witness_eval[1][s] +=
-                            eq_shard[idx % eq_shard_len] * eq_eval_idx_s * F::from_i128(az_eval);
-                        witness_eval[2][s] +=
-                            eq_shard[idx % eq_shard_len] * eq_eval_idx_s * F::from_i128(bz_eval);
-                        witness_eval[3][s] +=
-                            eq_shard[idx % eq_shard_len] * eq_eval_idx_s * F::from_i128(cz_eval);
-                        // println!("idx = {}", idx);
-                        // println!(
-                        //     "witness_evals at {s} = {}, {}, {}",
-                        //     witness_eval[1][s], witness_eval[2][s], witness_eval[3][s]
-                        // );
-                    }
-                    prev_idx = idx
-                }
-
-                let idx = interleaved_az_bz_cz.get_step() * padded_num_constraints;
-                if i == num_rounds - 1 && idx == (1 << num_rounds) {
-                    for k in 0..=3 {
-                        witness_eval_for_final_eval[k][0] = witness_eval[k][0];
-                        witness_eval_for_final_eval[k][1] = witness_eval[k][1];
-                    }
-                }
-
-                // println!("round = {i}, shard = {l}, idx = {idx}");
-                if idx >= current_window_ub {
-                    for s in 0..=3 {
-                        let x1 = ((current_window_ub - 1) & x1_bitmask) >> 1;
-                        let x2 = (current_window_ub - 1) >> num_x1_bits;
-                        let E1_evals =  [
-                            E1_evals[x1].0,
-                            E1_evals[x1].1,
-                            E1_evals[x1].2,
-                            E1_evals[x1].3,
-                        ];
-                        witness_eval[0][s] = (E1_evals[s] * eq_tau.E2[x2]);
-                        let eval = witness_eval[0][s]
-                            * (witness_eval[1][s] * witness_eval[2][s] - witness_eval[3][s]);
-                        // println!("Eval at end of shard = {}", eval);
-                        accumulator[s] += eval;
-                    }
-                    return_vec.push(vec![
-                        vec![F::from_u64(idx as u64); 1],
-                        witness_eval[0].clone(),
-                        witness_eval[1].clone(),
-                        witness_eval[2].clone(),
-                        witness_eval[3].clone(),
-                    ]);
-
-                    // println!("Added to accumulator by index: {}", idx);
-                    witness_eval = vec![vec![F::zero(); 4]; 4];
-                    current_window_ub = idx - (idx % (1 << (i + 1))) + (1 << (i + 1));
-                }
-            }
-
-            // for val in accumulator.iter(){
-            //     println!("Round = {i}, accumulator = {}", val);
-            // }
-
-            let univariate_poly = UniPoly::from_evals(&accumulator);
-            let compressed_poly = univariate_poly.compress();
-            compressed_poly.append_to_transcript(transcript);
-
-            let r_i = transcript.challenge_scalar();
-            // println!("r_i = {}", r_i);
-            r.push(r_i);
-            compressed_polys.push(compressed_poly);
-            uni_polys.push(univariate_poly);
-
-            if i == num_rounds - 1 {
-                final_eval = (0..=3)
-                    .map(|i| {
-                        (F::one() - r_i) * witness_eval_for_final_eval[i][0]
-                            + r_i * witness_eval_for_final_eval[i][1]
-                    })
-                    .collect();
-            }
-            interleaved_az_bz_cz.reset();
-        }
-
-        #[cfg(test)]
-        {
-            // println!("Streaming prover compressed polys = {:?}", compressed_polys);
-            let mut e = F::zero();
-            for i in 0..uni_polys.len() {
-                // check if G_k(0) + G_k(1) = e
-                assert_eq!(
-                    uni_polys[i].eval_at_zero() + uni_polys[i].eval_at_one(),
-                    e,
-                    "failed at round {i}"
-                );
-                // println!("Round = {i}");
-                // evaluate the claimed degree-ell polynomial at r_i using the hint
-                e = uni_polys[i].evaluate(&r[i]);
-            }
-            // assert_eq!(
-            //     e,
-            //     final_eval[0] * (final_eval[1] * final_eval[2] - final_eval[3])
-            // );
-        }
-        (
-            SumcheckInstanceProof::new(compressed_polys),
-            r,
-            final_eval,
-            return_vec,
-        )
     }
 
     pub fn stream_prove_arbitrary<'a, Func1, Func2, I: JoltInstructionSet>(

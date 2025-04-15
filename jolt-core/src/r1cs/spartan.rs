@@ -716,56 +716,37 @@ where
             jolt_oracle,
         );
 
-        let mut eq_tau = SplitEqPolynomial::new(&tau);
-        let mut az_bz_cz_poly = constraint_builder.compute_spartan_Az_Bz_Cz(&flattened_polys);
-        let mut transcript_1 = transcript.clone();
-        let val_prev = SumcheckInstanceProof::prove_spartan_cubic_(
-            num_rounds_x,
-            &mut eq_tau,
-            &mut az_bz_cz_poly,
-            &mut transcript_1,
-        );
+        #[cfg(test)]
+        {
+            let mut az_bz_cz_poly = constraint_builder.compute_spartan_Az_Bz_Cz(&flattened_polys);
 
-        let mut streamed_polys_vec: Vec<AzBzCz> = Vec::new();
-        for n in 0..num_shards {
-            // println!("n = {}", n);
-            let streamed_polys = streaming_az_bz_cz_poly.next_shard(shard_length);
-            streamed_polys_vec.push(streamed_polys);
-        }
-
-        let mut j = 0;
-        for n in 0..num_shards {
-            let len = streamed_polys_vec[n].interleaved_az_bz_cz.len();
-            for i in 0..len {
-                assert_eq!(
-                    streamed_polys_vec[n].interleaved_az_bz_cz[i].0,
-                    az_bz_cz_poly.unbound_coeffs[j].index
-                );
-                assert_eq!(
-                    streamed_polys_vec[n].interleaved_az_bz_cz[i].1,
-                    az_bz_cz_poly.unbound_coeffs[j].value
-                );
-                j += 1;
+            let mut streamed_polys_vec: Vec<AzBzCz> = Vec::new();
+            for n in 0..num_shards {
+                let streamed_polys = streaming_az_bz_cz_poly.next_shard(shard_length);
+                streamed_polys_vec.push(streamed_polys);
             }
+
+            let mut j = 0;
+            for n in 0..num_shards {
+                let len = streamed_polys_vec[n].interleaved_az_bz_cz.len();
+                for i in 0..len {
+                    assert_eq!(
+                        streamed_polys_vec[n].interleaved_az_bz_cz[i].0,
+                        az_bz_cz_poly.unbound_coeffs[j].index
+                    );
+                    assert_eq!(
+                        streamed_polys_vec[n].interleaved_az_bz_cz[i].1,
+                        az_bz_cz_poly.unbound_coeffs[j].value
+                    );
+                    j += 1;
+                }
+            }
+            assert_eq!(j, az_bz_cz_poly.unbound_coeffs.len());
+            streaming_az_bz_cz_poly.reset();
         }
-        assert_eq!(j, az_bz_cz_poly.unbound_coeffs.len());
 
-        streaming_az_bz_cz_poly.reset();
-
-        // let outer_sumcheck_r: Vec<F> = outer_sumcheck_r.into_iter().rev().collect();
-        // drop_in_background_thread((az_bz_cz_poly, eq_tau));
-
-        // ProofTranscript::append_scalars(transcript, &outer_sumcheck_claims);
-        // claims from the end of sum-check
-        // claim_Az is the (scalar) value v_A = \sum_y A(r_x, y) * z(r_x) where r_x is the sumcheck randomness
-        // let (claim_Az, claim_Bz, claim_Cz): (F, F, F) = (
-        //     outer_sumcheck_claims[0],
-        //     outer_sumcheck_claims[1],
-        //     outer_sumcheck_claims[2],
-        // );
-
-        let (outer_sumcheck_proof, outer_sumcheck_r, outer_sumcheck_claims, val_stream) =
-            SumcheckInstanceProof::stream_prove_cubic_(
+        let (outer_sumcheck_proof, outer_sumcheck_r, outer_sumcheck_claims) =
+            SumcheckInstanceProof::stream_prove_cubic(
                 num_shards,
                 num_rounds_x,
                 &mut streaming_az_bz_cz_poly,
@@ -775,49 +756,10 @@ where
                 transcript,
             );
 
-        for idx in 0..val_prev.len() {
-            let temp_0 = val_prev[idx];
-            let temp_1 = val_stream[idx].clone();
-
-            let eq = temp_0[0];
-            let az = temp_0[1];
-            let bz = temp_0[2];
-            let cz = temp_0[3];
-
-            let global_idx = temp_1[0][0];
-            let eq_stream = temp_1[1].clone();
-            let az_stream = temp_1[2].clone();
-            let bz_stream = temp_1[3].clone();
-            let cz_stream = temp_1[4].clone();
-            for j in 0..4 {
-                // println!("az_pre[{}] = {}", j, az[j]);
-                // println!("az_stream[{}] = {}", j, az_stream[j]);
-                assert_eq!(
-                    eq[j], eq_stream[j],
-                    "failed eq at idx = {global_idx} j = {}",
-                    j
-                );
-                assert_eq!(
-                    az[j], az_stream[j],
-                    "failed az at idx = {global_idx} j = {}",
-                    j
-                );
-                assert_eq!(
-                    cz[j], cz_stream[j],
-                    "failed cz at idx = {global_idx} j = {}",
-                    j
-                );
-                assert_eq!(
-                    bz[j], bz_stream[j],
-                    "failed bz at idx = {global_idx} j = {}",
-                    j
-                );
-            }
-        }
-
         let outer_sumcheck_r: Vec<F> = outer_sumcheck_r.into_iter().rev().collect();
 
         ProofTranscript::append_scalars(transcript, &outer_sumcheck_claims);
+
         // claims from the end of sum-check
         // claim_Az is the (scalar) value v_A = \sum_y A(r_x, y) * z(r_x) where r_x is the sumcheck randomness
         let (claim_Az, claim_Bz, claim_Cz): (F, F, F) = (
