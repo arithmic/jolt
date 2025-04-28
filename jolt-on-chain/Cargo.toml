@@ -2,7 +2,7 @@
 name = "jolt-on-chain"
 version = "0.1.0"
 authors = ["Arithmic labs"]
-edition = "2025"
+edition = "2021"
 description = "Doing recursion on Jolt proof to enable efficient on-chain verification."
 
 [dependencies]

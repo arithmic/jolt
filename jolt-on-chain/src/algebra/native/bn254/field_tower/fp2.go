@@ -14,6 +14,22 @@ type Ext2 struct {
 	api frontend.API
 }
 
+// type Fp6 struct {
+// 	A0, A1, A2 Fp2
+// }
+
+// type Ext6 struct {
+// 	api frontend.API
+// }
+
+// func (e Ext6) Add(x, y *Fp6) *Fp6 {
+// 	e2 := Ext2{api: e.api}
+
+// 	_ = e2.Add(&x.A0, &y.A0)
+
+// 	return x
+// }
+
 func FromE2(y *bn254.E2) Fp2 {
 	return Fp2{
 		A0: grumpkin_fr.Element(y.A0),
