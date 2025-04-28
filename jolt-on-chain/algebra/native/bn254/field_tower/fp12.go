@@ -13,6 +13,13 @@ type Ext12 struct {
 	e6 Ext6
 }
 
+// NewExt12 creates a new instance of Ext12
+func NewExt12(api frontend.API) *Ext12 {
+	return &Ext12{e6: Ext6{e2: Ext2{api: api}}}
+}
+
+// This function is required to create an object of Fp12 from an object of E6 provided by gnark-crypto/ecc/bn254/bn254.go/E12.
+// It comes in handy when we want to create random elements of Fp12
 func FromE12(y *bn254.E12) Fp12 {
 	return Fp12{
 		A0: FromE6(&y.C0),
@@ -138,9 +145,8 @@ func (e Ext12) Inverse(x *Fp12) *Fp12 {
 }
 
 func (e Ext12) Select(condition frontend.Variable, a, b *Fp12) *Fp12 {
-	// Conditionally select the real part
+	// Select the components of a and b based on the condition
 	z0 := e.e6.Select(condition, &b.A0, &a.A0)
-	// Conditionally select the imaginary part
 	z1 := e.e6.Select(condition, &b.A1, &a.A1)
 
 	return &Fp12{
@@ -149,6 +155,7 @@ func (e Ext12) Select(condition frontend.Variable, a, b *Fp12) *Fp12 {
 	}
 }
 
+// TODO: Maybe n = 110. Provides enough security and leads to a smaller circuit.
 func (e Ext12) Exp(x *Fp12, k *frontend.Variable) *Fp12 {
 	const n = 254
 	bits := e.e6.e2.api.ToBinary(*k, n)

@@ -13,6 +13,13 @@ type Ext6 struct {
 	e2 Ext2
 }
 
+// NewExt6 creates a new instance of Ext6
+func NewExt6(api frontend.API) *Ext6 {
+	return &Ext6{e2: Ext2{api: api}}
+}
+
+// This function is required to create an object of Fp6 from an object of E6 provided by gnark-crypto/ecc/bn254/bn254.go/E6.
+// It comes in handy when we want to create random elements of Fp6
 func FromE6(y *bn254.E6) Fp6 {
 	return Fp6{
 		A0: FromE2(&y.B0),
@@ -217,9 +224,9 @@ func (e Ext6) MulByNonResidue(x *Fp6) *Fp6 {
 }
 
 func (e Ext6) Select(condition frontend.Variable, a, b *Fp6) *Fp6 {
-	// Conditionally select the real part
+	// Select the components of a and b based on the condition
 	z0 := e.e2.Select(condition, &b.A0, &a.A0)
-	// Conditionally select the imaginary part
+
 	z1 := e.e2.Select(condition, &b.A1, &a.A1)
 
 	z2 := e.e2.Select(condition, &b.A2, &a.A2)

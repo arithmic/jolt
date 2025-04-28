@@ -14,6 +14,13 @@ type Ext2 struct {
 	api frontend.API
 }
 
+// NewExt2 creates a new instance of Ext2
+func NewExt2(api frontend.API) *Ext2 {
+	return &Ext2{api: api}
+}
+
+// This function is required to create an object of Fp2 from an object of E2 provided by gnark-crypto/ecc/bn254/bn254.go/E2.
+// It comes in handy when we want to create random elements of Fp2
 func FromE2(y *bn254.E2) Fp2 {
 	return Fp2{
 		A0: grumpkin_fr.Element(y.A0),
@@ -188,6 +195,7 @@ func (e Ext2) MulByNonResidue(x *Fp2) *Fp2 {
 	}
 }
 
+// TODO: Maybe n = 110. Provides enough security and leads to a smaller circuit.
 func (e Ext2) Exp(x *Fp2, k *frontend.Variable) *Fp2 {
 
 	const n = 254
@@ -203,31 +211,18 @@ func (e Ext2) Exp(x *Fp2, k *frontend.Variable) *Fp2 {
 	for i := n - 1; i >= 0; i-- {
 		// Square z
 		z = e.Square(z)
+
 		// Conditionally multiply z by x if the current bit is 1
-		z = e.ConditionalMul(z, x, bits[i])
+		z = e.Select(bits[i], z, e.Mul(z, x))
 	}
 
 	return z
 }
 
-func (e Ext2) ConditionalMul(a, b *Fp2, condition frontend.Variable) *Fp2 {
-	// Conditionally select the real part
-	z0 := e.api.Select(condition, e.Mul(a, b).A0, a.A0)
-
-	// Conditionally select the imaginary part
-	z1 := e.api.Select(condition, e.Mul(a, b).A1, a.A1)
-
-	return &Fp2{
-		A0: z0,
-		A1: z1,
-	}
-}
-
 func (e Ext2) Select(condition frontend.Variable, a, b *Fp2) *Fp2 {
-	// Conditionally select the real part
+	// Select the components of a and b based on the condition
 	z0 := e.api.Select(condition, b.A0, a.A0)
 
-	// Conditionally select the imaginary part
 	z1 := e.api.Select(condition, b.A1, a.A1)
 
 	return &Fp2{

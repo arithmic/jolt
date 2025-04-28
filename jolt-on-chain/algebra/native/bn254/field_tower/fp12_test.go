@@ -20,7 +20,7 @@ type Fp12AddCircuit struct {
 }
 
 func (circuit *Fp12AddCircuit) Define(api frontend.API) error {
-	e := Ext12{e6: Ext6{e2: Ext2{api: api}}}
+	e := NewExt12(api)
 	expected := *e.Add(&circuit.A, &circuit.B)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -28,7 +28,7 @@ func (circuit *Fp12AddCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp12Add(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp12AddCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -72,7 +72,7 @@ type Fp12ConjugateCircuit struct {
 }
 
 func (circuit *Fp12ConjugateCircuit) Define(api frontend.API) error {
-	e := Ext12{e6: Ext6{e2: Ext2{api: api}}}
+	e := NewExt12(api)
 	expected := *e.Conjugate(&circuit.A)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -80,7 +80,6 @@ func (circuit *Fp12ConjugateCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp12Conjugate(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
 	var circuit Fp12ConjugateCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -122,7 +121,7 @@ type Fp12MulCircuit struct {
 }
 
 func (circuit *Fp12MulCircuit) Define(api frontend.API) error {
-	e := Ext12{e6: Ext6{e2: Ext2{api: api}}}
+	e := NewExt12(api)
 	expected := *e.Mul(&circuit.A, &circuit.B)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -130,7 +129,6 @@ func (circuit *Fp12MulCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp12Mul(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
 	var circuit Fp12MulCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -174,7 +172,7 @@ type Fp12SquareCircuit struct {
 }
 
 func (circuit *Fp12SquareCircuit) Define(api frontend.API) error {
-	e := Ext12{e6: Ext6{e2: Ext2{api: api}}}
+	e := NewExt12(api)
 	expected := *e.Square(&circuit.A)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -182,7 +180,7 @@ func (circuit *Fp12SquareCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp12Square(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp12SquareCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -224,7 +222,7 @@ type Fp12InverseCircuit struct {
 }
 
 func (circuit *Fp12InverseCircuit) Define(api frontend.API) error {
-	e := Ext12{e6: Ext6{e2: Ext2{api: api}}}
+	e := NewExt12(api)
 	expected := *e.Inverse(&circuit.A)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -232,7 +230,7 @@ func (circuit *Fp12InverseCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp12Inverse(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp12InverseCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -275,7 +273,7 @@ type Fp12Exp struct {
 }
 
 func (circuit *Fp12Exp) Define(api frontend.API) error {
-	e := Ext12{e6: Ext6{e2: Ext2{api: api}}}
+	e := NewExt12(api)
 	expected := e.Exp(&circuit.A, &circuit.B)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -283,7 +281,6 @@ func (circuit *Fp12Exp) Define(api frontend.API) error {
 
 func TestCircuitFp12Exp(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
 	var circuit Fp12Exp
 	// Compile the circuit into an R1CS
 	start := time.Now()

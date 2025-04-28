@@ -17,7 +17,7 @@ type Fp6AddCircuit struct {
 }
 
 func (circuit *Fp6AddCircuit) Define(api frontend.API) error {
-	e := Ext6{e2: Ext2{api: api}}
+	e := NewExt6(api)
 	expected := *e.Add(&circuit.A, &circuit.B)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -25,7 +25,7 @@ func (circuit *Fp6AddCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp6Add(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp6AddCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -69,7 +69,7 @@ type Fp6DoubleCircuit struct {
 }
 
 func (circuit *Fp6DoubleCircuit) Define(api frontend.API) error {
-	e := Ext6{e2: Ext2{api: api}}
+	e := NewExt6(api)
 	expected := e.Double(&circuit.A)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -77,7 +77,7 @@ func (circuit *Fp6DoubleCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp6Double(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp6DoubleCircuit
 
 	// Compile the circuit into an R1CS
@@ -120,7 +120,7 @@ type Fp6SubCircuit struct {
 }
 
 func (circuit *Fp6SubCircuit) Define(api frontend.API) error {
-	e := Ext6{e2: Ext2{api: api}}
+	e := NewExt6(api)
 	expected := *e.Sub(&circuit.A, &circuit.B)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -128,7 +128,7 @@ func (circuit *Fp6SubCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp6Sub(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp6SubCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -172,7 +172,7 @@ type Fp6NegCircuit struct {
 }
 
 func (circuit *Fp6NegCircuit) Define(api frontend.API) error {
-	e := Ext6{e2: Ext2{api: api}}
+	e := NewExt6(api)
 	expected := *e.Neg(&circuit.A)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -180,7 +180,7 @@ func (circuit *Fp6NegCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp6Neg(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp6NegCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -222,7 +222,7 @@ type Fp6MulCircuit struct {
 }
 
 func (circuit *Fp6MulCircuit) Define(api frontend.API) error {
-	e := Ext6{e2: Ext2{api: api}}
+	e := NewExt6(api)
 	expected := *e.Mul(&circuit.A, &circuit.B)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -230,7 +230,7 @@ func (circuit *Fp6MulCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp6Mul(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp6MulCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -274,7 +274,7 @@ type Fp6SquareCircuit struct {
 }
 
 func (circuit *Fp6SquareCircuit) Define(api frontend.API) error {
-	e := Ext6{e2: Ext2{api: api}}
+	e := NewExt6(api)
 	expected := *e.Square(&circuit.A)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -282,7 +282,7 @@ func (circuit *Fp6SquareCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp6Square(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp6SquareCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -324,7 +324,7 @@ type Fp6InverseCircuit struct {
 }
 
 func (circuit *Fp6InverseCircuit) Define(api frontend.API) error {
-	e := Ext6{e2: Ext2{api: api}}
+	e := NewExt6(api)
 	expected := *e.Inverse(&circuit.A)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -332,7 +332,7 @@ func (circuit *Fp6InverseCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp6Inverse(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp6InverseCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -374,7 +374,7 @@ type Fp6MulByNonResidueCircuit struct {
 }
 
 func (circuit *Fp6MulByNonResidueCircuit) Define(api frontend.API) error {
-	e := Ext6{e2: Ext2{api: api}}
+	e := NewExt6(api)
 	expected := *e.MulByNonResidue(&circuit.A)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -382,7 +382,7 @@ func (circuit *Fp6MulByNonResidueCircuit) Define(api frontend.API) error {
 
 func TestCircuitFp6MulByNonResidue(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp6MulByNonResidueCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
