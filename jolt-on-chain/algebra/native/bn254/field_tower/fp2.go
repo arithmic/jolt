@@ -14,6 +14,11 @@ type Ext2 struct {
 	api frontend.API
 }
 
+// NewExt2
+func NewExt2(api frontend.API) Ext2 {
+	return Ext2{api: api}
+}
+
 // type Fp6 struct {
 // 	A0, A1, A2 Fp2
 // }

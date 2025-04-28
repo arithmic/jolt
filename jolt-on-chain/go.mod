@@ -1,4 +1,4 @@
-module github.com/arithmic/jolt/jolt-on-chain/src
+module github.com/arithmic/jolt/jolt-on-chain
 
 go 1.24.2
 
@@ -26,7 +26,6 @@ require (
 	github.com/rs/zerolog v1.33.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.33.0 // indirect
-	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948 // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
@@ -34,4 +33,3 @@ require (
 )
 
 replace github.com/arithmic/gnark => github.com/arithmic/gnark v0.12.1-0.20250402125248-8bd2841f312d
-
