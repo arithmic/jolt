@@ -1,4 +1,4 @@
-package fp2
+package field_tower
 
 import (
 	"github.com/arithmic/gnark/frontend"
@@ -216,6 +216,19 @@ func (e Ext2) ConditionalMul(a, b *Fp2, condition frontend.Variable) *Fp2 {
 
 	// Conditionally select the imaginary part
 	z1 := e.api.Select(condition, e.Mul(a, b).A1, a.A1)
+
+	return &Fp2{
+		A0: z0,
+		A1: z1,
+	}
+}
+
+func (e Ext2) Select(condition frontend.Variable, a, b *Fp2) *Fp2 {
+	// Conditionally select the real part
+	z0 := e.api.Select(condition, b.A0, a.A0)
+
+	// Conditionally select the imaginary part
+	z1 := e.api.Select(condition, b.A1, a.A1)
 
 	return &Fp2{
 		A0: z0,
