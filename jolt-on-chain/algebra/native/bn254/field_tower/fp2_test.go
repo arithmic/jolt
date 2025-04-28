@@ -1,4 +1,4 @@
-package fp2
+package field_tower
 
 import (
 	"fmt"
@@ -56,7 +56,6 @@ func TestCircuitAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	_, err_1 := r1cs.Solve(witness)
 	if err_1 != nil {
 		fmt.Println("Error solving the r1cs", err_1)
@@ -107,14 +106,15 @@ func TestCircuitDouble(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2SubCircuit struct {
@@ -159,14 +159,15 @@ func TestCircuitSub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2NegCircuit struct {
@@ -208,14 +209,15 @@ func TestCircuitNeg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2ConjugateCircuit struct {
@@ -257,14 +259,15 @@ func TestCircuitConjugate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2MulCircuit struct {
@@ -309,14 +312,15 @@ func TestCircuitMul(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2SquareCircuit struct {
@@ -358,14 +362,15 @@ func TestCircuitSquare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2InverseCircuit struct {
@@ -407,14 +412,15 @@ func TestCircuitInverse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2MulByNonResidueCircuit struct {
@@ -456,14 +462,15 @@ func TestCircuitMulByNonResidue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2MulByElementCircuit struct {
@@ -509,14 +516,15 @@ func TestCircuitMulByElement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2Exp struct {
