@@ -26,6 +26,7 @@ members = [
     "common",
     "jolt-sdk",
     "jolt-sdk/macros",
+    "jolt-on-chain",
     "examples/collatz",
     "examples/collatz/guest",
     "examples/fibonacci",
