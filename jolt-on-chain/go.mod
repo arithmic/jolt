@@ -1,4 +1,4 @@
-module github.com/arithmic/jolt/jolt-on-chain
+module github.com/arithmic/jolt/jolt-on-chain/circuits
 
 go 1.24.2
 

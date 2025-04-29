@@ -26,7 +26,7 @@ func (circuit *Fp2AddCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestCircuitAdd(t *testing.T) {
+func TestCircuitFp2Add(t *testing.T) {
 	// Define the circuit
 	var circuit Fp2AddCircuit
 	// Compile the circuit into an R1CS
@@ -77,7 +77,7 @@ func (circuit *Fp2DoubleCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestCircuitDouble(t *testing.T) {
+func TestCircuitFp2Double(t *testing.T) {
 	// Define the circuit
 
 	var circuit Fp2DoubleCircuit
@@ -128,7 +128,7 @@ func (circuit *Fp2SubCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestCircuitSub(t *testing.T) {
+func TestCircuitFp2Sub(t *testing.T) {
 	// Define the circuit
 	var circuit Fp2SubCircuit
 	// Compile the circuit into an R1CS
@@ -179,7 +179,7 @@ func (circuit *Fp2NegCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestCircuitNeg(t *testing.T) {
+func TestCircuitFp2Neg(t *testing.T) {
 	// Define the circuit
 
 	var circuit Fp2NegCircuit
@@ -229,7 +229,7 @@ func (circuit *Fp2ConjugateCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestCircuitConjugate(t *testing.T) {
+func TestCircuitFp2Conjugate(t *testing.T) {
 	// Define the circuit
 
 	var circuit Fp2ConjugateCircuit
@@ -279,7 +279,7 @@ func (circuit *Fp2MulCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestCircuitMul(t *testing.T) {
+func TestCircuitFp2Mul(t *testing.T) {
 	// Define the circuit
 
 	var circuit Fp2MulCircuit
@@ -332,7 +332,7 @@ func (circuit *Fp2SquareCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestCircuitSquare(t *testing.T) {
+func TestCircuitFp2Square(t *testing.T) {
 	// Define the circuit
 
 	var circuit Fp2SquareCircuit
@@ -382,7 +382,7 @@ func (circuit *Fp2InverseCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestCircuitInverse(t *testing.T) {
+func TestCircuitFp2Inverse(t *testing.T) {
 	// Define the circuit
 
 	var circuit Fp2InverseCircuit
@@ -432,7 +432,7 @@ func (circuit *Fp2MulByNonResidueCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestCircuitMulByNonResidue(t *testing.T) {
+func TestCircuitFp2MulByNonResidue(t *testing.T) {
 	// Define the circuit
 
 	var circuit Fp2MulByNonResidueCircuit
@@ -483,7 +483,7 @@ func (circuit *Fp2MulByElementCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestCircuitMulByElement(t *testing.T) {
+func TestCircuitFp2MulByElement(t *testing.T) {
 	// Define the circuit
 
 	var circuit Fp2MulByElementCircuit
@@ -537,7 +537,7 @@ func (circuit *Fp2Exp) Define(api frontend.API) error {
 	return nil
 }
 
-func TestCircuitExp(t *testing.T) {
+func TestCircuitFp2Exp(t *testing.T) {
 	// Define the circuit
 	var circuit Fp2Exp
 	// Compile the circuit into an R1CS
