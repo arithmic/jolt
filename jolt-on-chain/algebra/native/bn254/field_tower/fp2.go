@@ -1,6 +1,8 @@
 package field_tower
 
 import (
+	"fmt"
+
 	"github.com/arithmic/gnark/frontend"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
@@ -18,6 +20,25 @@ type Ext2 struct {
 func NewExt2(api frontend.API) Ext2 {
 	return Ext2{api: api}
 }
+
+// func (e Ext2) DivUnchecked(x, y *Fp2) *Fp2 {
+// 	res, err := e.api.NewHint(divE2Hint, 2, &x.A0, &x.A1, &y.A0, &y.A1)
+// 	if err != nil {
+// 		// err is non-nil only for invalid number of inputs
+// 		panic(err)
+// 	}
+
+// 	div := Fp2{
+// 		A0: *res[0],
+// 		A1: *res[1],
+// 	}
+
+// 	// x == div * y
+// 	_x := e.Mul(&div, y)
+// 	e.AssertIsEqual(x, _x)
+
+// 	return &div
+// }
 
 // type Fp6 struct {
 // 	A0, A1, A2 Fp2
@@ -54,6 +75,7 @@ func (e Ext2) Add(x, y *Fp2) *Fp2 {
 func (e Ext2) Double(x *Fp2) *Fp2 {
 	z0 := e.api.Mul(x.A0, 2)
 	z1 := e.api.Mul(x.A1, 2)
+
 	return &Fp2{
 		A0: z0,
 		A1: z1,
@@ -260,4 +282,39 @@ func (e Ext2) Select(condition frontend.Variable, a, b *Fp2) *Fp2 {
 func (e Ext2) AssertIsEqual(x, y *Fp2) {
 	e.api.AssertIsEqual(x.A0, y.A0)
 	e.api.AssertIsEqual(x.A1, y.A1)
+}
+
+// Impl DivUnchecked using Select
+func (e Ext2) Fp2DivUnchecked(x, y *Fp2) *Fp2 {
+	bits_A0 := e.api.ToBinary(y.A0, 254)
+	bits_A1 := e.api.ToBinary(y.A1, 254)
+
+	// Check if A0 is zero: product of (1 - bit_i)
+	prod_comp_A0 := frontend.Variable(1)
+	for _, bit := range bits_A0 {
+		// fmt.Println("bit is ", bit)
+		prod_comp_A0 = e.api.Mul(prod_comp_A0, e.api.Sub(frontend.Variable(1), bit))
+		// fmt.Println("prod_comp_A0 is ", prod_comp_A0)
+
+	}
+
+	// Check if A1 is zero: product of (1 - bit_i)
+	prod_comp_A1 := frontend.Variable(1)
+	// fmt.Println("prod_comp_A1 is ", prod_comp_A1)
+
+	for _, bit := range bits_A1 {
+		prod_comp_A1 = e.api.Mul(prod_comp_A1, e.api.Sub(frontend.Variable(1), bit))
+	}
+	// fmt.Println("prod_comp_A0 is ", prod_comp_A0)
+	// Check if both A0 and A1 are one
+	condition := e.api.And(prod_comp_A0, prod_comp_A1)
+
+	// condition = condition.IsOne()
+	fmt.Println("condition is ", e.api.IsZero(condition))
+	result := e.Inverse(y)
+	div := e.Select(condition, e.Mul(x, result), &Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)})
+	// fmt.Println("div is ", div.A0, div.A1)
+	// fmt.Println("x is ", e.Mul(x, result))
+	// fmt.Println("Fp2 0 is ", Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)})
+	return div
 }

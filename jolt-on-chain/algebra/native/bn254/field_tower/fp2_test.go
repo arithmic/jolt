@@ -584,3 +584,63 @@ func TestCircuitExp(t *testing.T) {
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 }
+
+type Fp2DivUncheckedCircuit struct {
+	A Fp2
+	B Fp2
+	C Fp2 `gnark:",public"`
+}
+
+func (circuit *Fp2DivUncheckedCircuit) Define(api frontend.API) error {
+	e := Ext2{api: api}
+	expected := e.Fp2DivUnchecked(&circuit.A, &circuit.B)
+	e.AssertIsEqual(expected, &circuit.C)
+	return nil
+}
+
+func TestCircuitFp2DivUnchecked(t *testing.T) {
+	// Define the circuit
+	// Replace with an existing circuit type, e.g., SubCircuit
+	var circuit Fp2DivUncheckedCircuit
+	// Compile the circuit into an R1CS
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of Fp2Exp", r1cs.GetNbConstraints())
+	var a, b bn254.E2
+	_, _ = a.SetRandom()
+	_ = b.SetZero()
+
+	var c bn254.E2
+	// _ = c.SetZero()
+
+	c.Div(&a, &b)
+	// fmt.Println("c is ", c)
+
+	assignment := &Fp2DivUncheckedCircuit{
+		A: FromE2(&a),
+		B: FromE2(&b),
+		C: FromE2(&c),
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = r1cs.Solve(witness)
+	if err != nil {
+		fmt.Println("Error solving the r1cs", err)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
+}
