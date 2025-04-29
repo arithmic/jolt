@@ -1,4 +1,4 @@
-package fp2
+package field_tower
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ type Fp2AddCircuit struct {
 }
 
 func (circuit *Fp2AddCircuit) Define(api frontend.API) error {
-	e := Ext2{api: api}
+	e := NewExt2(api)
 	expected := *e.Add(&circuit.A, &circuit.B)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -28,7 +28,6 @@ func (circuit *Fp2AddCircuit) Define(api frontend.API) error {
 
 func TestCircuitAdd(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
 	var circuit Fp2AddCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -56,7 +55,6 @@ func TestCircuitAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	_, err_1 := r1cs.Solve(witness)
 	if err_1 != nil {
 		fmt.Println("Error solving the r1cs", err_1)
@@ -73,7 +71,7 @@ type Fp2DoubleCircuit struct {
 }
 
 func (circuit *Fp2DoubleCircuit) Define(api frontend.API) error {
-	e := Ext2{api: api}
+	e := NewExt2(api)
 	expected := e.Double(&circuit.A)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -81,7 +79,7 @@ func (circuit *Fp2DoubleCircuit) Define(api frontend.API) error {
 
 func TestCircuitDouble(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp2DoubleCircuit
 
 	// Compile the circuit into an R1CS
@@ -107,14 +105,15 @@ func TestCircuitDouble(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2SubCircuit struct {
@@ -123,7 +122,7 @@ type Fp2SubCircuit struct {
 }
 
 func (circuit *Fp2SubCircuit) Define(api frontend.API) error {
-	e := Ext2{api: api}
+	e := NewExt2(api)
 	expected := e.Sub(&circuit.A, &circuit.B)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -131,9 +130,7 @@ func (circuit *Fp2SubCircuit) Define(api frontend.API) error {
 
 func TestCircuitSub(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
 	var circuit Fp2SubCircuit
-
 	// Compile the circuit into an R1CS
 	start := time.Now()
 	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
@@ -159,14 +156,15 @@ func TestCircuitSub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2NegCircuit struct {
@@ -175,7 +173,7 @@ type Fp2NegCircuit struct {
 }
 
 func (circuit *Fp2NegCircuit) Define(api frontend.API) error {
-	e := Ext2{api: api}
+	e := NewExt2(api)
 	expected := *e.Neg(&circuit.A)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -183,7 +181,7 @@ func (circuit *Fp2NegCircuit) Define(api frontend.API) error {
 
 func TestCircuitNeg(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp2NegCircuit
 
 	start := time.Now()
@@ -208,14 +206,15 @@ func TestCircuitNeg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2ConjugateCircuit struct {
@@ -224,7 +223,7 @@ type Fp2ConjugateCircuit struct {
 }
 
 func (circuit *Fp2ConjugateCircuit) Define(api frontend.API) error {
-	e := Ext2{api: api}
+	e := NewExt2(api)
 	expected := e.Conjugate(&circuit.A)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -232,7 +231,7 @@ func (circuit *Fp2ConjugateCircuit) Define(api frontend.API) error {
 
 func TestCircuitConjugate(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp2ConjugateCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -257,14 +256,15 @@ func TestCircuitConjugate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2MulCircuit struct {
@@ -273,7 +273,7 @@ type Fp2MulCircuit struct {
 }
 
 func (circuit *Fp2MulCircuit) Define(api frontend.API) error {
-	e := Ext2{api: api}
+	e := NewExt2(api)
 	expected := *e.Mul(&circuit.A, &circuit.B)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -281,7 +281,7 @@ func (circuit *Fp2MulCircuit) Define(api frontend.API) error {
 
 func TestCircuitMul(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp2MulCircuit
 
 	// Compile the circuit into an R1CS
@@ -309,14 +309,15 @@ func TestCircuitMul(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2SquareCircuit struct {
@@ -325,7 +326,7 @@ type Fp2SquareCircuit struct {
 }
 
 func (circuit *Fp2SquareCircuit) Define(api frontend.API) error {
-	e := Ext2{api: api}
+	e := NewExt2(api)
 	expected := *e.Square(&circuit.A)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -333,7 +334,7 @@ func (circuit *Fp2SquareCircuit) Define(api frontend.API) error {
 
 func TestCircuitSquare(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp2SquareCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -358,14 +359,15 @@ func TestCircuitSquare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2InverseCircuit struct {
@@ -374,7 +376,7 @@ type Fp2InverseCircuit struct {
 }
 
 func (circuit *Fp2InverseCircuit) Define(api frontend.API) error {
-	e := Ext2{api: api}
+	e := NewExt2(api)
 	expected := e.Inverse(&circuit.A)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -382,7 +384,7 @@ func (circuit *Fp2InverseCircuit) Define(api frontend.API) error {
 
 func TestCircuitInverse(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp2InverseCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -407,14 +409,15 @@ func TestCircuitInverse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2MulByNonResidueCircuit struct {
@@ -423,7 +426,7 @@ type Fp2MulByNonResidueCircuit struct {
 }
 
 func (circuit *Fp2MulByNonResidueCircuit) Define(api frontend.API) error {
-	e := Ext2{api: api}
+	e := NewExt2(api)
 	expected := e.MulByNonResidue(&circuit.A)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -431,7 +434,7 @@ func (circuit *Fp2MulByNonResidueCircuit) Define(api frontend.API) error {
 
 func TestCircuitMulByNonResidue(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp2MulByNonResidueCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -456,14 +459,15 @@ func TestCircuitMulByNonResidue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2MulByElementCircuit struct {
@@ -473,7 +477,7 @@ type Fp2MulByElementCircuit struct {
 }
 
 func (circuit *Fp2MulByElementCircuit) Define(api frontend.API) error {
-	e := Ext2{api: api}
+	e := NewExt2(api)
 	expected := e.MulByElement(&circuit.A, &circuit.B)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -481,7 +485,7 @@ func (circuit *Fp2MulByElementCircuit) Define(api frontend.API) error {
 
 func TestCircuitMulByElement(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
+
 	var circuit Fp2MulByElementCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -509,14 +513,15 @@ func TestCircuitMulByElement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 	_, err = r1cs.Solve(witness)
 	if err != nil {
 		fmt.Println("Error solving the r1cs", err)
 		return
 	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
 }
 
 type Fp2Exp struct {
@@ -526,7 +531,7 @@ type Fp2Exp struct {
 }
 
 func (circuit *Fp2Exp) Define(api frontend.API) error {
-	e := Ext2{api: api}
+	e := NewExt2(api)
 	expected := e.Exp(&circuit.A, &circuit.B)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -534,7 +539,6 @@ func (circuit *Fp2Exp) Define(api frontend.API) error {
 
 func TestCircuitExp(t *testing.T) {
 	// Define the circuit
-	// Replace with an existing circuit type, e.g., SubCircuit
 	var circuit Fp2Exp
 	// Compile the circuit into an R1CS
 	start := time.Now()
