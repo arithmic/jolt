@@ -1,8 +1,6 @@
 package field_tower
 
 import (
-	"fmt"
-
 	"github.com/arithmic/gnark/frontend"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
@@ -57,8 +55,9 @@ func NewExt2(api frontend.API) Ext2 {
 // }
 
 func FromE2(y *bn254.E2) Fp2 {
+	a0 := grumpkin_fr.Element(y.A0)
 	return Fp2{
-		A0: grumpkin_fr.Element(y.A0),
+		A0: a0,
 		A1: grumpkin_fr.Element(y.A1),
 	}
 }
@@ -70,6 +69,12 @@ func (e Ext2) Add(x, y *Fp2) *Fp2 {
 		A0: z0,
 		A1: z1,
 	}
+}
+
+func (e Ext2) Println(str string, x *Fp2) {
+	e.api.Println(str)
+	e.api.Println("A0", x.A0)
+	e.api.Println("A1", x.A1)
 }
 
 func (e Ext2) Double(x *Fp2) *Fp2 {
@@ -177,7 +182,36 @@ func (e Ext2) Inverse(x *Fp2) *Fp2 {
 	t0 = e.api.Add(t0, t1)
 
 	// Compute t1 = 1 / t0 (inverse of t0)
+	// t1 = e.api.DivUnchecked(frontend.Variable(1), t0)
+	// e.api.AssertIsDifferent(t0, frontend.Variable(0))
+
 	t1 = e.api.Inverse(t0)
+	// Compute z.A0 = x.A0 * t1
+	z0 := e.api.Mul(x.A0, t1)
+
+	// Compute z.A1 = -(x.A1 * t1)
+	z1 := e.api.Mul(x.A1, t1)
+	z1 = e.api.Neg(z1)
+
+	return &Fp2{
+		A0: z0,
+		A1: z1,
+	}
+}
+
+func (e Ext2) InverseUnchecked(x *Fp2) *Fp2 {
+	// Compute t0 = x.A0^2
+	t0 := e.api.Mul(x.A0, x.A0)
+
+	// Compute t1 = x.A1^2
+	t1 := e.api.Mul(x.A1, x.A1)
+
+	// Compute t0 = t0 + t1
+	t0 = e.api.Add(t0, t1)
+
+	// Compute t1 = 1 / t0 (inverse of t0)
+
+	t1 = e.api.DivUnchecked(frontend.Variable(grumpkin_fr.One()), t0)
 
 	// Compute z.A0 = x.A0 * t1
 	z0 := e.api.Mul(x.A0, t1)
@@ -284,37 +318,36 @@ func (e Ext2) AssertIsEqual(x, y *Fp2) {
 	e.api.AssertIsEqual(x.A1, y.A1)
 }
 
-// Impl DivUnchecked using Select
-func (e Ext2) Fp2DivUnchecked(x, y *Fp2) *Fp2 {
-	bits_A0 := e.api.ToBinary(y.A0, 254)
-	bits_A1 := e.api.ToBinary(y.A1, 254)
+// // Impl DivUnchecked using Select
+// func (e Ext2) Fp2DivUnchecked(x, y *Fp2) *Fp2 {
+// 	e.api.Println("y is ", y.A0, y.A1)
+// 	bits_A0 := e.api.ToBinary(y.A0, 254)
+// 	bits_A1 := e.api.ToBinary(y.A1, 254)
 
-	// Check if A0 is zero: product of (1 - bit_i)
-	prod_comp_A0 := frontend.Variable(1)
-	for _, bit := range bits_A0 {
-		// fmt.Println("bit is ", bit)
-		prod_comp_A0 = e.api.Mul(prod_comp_A0, e.api.Sub(frontend.Variable(1), bit))
-		// fmt.Println("prod_comp_A0 is ", prod_comp_A0)
+// 	for i := 0; i < 254; i++ {
+// 		e.api.Println("bits_A0[", i, "] is ", bits_A0[i])
+// 		e.api.Println("bits_A1[", i, "] is ", bits_A1[i])
+// 	}
 
-	}
+// 	// Check if A0 is zero: product of (1 - bit_i)
+// 	prod_comp_A0 := frontend.Variable(1)
+// 	for _, bit := range bits_A0 {
+// 		prod_comp_A0 = e.api.Mul(prod_comp_A0, e.api.Sub(frontend.Variable(grumpkin_fr.One()), bit))
+// 	}
 
-	// Check if A1 is zero: product of (1 - bit_i)
-	prod_comp_A1 := frontend.Variable(1)
-	// fmt.Println("prod_comp_A1 is ", prod_comp_A1)
+// 	// Check if A1 is zero: product of (1 - bit_i)
+// 	prod_comp_A1 := frontend.Variable(1)
 
-	for _, bit := range bits_A1 {
-		prod_comp_A1 = e.api.Mul(prod_comp_A1, e.api.Sub(frontend.Variable(1), bit))
-	}
-	// fmt.Println("prod_comp_A0 is ", prod_comp_A0)
-	// Check if both A0 and A1 are one
-	condition := e.api.And(prod_comp_A0, prod_comp_A1)
+// 	for _, bit := range bits_A1 {
+// 		prod_comp_A1 = e.api.Mul(prod_comp_A1, e.api.Sub(frontend.Variable(grumpkin_fr.One()), bit))
+// 	}
+// 	// Check if both A0 and A1 are one
+// 	condition := e.api.And(prod_comp_A0, prod_comp_A1)
+// 	e.api.Println("prod_comp_A1 is ", prod_comp_A1)
+// 	e.api.Println("prod_comp_A0 is ", prod_comp_A0)
 
-	// condition = condition.IsOne()
-	fmt.Println("condition is ", e.api.IsZero(condition))
-	result := e.Inverse(y)
-	div := e.Select(condition, e.Mul(x, result), &Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)})
-	// fmt.Println("div is ", div.A0, div.A1)
-	// fmt.Println("x is ", e.Mul(x, result))
-	// fmt.Println("Fp2 0 is ", Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)})
-	return div
-}
+// 	inv_y := e.Select(condition, e.Inverse(y), y)
+// 	div := e.Select(condition, e.Mul(x, inv_y), y)
+
+// 	return div
+// }

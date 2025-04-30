@@ -193,9 +193,9 @@
     3,
     3,
     4,
-    1,
+    3,
     7,
-    1,
+    3,
     8,
     1,
     18,
@@ -207,7 +207,7 @@
     16,
     3,
     3,
-    1,
+    3,
     7,
     1,
     19,
@@ -219,7 +219,7 @@
     17,
     3,
     4,
-    1,
+    3,
     8,
     1,
     20,
@@ -416,12 +416,278 @@
     "C_Y_A1"
   ],
   "Logs": null,
-  "DebugInfo": null,
+  "DebugInfo": [
+    {
+      "Caller": "",
+      "Format": "[inverse] %s*%s == 1\n%s\n",
+      "ToResolve": [
+        [
+          {
+            "CID": 1,
+            "VID": 13
+          },
+          {
+            "CID": 1,
+            "VID": 14
+          }
+        ],
+        [
+          {
+            "CID": 1,
+            "VID": 15
+          }
+        ]
+      ],
+      "Stack": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "Caller": "",
+      "Format": "[assertIsEqual] %s == %s\n%s\n",
+      "ToResolve": [
+        [
+          {
+            "CID": 3,
+            "VID": 1
+          },
+          {
+            "CID": 3,
+            "VID": 5
+          },
+          {
+            "CID": 1,
+            "VID": 22
+          },
+          {
+            "CID": 3,
+            "VID": 23
+          }
+        ],
+        [
+          {
+            "CID": 1,
+            "VID": 9
+          }
+        ]
+      ],
+      "Stack": [
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "Caller": "",
+      "Format": "[assertIsEqual] %s == %s\n%s\n",
+      "ToResolve": [
+        [
+          {
+            "CID": 3,
+            "VID": 2
+          },
+          {
+            "CID": 3,
+            "VID": 6
+          },
+          {
+            "CID": 1,
+            "VID": 21
+          },
+          {
+            "CID": 3,
+            "VID": 22
+          },
+          {
+            "CID": 3,
+            "VID": 23
+          }
+        ],
+        [
+          {
+            "CID": 1,
+            "VID": 10
+          }
+        ]
+      ],
+      "Stack": [
+        5,
+        9,
+        7,
+        8
+      ]
+    },
+    {
+      "Caller": "",
+      "Format": "[assertIsEqual] %s == %s\n%s\n",
+      "ToResolve": [
+        [
+          {
+            "CID": 3,
+            "VID": 3
+          },
+          {
+            "CID": 1,
+            "VID": 25
+          },
+          {
+            "CID": 3,
+            "VID": 26
+          }
+        ],
+        [
+          {
+            "CID": 1,
+            "VID": 11
+          }
+        ]
+      ],
+      "Stack": [
+        5,
+        6,
+        10,
+        8
+      ]
+    },
+    {
+      "Caller": "",
+      "Format": "[assertIsEqual] %s == %s\n%s\n",
+      "ToResolve": [
+        [
+          {
+            "CID": 3,
+            "VID": 4
+          },
+          {
+            "CID": 1,
+            "VID": 24
+          },
+          {
+            "CID": 3,
+            "VID": 25
+          },
+          {
+            "CID": 3,
+            "VID": 26
+          }
+        ],
+        [
+          {
+            "CID": 1,
+            "VID": 12
+          }
+        ]
+      ],
+      "Stack": [
+        5,
+        9,
+        10,
+        8
+      ]
+    }
+  ],
   "SymbolTable": {
-    "Locations": null,
-    "Functions": null
+    "Locations": [
+      {
+        "FunctionID": 0,
+        "Line": 330
+      },
+      {
+        "FunctionID": 1,
+        "Line": 188
+      },
+      {
+        "FunctionID": 2,
+        "Line": 28
+      },
+      {
+        "FunctionID": 3,
+        "Line": 59
+      },
+      {
+        "FunctionID": 4,
+        "Line": 206
+      },
+      {
+        "FunctionID": 5,
+        "Line": 34
+      },
+      {
+        "FunctionID": 6,
+        "Line": 317
+      },
+      {
+        "FunctionID": 7,
+        "Line": 213
+      },
+      {
+        "FunctionID": 4,
+        "Line": 207
+      },
+      {
+        "FunctionID": 6,
+        "Line": 318
+      },
+      {
+        "FunctionID": 7,
+        "Line": 214
+      }
+    ],
+    "Functions": [
+      {
+        "Name": "r1cs.(*builder).Inverse",
+        "SystemName": "github.com/arithmic/gnark/frontend/cs/r1cs.(*builder).Inverse",
+        "Filename": "/Users/rituraj/go/pkg/mod/github.com/arithmic/gnark@v0.12.1-0.20250402125248-8bd2841f312d/frontend/cs/r1cs/api.go"
+      },
+      {
+        "Name": "field_tower.Ext2.Inverse",
+        "SystemName": "github.com/arithmic/jolt/jolt-on-chain/algebra/native/bn254/field_tower.Ext2.Inverse",
+        "Filename": "/Users/rituraj/Desktop/Repos/jolt/jolt-on-chain/algebra/native/bn254/field_tower/fp2.go"
+      },
+      {
+        "Name": "groups.(*G2).G2Add",
+        "SystemName": "github.com/arithmic/jolt/jolt-on-chain/algebra/native/bn254/groups.(*G2).G2Add",
+        "Filename": "/Users/rituraj/Desktop/Repos/jolt/jolt-on-chain/algebra/native/bn254/groups/g2.go"
+      },
+      {
+        "Name": "groups.G2.G2Sub",
+        "SystemName": "github.com/arithmic/jolt/jolt-on-chain/algebra/native/bn254/groups.G2.G2Sub",
+        "Filename": "/Users/rituraj/Desktop/Repos/jolt/jolt-on-chain/algebra/native/bn254/groups/g2.go"
+      },
+      {
+        "Name": "groups.(*G2SubCircuit).Define",
+        "SystemName": "github.com/arithmic/jolt/jolt-on-chain/algebra/native/bn254/groups.(*G2SubCircuit).Define",
+        "Filename": "/Users/rituraj/Desktop/Repos/jolt/jolt-on-chain/algebra/native/bn254/groups/g2_test.go"
+      },
+      {
+        "Name": "r1cs.(*builder).AssertIsEqual",
+        "SystemName": "github.com/arithmic/gnark/frontend/cs/r1cs.(*builder).AssertIsEqual",
+        "Filename": "/Users/rituraj/go/pkg/mod/github.com/arithmic/gnark@v0.12.1-0.20250402125248-8bd2841f312d/frontend/cs/r1cs/api_assertions.go"
+      },
+      {
+        "Name": "field_tower.Ext2.AssertIsEqual",
+        "SystemName": "github.com/arithmic/jolt/jolt-on-chain/algebra/native/bn254/field_tower.Ext2.AssertIsEqual",
+        "Filename": "/Users/rituraj/Desktop/Repos/jolt/jolt-on-chain/algebra/native/bn254/field_tower/fp2.go"
+      },
+      {
+        "Name": "groups.G2.AssertIsEqual",
+        "SystemName": "github.com/arithmic/jolt/jolt-on-chain/algebra/native/bn254/groups.G2.AssertIsEqual",
+        "Filename": "/Users/rituraj/Desktop/Repos/jolt/jolt-on-chain/algebra/native/bn254/groups/g2.go"
+      }
+    ]
   },
-  "MDebug": {},
+  "MDebug": {
+    "14": 1,
+    "15": 2,
+    "16": 3,
+    "17": 4,
+    "2": 0
+  },
   "MHintsDependencies": {},
   "Levels": [
     [

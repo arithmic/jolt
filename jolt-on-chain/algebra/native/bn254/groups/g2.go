@@ -1,8 +1,6 @@
 package g1ops
 
 import (
-	"fmt"
-
 	"github.com/arithmic/gnark/frontend"
 	fp2 "github.com/arithmic/jolt/jolt-on-chain/algebra/native/bn254/field_tower"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
@@ -20,19 +18,16 @@ func NewG2(api frontend.API) *G2 {
 	return &G2{e2: fp2.NewExt2(api)}
 }
 
+// Warning: Points should be unequal
 func (g2 *G2) G2Add(p, q *G2Affine) *G2Affine {
 	// λ = (q.Y - p.Y) / (q.X - p.X)
 	qypy := g2.e2.Sub(&q.Y, &p.Y)
 	qxpx := g2.e2.Sub(&q.X, &p.X)
 
-	// fmt.Println("qypy is ", qypy)
-	// fmt.Println("qxpx is ", qxpx)
 	// removed unchecked division
 	lambda1 := g2.e2.Inverse(qxpx)
-	fmt.Println("λ1 is ", lambda1)
 
 	λ := g2.e2.Mul(lambda1, qypy)
-	fmt.Println("λ is ", λ.A0)
 
 	// xr = λ² - p.X - q.X
 	lambdaSquared := g2.e2.Mul(λ, λ)
@@ -93,82 +88,24 @@ func (g2 *G2) G2Double(p *G2Affine) *G2Affine {
 	}
 }
 
-// func (g2 *G2) phi(q *G2Affine) *G2Affine {
-// 	x := g2.e2.Mul(&q.X, &g2.w)
+func (g2 *G2) G2DoubleN(p *G2Affine, n int) *G2Affine {
+	pn := p
+	for s := 0; s < n; s++ {
+		pn = g2.G2Double(pn)
+	}
+	return pn
+}
 
-// 	return &G2Affine{
-// 		X: *x,
-// 		Y: *g2.e2.Neg(&q.Y),
-// 	}
-// }
-
-// func (g2 *G2) psi(q *G2Affine) *G2Affine {
-// 	x := g2.e2.Conjugate(&q.X)
-// 	x = g2.e2.Mul(x, &g2.u)
-// 	y := g2.e2.Conjugate(&q.Y)
-// 	y = g2.e2.Mul(y, &g2.v)
-
-// 	return &G2Affine{
-// 		X: *x,
-// 		Y: *y,
-// 	}
-// }
-
-// func (g2 *G2) G2scalarMulBySeed(q *G2Affine) *G2Affine {
-// 	z := g2.G2Double(q)
-// 	t0 := g2.G2Add(q, z)
-// 	t2 := g2.G2Add(q, t0)
-// 	t1 := g2.G2Add(z, t2)
-// 	z = g2.G2DoubleAndAdd(t1, t0)
-// 	t0 = g2.G2Add(t0, z)
-// 	t2 = g2.G2Add(t2, t0)
-// 	t1 = g2.G2Add(t1, t2)
-// 	t0 = g2.G2Add(t0, t1)
-// 	t1 = g2.G2Add(t1, t0)
-// 	t0 = g2.G2Add(t0, t1)
-// 	t2 = g2.G2Add(t2, t0)
-// 	t1 = g2.G2DoubleAndAdd(t2, t1)
-// 	t2 = g2.G2Add(t2, t1)
-// 	z = g2.G2Add(z, t2)
-// 	t2 = g2.G2Add(t2, z)
-// 	z = g2.G2DoubleAndAdd(t2, z)
-// 	t0 = g2.G2Add(t0, z)
-// 	t1 = g2.G2Add(t1, t0)
-// 	t3 := g2.G2Double(t1)
-// 	t3 = g2.G2DoubleAndAdd(t3, t1)
-// 	t2 = g2.G2Add(t2, t3)
-// 	t1 = g2.G2Add(t1, t2)
-// 	t2 = g2.G2Add(t2, t1)
-// 	t2 = g2.G2DoubleN(t2, 16)
-// 	t1 = g2.G2DoubleAndAdd(t2, t1)
-// 	t1 = g2.G2DoubleN(t1, 13)
-// 	t0 = g2.G2DoubleAndAdd(t1, t0)
-// 	t0 = g2.G2DoubleN(t0, 15)
-// 	z = g2.G2DoubleAndAdd(t0, z)
-
-// 	return z
-// }
-
+// Warning: Points should be unequal
 func (g2 *G2) G2DoubleAndAdd(p, q *G2Affine) *G2Affine {
-	// mone := g2.fp.NewElement(-1)  // no longer needed
-
 	// compute λ1 = (q.Y - p.Y) / (q.X - p.X)
 	yqyp := g2.e2.Sub(&q.Y, &p.Y)
 	xqxp := g2.e2.Sub(&q.X, &p.X)
 
-	// print yqyp in hex
-
-	// fmt.Println("yqyp: ", yqyp)
-	// fmt.Println("xqxp: ", xqxp)
-
 	λ1_prime := g2.e2.Inverse(xqxp)
 	λ1 := g2.e2.Mul(λ1_prime, yqyp)
 
-	// fmt.Print("λ1: ", λ1)
-	// λ1 := g2.e2.DivUnchecked(yqyp, xqxp)
-
 	// compute x2 = λ1² - p.X - q.X
-
 	lambda1Squared := g2.e2.Mul(λ1, λ1)
 	x2 := g2.e2.Sub(lambda1Squared, &p.X)
 	x2 = g2.e2.Sub(x2, &q.X)
@@ -176,7 +113,6 @@ func (g2 *G2) G2DoubleAndAdd(p, q *G2Affine) *G2Affine {
 	// compute -λ2 = λ1 + 2*p.Y / (x2 - p.X)
 	twoPy := g2.e2.Double(&p.Y)
 	x2xp := g2.e2.Sub(x2, &p.X)
-	// twoPyOverX2xp := g2.e2.DivUnchecked(twoPy, x2xp)
 	twoPyOverX2xp := g2.e2.Inverse(x2xp)
 	twoPyOverX2xp = g2.e2.Mul(twoPyOverX2xp, twoPy)
 	lambda2 := g2.e2.Add(λ1, twoPyOverX2xp)
@@ -188,8 +124,8 @@ func (g2 *G2) G2DoubleAndAdd(p, q *G2Affine) *G2Affine {
 
 	// compute y3 = -λ2 * (x3 - p.X) - p.Y
 	x3xp := g2.e2.Sub(x3, &p.X)
+
 	y3 := g2.e2.Mul(lambda2, x3xp)
-	y3 = g2.e2.Neg(y3)
 	y3 = g2.e2.Sub(y3, &p.Y)
 
 	return &G2Affine{
@@ -198,13 +134,40 @@ func (g2 *G2) G2DoubleAndAdd(p, q *G2Affine) *G2Affine {
 	}
 }
 
-// func (g2 *G2) G2DoubleN(p *G2Affine, n int) *G2Affine {
-// 	pn := p
-// 	for s := 0; s < n; s++ {
-// 		pn = g2.G2Double(pn)
-// 	}
-// 	return pn
-// }
+func (g2 *G2) G2scalarMulBySeed(q *G2Affine) *G2Affine {
+	z := g2.G2Double(q)
+	t0 := g2.G2Add(q, z)
+	t2 := g2.G2Add(q, t0)
+	t1 := g2.G2Add(z, t2)
+	z = g2.G2DoubleAndAdd(t1, t0)
+	t0 = g2.G2Add(t0, z)
+	t2 = g2.G2Add(t2, t0)
+	t1 = g2.G2Add(t1, t2)
+	t0 = g2.G2Add(t0, t1)
+	t1 = g2.G2Add(t1, t0)
+	t0 = g2.G2Add(t0, t1)
+	t2 = g2.G2Add(t2, t0)
+	t1 = g2.G2DoubleAndAdd(t2, t1)
+	t2 = g2.G2Add(t2, t1)
+	z = g2.G2Add(z, t2)
+	t2 = g2.G2Add(t2, z)
+	z = g2.G2DoubleAndAdd(t2, z)
+	t0 = g2.G2Add(t0, z)
+	t1 = g2.G2Add(t1, t0)
+	t3 := g2.G2Double(t1)
+	t3 = g2.G2DoubleAndAdd(t3, t1)
+	t2 = g2.G2Add(t2, t3)
+	t1 = g2.G2Add(t1, t2)
+	t2 = g2.G2Add(t2, t1)
+	t2 = g2.G2DoubleN(t2, 16)
+	t1 = g2.G2DoubleAndAdd(t2, t1)
+	t1 = g2.G2DoubleN(t1, 13)
+	t0 = g2.G2DoubleAndAdd(t1, t0)
+	t0 = g2.G2DoubleN(t0, 15)
+	z = g2.G2DoubleAndAdd(t0, z)
+
+	return z
+}
 
 func (e G2) AssertIsEqual(p, q *G2Affine) {
 	e.e2.AssertIsEqual(&p.X, &q.X)
