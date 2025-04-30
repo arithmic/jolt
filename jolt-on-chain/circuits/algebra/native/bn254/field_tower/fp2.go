@@ -28,6 +28,22 @@ func FromE2(y *bn254.E2) Fp2 {
 	}
 }
 
+func (e Ext2) One() *Fp2{
+	return &Fp2{
+		A0: frontend.Variable(grumpkin_fr.One()),
+		A1: frontend.Variable(0),
+	}
+}
+
+func (e Ext2) Zero() *Fp2{
+	return &Fp2{
+		A0: frontend.Variable(0),
+		A1: frontend.Variable(0),
+	}
+}
+
+
+
 func (e Ext2) Add(x, y *Fp2) *Fp2 {
 	z0 := e.api.Add(x.A0, y.A0)
 	z1 := e.api.Add(x.A1, y.A1)
@@ -202,10 +218,7 @@ func (e Ext2) Exp(x *Fp2, k *frontend.Variable) *Fp2 {
 	bits := e.api.ToBinary(*k, n)
 
 	// Initialize z identity element in Fp2
-	z := &Fp2{
-		A0: frontend.Variable(1),
-		A1: frontend.Variable(0),
-	}
+	z := e.One()
 
 	// Perform binary exponentiation
 	for i := n - 1; i >= 0; i-- {

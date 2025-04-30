@@ -12,10 +12,33 @@ type G2Affine struct {
 
 type G2 struct {
 	e2 fp2.Ext2
+	// w    frontend.Variable
+	// u, v fp2.Fp2
 }
 
 func NewG2(api frontend.API) *G2 {
 	return &G2{e2: *fp2.NewExt2(api)}
+}
+
+func (g2 *G2) phi(q *G2Affine, w frontend.Variable) *G2Affine {
+	x := g2.e2.MulByElement(&q.X, &w)
+
+	return &G2Affine{
+		X: *x,
+		Y: *g2.e2.Neg(&q.Y),
+	}
+}
+
+func (g2 *G2) psi(q *G2Affine, u, v fp2.Fp2) *G2Affine {
+	x := g2.e2.Conjugate(&q.X)
+	x = g2.e2.Mul(x, &u)
+	y := g2.e2.Conjugate(&q.Y)
+	y = g2.e2.Mul(y, &v)
+
+	return &G2Affine{
+		X: *x,
+		Y: *y,
+	}
 }
 
 // Warning: Points should be unequal

@@ -30,17 +30,17 @@ func FromE6(y *bn254.E6) Fp6 {
 
 func (e Ext6) One() *Fp6 {
 	return &Fp6{
-		A0: Fp2{A0: frontend.Variable(1), A1: frontend.Variable(0)},
-		A1: Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)},
-		A2: Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)},
+		A0: *e.e2.One(),
+		A1: *e.e2.Zero(),
+		A2: *e.e2.Zero(),
 	}
 }
 
 func (e Ext6) Zero() *Fp6 {
 	return &Fp6{
-		A0: Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)},
-		A1: Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)},
-		A2: Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)},
+		A0: *e.e2.Zero(),
+		A1: *e.e2.Zero(),
+		A2: *e.e2.Zero(),
 	}
 }
 

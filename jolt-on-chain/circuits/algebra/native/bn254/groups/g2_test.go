@@ -9,6 +9,7 @@ import (
 
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
+	fp2 "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 )
@@ -258,7 +259,7 @@ func TestCircuitG2DoubleN(t *testing.T) {
 	duration := time.Since(start)
 	fmt.Printf("Circuit compiled in: %s\n\n", duration)
 
-	fmt.Println("number of constraints of G2DoubleN", r1cs.GetNbConstraints())
+	fmt.Println("number of constraints of G2DoubleN for n = 10:", r1cs.GetNbConstraints())
 
 	_, in1 := randomG1G2Affines()
 	var res bn254.G2Affine
@@ -375,6 +376,68 @@ func TestCircuitG2scalarMulBySeedCircuit(t *testing.T) {
 	assignment := G2scalarMulBySeedCircuit{
 		In1: FromBNG2Affine(&in1),
 		Res: FromBNG2Affine(&res),
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(&assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n\n", duration_witness)
+}
+
+type G2endomorphismCircuit struct {
+	In1 G2Affine
+}
+
+func (c *G2endomorphismCircuit) Define(api frontend.API) error {
+	g2 := NewG2(api)
+	w, _ := new(big.Int).SetString("21888242871839275220042445260109153167277707414472061641714758635765020556616", 10)
+	w, _ = api.ConstantValue(w)
+	res1 := g2.phi(&c.In1, w)
+
+	u0, _ := new(big.Int).SetString("21575463638280843010398324269430826099269044274347216827212613867836435027261", 10)
+	u0, _ = api.ConstantValue(u0)
+
+	u1, _ := new(big.Int).SetString("10307601595873709700152284273816112264069230130616436755625194854815875713954", 10)
+	u1, _ = api.ConstantValue(u1)
+
+	v0, _ := new(big.Int).SetString("2821565182194536844548159561693502659359617185244120367078079554186484126554", 10)
+	v0, _ = api.ConstantValue(v0)
+
+	v1, _ := new(big.Int).SetString("3505843767911556378687030309984248845540243509899259641013678093033130930403", 10)
+	v1, _ = api.ConstantValue(v1)
+
+	res2 := g2.psi(&c.In1, fp2.Fp2{A0: u0, A1: u1}, fp2.Fp2{A0: v0, A1: v1})
+	res2 = g2.psi(res2, fp2.Fp2{A0: u0, A1: u1}, fp2.Fp2{A0: v0, A1: v1})
+	g2.AssertIsEqual(res1, res2)
+	return nil
+}
+
+func TestEndomorphismG2TestSolve(t *testing.T) {
+	var circuit G2endomorphismCircuit
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n\n", duration)
+
+	fmt.Println("number of constraints of G2scalarMulBySeed", r1cs.GetNbConstraints())
+
+	_, in1 := randomG1G2Affines()
+
+	assignment := G2endomorphismCircuit{
+		In1: FromBNG2Affine(&in1),
 	}
 
 	// Generate witness
