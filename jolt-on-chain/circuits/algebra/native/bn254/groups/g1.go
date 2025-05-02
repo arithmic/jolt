@@ -2,9 +2,7 @@ package g1ops
 
 import (
 	"github.com/arithmic/gnark/frontend"
-
-	"github.com/consensys/gnark-crypto/ecc/bn254"
-	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
+	// "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
 type G1Projective struct {
@@ -18,25 +16,24 @@ type G1 struct {
 func (g G1) Double(A *G1Projective) *G1Projective {
 	b3, _ := g.api.Compiler().ConstantValue(3 * 3)
 
-    g0 := g.api.Mul(A.Y, A.Y)
-    z3 := g.api.Mul(8, g0)
+	g0 := g.api.Mul(A.Y, A.Y)
+	z3 := g.api.Mul(8, g0)
 
-    g1 := g.api.Mul(A.Y, A.Z)
-    g2 := g.api.Mul(A.Z, A.Z)
-    g3 := g.api.Mul(b3, g2)
+	g1 := g.api.Mul(A.Y, A.Z)
+	g2 := g.api.Mul(A.Z, A.Z)
+	g3 := g.api.Mul(b3, g2)
 
-    x3 := g.api.Mul(g3, z3)
-    y3 := g.api.Add(g0, g3)
-    outZ := g.api.Mul(g1, z3)
+	x3 := g.api.Mul(g3, z3)
+	y3 := g.api.Add(g0, g3)
+	outZ := g.api.Mul(g1, z3)
 
-    t1 := g.api.Mul(2, g3)
-    t2 := g.api.Add(t1, g3)
-    t0 := g.api.Sub(g0, t2)
+	t1 := g.api.Mul(2, g3)
+	t2 := g.api.Add(t1, g3)
+	t0 := g.api.Sub(g0, t2)
 
-    outY := g.api.Add(x3, g.api.Mul(t0, y3))
-    r1 := g.api.Mul(A.X, A.Y)
-    outx := g.api.Mul(2, t0, r1)
-
+	outY := g.api.Add(x3, g.api.Mul(t0, y3))
+	r1 := g.api.Mul(A.X, A.Y)
+	outx := g.api.Mul(2, t0, r1)
 
 	return &G1Projective{
 		X: outx,
@@ -82,7 +79,6 @@ func (g G1) Add(A, B *G1Projective) *G1Projective {
 	t31 := g.api.Mul(t21, t12)
 	t32 := g.api.Add(t31, t30)
 
-
 	return &G1Projective{
 		X: t26,
 		Y: t29,
@@ -90,16 +86,38 @@ func (g G1) Add(A, B *G1Projective) *G1Projective {
 	}
 }
 
-func (g G1) AssertIsEqual(A, B *G1Projective) {
-	g.api.AssertIsEqual(A.X, B.X)
-	g.api.AssertIsEqual(A.Y, B.Y)
-	g.api.AssertIsEqual(A.Z, B.Z)
+func (g G1) ScalarMul(A *G1Projective, exp *frontend.Variable) *G1Projective {
+	n := 254
+	bits := g.api.ToBinary(*exp, n)
+
+	// one := fr.One()
+	// result := &G1Projective{0, 1, 0}
+	result := &G1Projective{
+		X: frontend.Variable(0),
+		Y: frontend.Variable(1),
+		// Y: one,
+		Z: frontend.Variable(0),
+	}
+
+	for i := 0; i < n; i++ {
+		doubled := g.Double(result)
+		added := g.Add(doubled, A)
+
+		result = g.Select(bits[n-i-1], added, doubled)
+	}
+
+	return result
 }
 
-func FromG1Affine(p *bn254.G1Affine) G1Projective {
-	return G1Projective{
-		X: fr.Element(p.X),
-		Y: fr.Element(p.Y),
-		Z: fr.One(),
+func (g G1) AssertIsEqual(A, B *G1Projective) {
+	g.api.AssertIsEqual(g.api.Mul(A.X, B.Z), g.api.Mul(B.X, A.Z))
+	g.api.AssertIsEqual(g.api.Mul(A.Y, B.Z), g.api.Mul(B.Y, A.Z))
+}
+
+func (g G1) Select(bit frontend.Variable, A, B *G1Projective) *G1Projective {
+	return &G1Projective{
+		X: g.api.Select(bit, A.X, B.X),
+		Y: g.api.Select(bit, A.Y, B.Y),
+		Z: g.api.Select(bit, A.Z, B.Z),
 	}
 }
