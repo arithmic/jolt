@@ -26,7 +26,6 @@ func NewG2(api frontend.API) *G2 {
 		api: api}
 }
 
-
 // G2Add performs addition of two G2 projective points in the constraint system.
 func (g2 *G2) G2Add(op1, op2 *G2Projective) *G2Projective {
 	var b, three fp2.Fp2
