@@ -2,7 +2,6 @@ package g1ops
 
 import (
 	"github.com/arithmic/gnark/frontend"
-	// "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
 type G1Projective struct {
@@ -90,12 +89,9 @@ func (g G1) ScalarMul(A *G1Projective, exp *frontend.Variable) *G1Projective {
 	n := 254
 	bits := g.api.ToBinary(*exp, n)
 
-	// one := fr.One()
-	// result := &G1Projective{0, 1, 0}
 	result := &G1Projective{
 		X: frontend.Variable(0),
 		Y: frontend.Variable(1),
-		// Y: one,
 		Z: frontend.Variable(0),
 	}
 

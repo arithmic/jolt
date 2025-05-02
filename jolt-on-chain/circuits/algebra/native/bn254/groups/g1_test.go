@@ -2,8 +2,6 @@ package g1ops
 
 import (
 	"crypto/rand"
-	// "fmt"
-	// "math/big"
 	"testing"
 
 	"github.com/arithmic/gnark/frontend"
@@ -14,17 +12,6 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
-
-type G1Double struct {
-	A, C G1Projective
-}
-
-func (circuit *G1Double) Define(api frontend.API) error {
-	g := &G1{api: api}
-	result := g.Double(&circuit.A)
-	g.AssertIsEqual(result, &circuit.C)
-	return nil
-}
 
 func RandomG1Affine() bn254.G1Affine {
 	_, _, gen, _ := bn254.Generators()
@@ -37,6 +24,17 @@ func RandomG1Affine() bn254.G1Affine {
 	p.ScalarMultiplication(&gen, s1)
 
 	return p
+}
+
+type G1Double struct {
+	A, C G1Projective
+}
+
+func (circuit *G1Double) Define(api frontend.API) error {
+	g := &G1{api: api}
+	result := g.Double(&circuit.A)
+	g.AssertIsEqual(result, &circuit.C)
+	return nil
 }
 
 func TestG1Double(t *testing.T) {
