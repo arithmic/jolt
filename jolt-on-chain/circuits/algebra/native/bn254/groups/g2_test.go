@@ -1,4 +1,4 @@
-package g1ops
+package groups
 
 import (
 	"crypto/rand"
@@ -21,9 +21,9 @@ type G2AddCircuit struct {
 }
 
 func (circuit *G2AddCircuit) Define(api frontend.API) error {
-	e := NewG2(api)
+	e := New(api)
 
-	expected := e.G2Add(&circuit.A, &circuit.B)
+	expected := e.Add(&circuit.A, &circuit.B)
 	e.AssertIsEqual(expected, &circuit.C)
 
 	return nil
@@ -56,7 +56,7 @@ func TestCircuitG2Add(t *testing.T) {
 		t.Fatalf("Error compiling circuit: %s", err)
 	}
 	duration := time.Since(start)
-	fmt.Printf("Circuit compiled in: %s\n\n", duration)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
 
 	fmt.Println("number of constraints of G2Add", r1cs.GetNbConstraints())
 
@@ -85,7 +85,7 @@ func TestCircuitG2Add(t *testing.T) {
 		return
 	}
 	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n\n", duration_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
 }
 
 type G2MulCircuit struct {
@@ -94,9 +94,9 @@ type G2MulCircuit struct {
 }
 
 func (circuit *G2MulCircuit) Define(api frontend.API) error {
-	e := NewG2(api)
+	e := New(api)
 
-	expected := e.G2Mul(&circuit.A, &circuit.In2)
+	expected := e.Mul(&circuit.A, &circuit.In2)
 	e.AssertIsEqual(expected, &circuit.C)
 
 	return nil
@@ -110,7 +110,7 @@ func TestCircuitG2Mul(t *testing.T) {
 		t.Fatalf("Error compiling circuit: %s", err)
 	}
 	duration := time.Since(start)
-	fmt.Printf("Circuit compiled in: %s\n\n", duration)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
 
 	fmt.Println("number of constraints of G2Mul", r1cs.GetNbConstraints())
 
@@ -144,7 +144,7 @@ func TestCircuitG2Mul(t *testing.T) {
 		return
 	}
 	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n\n", duration_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
 }
 
 type G2DoubleCircuit struct {
@@ -152,8 +152,8 @@ type G2DoubleCircuit struct {
 }
 
 func (circuit *G2DoubleCircuit) Define(api frontend.API) error {
-	e := NewG2(api)
-	expected := e.G2Double(&circuit.A)
+	e := New(api)
+	expected := e.Double(&circuit.A)
 	e.AssertIsEqual(expected, &circuit.B)
 	return nil
 }
@@ -166,7 +166,7 @@ func TestCircuitG2Double(t *testing.T) {
 		t.Fatalf("Error compiling circuit: %s", err)
 	}
 	duration := time.Since(start)
-	fmt.Printf("Circuit compiled in: %s\n\n", duration)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
 
 	fmt.Println("number of constraints of G2Double", r1cs.GetNbConstraints())
 
@@ -192,7 +192,7 @@ func TestCircuitG2Double(t *testing.T) {
 		return
 	}
 	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n\n", duration_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
 }
 
 type G2toProjectiveCircuit struct {
@@ -201,12 +201,14 @@ type G2toProjectiveCircuit struct {
 }
 
 func (circuit *G2toProjectiveCircuit) Define(api frontend.API) error {
-	e := NewG2(api)
-	expected := e.G2toProjective(&circuit.A)
+	e := New(api)
+	expected := e.ToProjective(&circuit.A)
 	e.AssertIsEqual(expected, &circuit.B)
 	return nil
 }
 
+// To test this one for identity element, we have to change A0 to 0 instead of 1.
+// and uncomment the line next to randomG1G2Affines.
 func TestCircuitG2toProjective(t *testing.T) {
 	var circuit G2toProjectiveCircuit
 	start := time.Now()
@@ -215,11 +217,12 @@ func TestCircuitG2toProjective(t *testing.T) {
 		t.Fatalf("Error compiling circuit: %s", err)
 	}
 	duration := time.Since(start)
-	fmt.Printf("Circuit compiled in: %s\n\n", duration)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
 
-	fmt.Println("number of constraints of G2toProjective", r1cs.GetNbConstraints())
+	fmt.Println("number of constraints of G2toProjectiveCircuit", r1cs.GetNbConstraints())
 
 	_, in1 := randomG1G2Affines()
+	// in1 = *in1.ScalarMultiplication(&in1, bn254_fr.Modulus())
 
 	assignment := G2toProjectiveCircuit{
 		A: G2AffineFromBNG2Affine(&in1),
@@ -239,5 +242,5 @@ func TestCircuitG2toProjective(t *testing.T) {
 		return
 	}
 	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n\n", duration_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
 }
