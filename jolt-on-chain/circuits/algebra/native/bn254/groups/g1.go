@@ -17,29 +17,29 @@ type G1API struct {
 func (g G1API) Double(A *G1Projective) *G1Projective {
 	b3, _ := g.api.Compiler().ConstantValue(3 * 3)
 
-	g0 := g.api.Mul(A.Y, A.Y)
-	z3 := g.api.Mul(8, g0)
+	t0 := g.api.Mul(A.Y, A.Y)
+	t1 := g.api.Mul(8, t0)
 
-	g1 := g.api.Mul(A.Y, A.Z)
-	g2 := g.api.Mul(A.Z, A.Z)
-	g3 := g.api.Mul(b3, g2)
+	t3 := g.api.Mul(A.Y, A.Z)
+	t4 := g.api.Mul(A.Z, A.Z)
+	t5 := g.api.Mul(b3, t4)
 
-	x3 := g.api.Mul(g3, z3)
-	y3 := g.api.Add(g0, g3)
-	outZ := g.api.Mul(g1, z3)
+	t6 := g.api.Mul(t5, t1)
+	t7 := g.api.Add(t0, t5)
+	t8 := g.api.Mul(t3, t1)
 
-	t1 := g.api.Mul(2, g3)
-	t2 := g.api.Add(t1, g3)
-	t0 := g.api.Sub(g0, t2)
+	t9 := g.api.Mul(2, t5)
+	t10 := g.api.Add(t9, t5)
+	t11 := g.api.Sub(t0, t10)
 
-	outY := g.api.Add(x3, g.api.Mul(t0, y3))
-	r1 := g.api.Mul(A.X, A.Y)
-	outx := g.api.Mul(2, t0, r1)
+	t12 := g.api.Add(t6, g.api.Mul(t11, t7))
+	t13 := g.api.Mul(A.X, A.Y)
+	t14 := g.api.Mul(2, t11, t13)
 
 	return &G1Projective{
-		X: outx,
-		Y: outY,
-		Z: outZ,
+		X: t14,
+		Y: t12,
+		Z: t8,
 	}
 }
 
@@ -121,13 +121,12 @@ func (g G1API) Select(bit frontend.Variable, A, B *G1Projective) *G1Projective {
 	}
 }
 
-
 func FromG1Affine(p *bn254.G1Affine) G1Projective {
 	if p.X.IsZero() && p.Y.IsZero() {
 		var zero, one fr.Element
 		zero.SetZero()
 		one.SetOne()
-		
+
 		return G1Projective{
 			X: zero,
 			Y: one,
