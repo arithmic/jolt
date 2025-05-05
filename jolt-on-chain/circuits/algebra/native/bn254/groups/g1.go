@@ -1,18 +1,20 @@
-package g1ops
+package g1
 
 import (
 	"github.com/arithmic/gnark/frontend"
+	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
+	"github.com/consensys/gnark-crypto/ecc/bn254"
 )
 
 type G1Projective struct {
 	X, Y, Z frontend.Variable
 }
 
-type G1 struct {
+type G1API struct {
 	api frontend.API
 }
 
-func (g G1) Double(A *G1Projective) *G1Projective {
+func (g G1API) Double(A *G1Projective) *G1Projective {
 	b3, _ := g.api.Compiler().ConstantValue(3 * 3)
 
 	g0 := g.api.Mul(A.Y, A.Y)
@@ -41,7 +43,7 @@ func (g G1) Double(A *G1Projective) *G1Projective {
 	}
 }
 
-func (g G1) Add(A, B *G1Projective) *G1Projective {
+func (g G1API) Add(A, B *G1Projective) *G1Projective {
 	b3, _ := g.api.Compiler().ConstantValue(3 * 3)
 
 	t0 := g.api.Mul(A.X, B.X)
@@ -85,7 +87,8 @@ func (g G1) Add(A, B *G1Projective) *G1Projective {
 	}
 }
 
-func (g G1) ScalarMul(A *G1Projective, exp *frontend.Variable) *G1Projective {
+func (g G1API) ScalarMul(A *G1Projective, exp *frontend.Variable) *G1Projective {
+	// TODO: Maybe n = 110. Provides enough security and leads to a smaller circuit.
 	n := 254
 	bits := g.api.ToBinary(*exp, n)
 
@@ -105,15 +108,24 @@ func (g G1) ScalarMul(A *G1Projective, exp *frontend.Variable) *G1Projective {
 	return result
 }
 
-func (g G1) AssertIsEqual(A, B *G1Projective) {
+func (g G1API) AssertIsEqual(A, B *G1Projective) {
 	g.api.AssertIsEqual(g.api.Mul(A.X, B.Z), g.api.Mul(B.X, A.Z))
 	g.api.AssertIsEqual(g.api.Mul(A.Y, B.Z), g.api.Mul(B.Y, A.Z))
 }
 
-func (g G1) Select(bit frontend.Variable, A, B *G1Projective) *G1Projective {
+func (g G1API) Select(bit frontend.Variable, A, B *G1Projective) *G1Projective {
 	return &G1Projective{
 		X: g.api.Select(bit, A.X, B.X),
 		Y: g.api.Select(bit, A.Y, B.Y),
 		Z: g.api.Select(bit, A.Z, B.Z),
+	}
+}
+
+
+func FromG1Affine(p *bn254.G1Affine) G1Projective {
+	return G1Projective{
+		X: fr.Element(p.X),
+		Y: fr.Element(p.Y),
+		Z: fr.One(),
 	}
 }
