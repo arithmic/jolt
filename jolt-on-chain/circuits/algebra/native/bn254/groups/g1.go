@@ -1,4 +1,4 @@
-package g1
+package groups
 
 import (
 	"github.com/arithmic/gnark/frontend"
