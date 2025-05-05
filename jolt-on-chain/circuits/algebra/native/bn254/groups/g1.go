@@ -123,6 +123,18 @@ func (g G1API) Select(bit frontend.Variable, A, B *G1Projective) *G1Projective {
 
 
 func FromG1Affine(p *bn254.G1Affine) G1Projective {
+	if p.X.IsZero() && p.Y.IsZero() {
+		var zero, one fr.Element
+		zero.SetZero()
+		one.SetOne()
+		
+		return G1Projective{
+			X: zero,
+			Y: one,
+			Z: zero,
+		}
+	}
+
 	return G1Projective{
 		X: fr.Element(p.X),
 		Y: fr.Element(p.Y),
