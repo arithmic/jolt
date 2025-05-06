@@ -230,7 +230,7 @@ func (e Ext2) Exp(x *Fp2, k *frontend.Variable) *Fp2 {
 	return z
 }
 
-// Select a if bit is condition is 1  otherwise b
+// Select a if condition is 1, and b if it is 0
 func (e Ext2) Select(condition frontend.Variable, a, b *Fp2) *Fp2 {
 	// Select the components of a and b based on the condition
 	z0 := e.api.Select(condition, a.A0, b.A0)

@@ -29,7 +29,7 @@ func (circuit *FrobeniusCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestFrobenius(t *testing.T) {
+func TestCircuitFrobenius(t *testing.T) {
 
 	var circuit FrobeniusCircuit
 
@@ -81,7 +81,7 @@ func (circuit *FrobeniusSquareCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestFrobenius2(t *testing.T) {
+func TestCircuitFrobeniusSquare(t *testing.T) {
 
 	var circuit FrobeniusSquareCircuit
 
@@ -133,7 +133,7 @@ func (circuit *FrobeniusCubeCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestFrobeniusCube(t *testing.T) {
+func TestCircuitFrobeniusCube(t *testing.T) {
 
 	var circuit FrobeniusCubeCircuit
 	start := time.Now()
@@ -185,7 +185,7 @@ func (circuit *MulBy01Circuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestMulBy01(t *testing.T) {
+func TestCircuitMulBy01(t *testing.T) {
 
 	var circuit MulBy01Circuit
 
@@ -248,7 +248,7 @@ func (circuit *MulBy034Circuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestMulBy034(t *testing.T) {
+func TestCircuitMulBy034(t *testing.T) {
 
 	var circuit MulBy034Circuit
 
@@ -309,7 +309,7 @@ func (circuit *FinalExponentiationCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestFinalExponentiation(t *testing.T) {
+func TestCircuitFinalExp(t *testing.T) {
 
 	var circuit FinalExponentiationCircuit
 
@@ -362,7 +362,7 @@ func (circuit *PairingCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func TestPairing(t *testing.T) {
+func TestCircuitPairing(t *testing.T) {
 
 	var circuit PairingCircuit
 

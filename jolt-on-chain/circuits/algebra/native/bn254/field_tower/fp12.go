@@ -144,7 +144,7 @@ func (e Ext12) Inverse(x *Fp12) *Fp12 {
 	}
 }
 
-// Select a if bit is condition is 1  otherwise b
+// Select a if condition is 1, and b if it is 0
 func (e Ext12) Select(condition frontend.Variable, a, b *Fp12) *Fp12 {
 	// Select the components of a and b based on the condition
 	z0 := e.e6.Select(condition, &a.A0, &b.A0)

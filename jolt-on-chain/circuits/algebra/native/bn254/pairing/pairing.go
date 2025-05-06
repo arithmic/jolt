@@ -13,9 +13,9 @@ func ExpByNegX(e12 *field_tower.Ext12, x *field_tower.Fp12) *field_tower.Fp12 {
 	XVar := frontend.Variable(4965661367192848881)
 	t := e12.Exp(x, &XVar)
 
-	out := e12.Conjugate(t)
+	res := e12.Conjugate(t)
 
-	return out
+	return res
 
 }
 
@@ -33,10 +33,8 @@ func Gamma1(e2 *field_tower.Ext2) [6]field_tower.Fp2 {
 	shiC := e2.Exp(&shi, &constExpVar)
 
 	// Initialize gamma1[0] = (1, 0)
-	gamma1[0] = field_tower.Fp2{
-		A0: frontend.Variable(1),
-		A1: frontend.Variable(0),
-	}
+	gamma1[0] = *e2.One()
+
 	// Compute gamma1[i] = gamma1[i-1] * shi_c for i = 1 to 5
 	for i := 1; i <= 5; i++ {
 		gamma1[i] = *e2.Mul(&gamma1[i-1], shiC)
@@ -72,18 +70,18 @@ func Gamma3(e2 *field_tower.Ext2, gamma1 [6]field_tower.Fp2, gamma2 [6]field_tow
 }
 
 // Computes Frobenius(x)
-func Frobenius(e2 *field_tower.Ext2, op1 *field_tower.Fp12) *field_tower.Fp12 {
+func Frobenius(e2 *field_tower.Ext2, x *field_tower.Fp12) *field_tower.Fp12 {
 
 	var t [7]field_tower.Fp2
 	var u [7]field_tower.Fp2
 
-	// Compute conjugates of op1 components
-	t[1] = *e2.Conjugate(&op1.A0.A0)
-	t[2] = *e2.Conjugate(&op1.A1.A0)
-	t[3] = *e2.Conjugate(&op1.A0.A1)
-	t[4] = *e2.Conjugate(&op1.A1.A1)
-	t[5] = *e2.Conjugate(&op1.A0.A2)
-	t[6] = *e2.Conjugate(&op1.A1.A2)
+	// Compute conjugates of x components
+	t[1] = *e2.Conjugate(&x.A0.A0)
+	t[2] = *e2.Conjugate(&x.A1.A0)
+	t[3] = *e2.Conjugate(&x.A0.A1)
+	t[4] = *e2.Conjugate(&x.A1.A1)
+	t[5] = *e2.Conjugate(&x.A0.A2)
+	t[6] = *e2.Conjugate(&x.A1.A2)
 
 	// Compute gamma1
 	gamma1 := Gamma1(e2)
@@ -93,30 +91,30 @@ func Frobenius(e2 *field_tower.Ext2, op1 *field_tower.Fp12) *field_tower.Fp12 {
 		u[i] = *e2.Mul(&t[i], &gamma1[i-1])
 	}
 
-	// Construct c0 and c1
-	c0 := field_tower.Fp6{
+	// Construct a0 and a1
+	a0 := field_tower.Fp6{
 		A0: t[1],
 		A1: u[3],
 		A2: u[5],
 	}
-	c1 := field_tower.Fp6{
+	a1 := field_tower.Fp6{
 		A0: u[2],
 		A1: u[4],
 		A2: u[6],
 	}
 
 	// Construct the output Fp12 element
-	out := field_tower.Fp12{
-		A0: c0,
-		A1: c1,
+	res := field_tower.Fp12{
+		A0: a0,
+		A1: a1,
 	}
 
-	return &out
+	return &res
 
 }
 
 // Computes Frobenius^2(x)
-func FrobeniusSquare(e2 *field_tower.Ext2, op1 *field_tower.Fp12) *field_tower.Fp12 {
+func FrobeniusSquare(e2 *field_tower.Ext2, x *field_tower.Fp12) *field_tower.Fp12 {
 
 	// Compute gamma1
 	gamma1 := Gamma1(e2)
@@ -125,45 +123,45 @@ func FrobeniusSquare(e2 *field_tower.Ext2, op1 *field_tower.Fp12) *field_tower.F
 	gamma2 := Gamma2(e2, gamma1)
 
 	// Compute intermediate values u2, u3, u4, u5, u6
-	u2 := *e2.Mul(&op1.A1.A0, &gamma2[1])
-	u3 := *e2.Mul(&op1.A0.A1, &gamma2[2])
-	u4 := *e2.Mul(&op1.A1.A1, &gamma2[3])
-	u5 := *e2.Mul(&op1.A0.A2, &gamma2[4])
-	u6 := *e2.Mul(&op1.A1.A2, &gamma2[5])
+	u2 := *e2.Mul(&x.A1.A0, &gamma2[1])
+	u3 := *e2.Mul(&x.A0.A1, &gamma2[2])
+	u4 := *e2.Mul(&x.A1.A1, &gamma2[3])
+	u5 := *e2.Mul(&x.A0.A2, &gamma2[4])
+	u6 := *e2.Mul(&x.A1.A2, &gamma2[5])
 
-	// Construct c0 and c1
-	c0 := field_tower.Fp6{
-		A0: op1.A0.A0,
+	// Construct a0 and a1
+	a0 := field_tower.Fp6{
+		A0: x.A0.A0,
 		A1: u3,
 		A2: u5,
 	}
-	c1 := field_tower.Fp6{
+	a1 := field_tower.Fp6{
 		A0: u2,
 		A1: u4,
 		A2: u6,
 	}
 	// Construct the output Fp12 element
-	out := field_tower.Fp12{
-		A0: c0,
-		A1: c1,
+	res := field_tower.Fp12{
+		A0: a0,
+		A1: a1,
 	}
 
-	return &out
+	return &res
 }
 
 // Computes Frobenius^3(x)
-func FrobeniusCube(e2 *field_tower.Ext2, op1 *field_tower.Fp12) *field_tower.Fp12 {
+func FrobeniusCube(e2 *field_tower.Ext2, x *field_tower.Fp12) *field_tower.Fp12 {
 
 	var t [7]field_tower.Fp2
 	var u [7]field_tower.Fp2
 
-	// Compute conjugates of op1 components
-	t[1] = *e2.Conjugate(&op1.A0.A0)
-	t[2] = *e2.Conjugate(&op1.A1.A0)
-	t[3] = *e2.Conjugate(&op1.A0.A1)
-	t[4] = *e2.Conjugate(&op1.A1.A1)
-	t[5] = *e2.Conjugate(&op1.A0.A2)
-	t[6] = *e2.Conjugate(&op1.A1.A2)
+	// Compute conjugates of x components
+	t[1] = *e2.Conjugate(&x.A0.A0)
+	t[2] = *e2.Conjugate(&x.A1.A0)
+	t[3] = *e2.Conjugate(&x.A0.A1)
+	t[4] = *e2.Conjugate(&x.A1.A1)
+	t[5] = *e2.Conjugate(&x.A0.A2)
+	t[6] = *e2.Conjugate(&x.A1.A2)
 
 	// Compute gamma1
 	gamma1 := Gamma1(e2)
@@ -179,43 +177,43 @@ func FrobeniusCube(e2 *field_tower.Ext2, op1 *field_tower.Fp12) *field_tower.Fp1
 		u[i] = *e2.Mul(&t[i], &gamma3[i-1])
 	}
 
-	// Construct c0 and c1
-	c0 := field_tower.Fp6{
+	// Construct a0 and a1
+	a0 := field_tower.Fp6{
 		A0: t[1],
 		A1: u[3],
 		A2: u[5],
 	}
-	c1 := field_tower.Fp6{
+	a1 := field_tower.Fp6{
 		A0: u[2],
 		A1: u[4],
 		A2: u[6],
 	}
 
 	// Construct the output Fp12 element
-	out := field_tower.Fp12{
-		A0: c0,
-		A1: c1,
+	res := field_tower.Fp12{
+		A0: a0,
+		A1: a1,
 	}
 
-	return &out
+	return &res
 }
 
 // Computes the multiplication of an Fp12 element by a sparse element of the form (c0, 0, 0, c3, c4, 0).
 // This optimization leverages the sparsity of the multiplier to reduce the number of operations required.
-func MulBy034(e2 *field_tower.Ext2, e6 *field_tower.Ext6, f *field_tower.Fp12, c0, c3, c4 *field_tower.Fp2) *field_tower.Fp12 {
+func MulBy034(e2 *field_tower.Ext2, e6 *field_tower.Ext6, x *field_tower.Fp12, c0, c3, c4 *field_tower.Fp2) *field_tower.Fp12 {
 
 	// Compute a.x, a.y, a.z
 	a := field_tower.Fp6{
-		A1: *e2.Mul(&f.A0.A1, c0),
-		A0: *e2.Mul(&f.A0.A0, c0),
-		A2: *e2.Mul(&f.A0.A2, c0),
+		A1: *e2.Mul(&x.A0.A1, c0),
+		A0: *e2.Mul(&x.A0.A0, c0),
+		A2: *e2.Mul(&x.A0.A2, c0),
 	}
 
-	b := MulBy01(e2, &f.A1, c3, c4)
+	b := MulBy01(e2, &x.A1, c3, c4)
 
 	c0_new := e2.Add(c0, c3)
 
-	temp_e := e6.Add(&f.A0, &f.A1)
+	temp_e := e6.Add(&x.A0, &x.A1)
 
 	e_result := MulBy01(e2, temp_e, c0_new, c4)
 
@@ -234,51 +232,51 @@ func MulBy034(e2 *field_tower.Ext2, e6 *field_tower.Ext6, f *field_tower.Fp12, c
 }
 
 // Computes the multiplication of an Fp6 element by a sparse element of the form (c0, c1, 0).
-func MulBy01(e2 *field_tower.Ext2, op1 *field_tower.Fp6, c0, c1 *field_tower.Fp2) *field_tower.Fp6 {
+func MulBy01(e2 *field_tower.Ext2, b *field_tower.Fp6, c0, c1 *field_tower.Fp2) *field_tower.Fp6 {
 
-	a_a := e2.Mul(&op1.A0, c0)
+	a_a := e2.Mul(&b.A0, c0)
 
-	b_b := e2.Mul(&op1.A1, c1)
+	b_b := e2.Mul(&b.A1, c1)
 
 	// Compute t1
-	tmp1 := e2.Add(&op1.A1, &op1.A2)
+	tmp1 := e2.Add(&b.A1, &b.A2)
 	tmp2 := e2.Mul(tmp1, c1)
 	tmp3 := e2.Sub(tmp2, b_b)
 	tmp4 := e2.MulByNonResidue(tmp3)
 	t1 := e2.Add(tmp4, a_a)
 
 	// Compute t3
-	tmp5 := e2.Add(&op1.A0, &op1.A2)
+	tmp5 := e2.Add(&b.A0, &b.A2)
 	tmp6 := e2.Mul(tmp5, c0)
 	tmp7 := e2.Sub(tmp6, a_a)
 	t3 := e2.Add(tmp7, b_b)
 
 	// Compute t2
 	tmp8 := e2.Add(c0, c1)
-	tmp9 := e2.Add(&op1.A0, &op1.A1)
+	tmp9 := e2.Add(&b.A0, &b.A1)
 	tmp10 := e2.Mul(tmp8, tmp9)
 	tmp11 := e2.Sub(tmp10, a_a)
 	t2 := e2.Sub(tmp11, b_b)
 
 	// Construct the output Fp6 element
-	out := field_tower.Fp6{
+	res := field_tower.Fp6{
 		A0: *t1,
 		A1: *t2,
 		A2: *t3,
 	}
 
-	return &out
+	return &res
 }
 
 // FinalExponentiation computes the exponentiation (∏ᵢ zᵢ)ᵈ
 // where d = (p¹²-1)/r = (p¹²-1)/Φ₁₂(p) ⋅ Φ₁₂(p)/r = (p⁶-1)(p²+1)(p⁴ - p² +1)/r
 // we use instead d=s ⋅ (p⁶-1)(p²+1)(p⁴ - p² +1)/r
 // where s is the cofactor 2x₀(6x₀²+3x₀+1)
-func FinalExp(e2 *field_tower.Ext2, e12 *field_tower.Ext12, f *field_tower.Fp12) *field_tower.Fp12 {
+func FinalExp(e2 *field_tower.Ext2, e12 *field_tower.Ext12, x *field_tower.Fp12) *field_tower.Fp12 {
 
 	// Easy part
-	f1 := e12.Conjugate(f)
-	f2 := e12.Inverse(f)
+	f1 := e12.Conjugate(x)
+	f2 := e12.Inverse(x)
 	f3 := e12.Mul(f1, f2)
 	f4 := FrobeniusSquare(e2, f3)
 	r := e12.Mul(f4, f3)
@@ -305,22 +303,22 @@ func FinalExp(e2 *field_tower.Ext2, e12 *field_tower.Ext12, f *field_tower.Fp12)
 	r_cyclo_inv := e12.Conjugate(r)
 	y15 := e12.Mul(r_cyclo_inv, y9)
 	y15_frobenius := FrobeniusCube(e2, y15)
-	out := e12.Mul(y15_frobenius, y14)
+	res := e12.Mul(y15_frobenius, y14)
 
-	return out
+	return res
 }
 
 // Ell computes the line evaluation in the pairing computation
-func Ell(e2 *field_tower.Ext2, e6 *field_tower.Ext6, f *field_tower.Fp12, coeff *field_tower.Fp6, p *groups.G1Affine) *field_tower.Fp12 {
+func Ell(e2 *field_tower.Ext2, e6 *field_tower.Ext6, x *field_tower.Fp12, b *field_tower.Fp6, P *groups.G1Affine) *field_tower.Fp12 {
 
 	// Compute c0
-	c0 := e2.MulByElement(&coeff.A0, &p.Y)
+	c0 := e2.MulByElement(&b.A0, &P.Y)
 
 	// Compute c1
-	c1 := e2.MulByElement(&coeff.A1, &p.X)
+	c1 := e2.MulByElement(&b.A1, &P.X)
 
-	// Compute updated_f = MulBy034()(f, c0, c1, coeff.z)
-	updated_f := MulBy034(e2, e6, f, c0, c1, &coeff.A2)
+	// Compute updated_f = MulBy034()(x, c0, c1, b.z)
+	updated_f := MulBy034(e2, e6, x, c0, c1, &b.A2)
 
 	return updated_f
 }
@@ -505,7 +503,7 @@ func (e PairingAPI) EllCoeffs(Q *groups.G2Affine) ([]field_tower.Fp6, []groups.G
 	return ell_coeff, R
 }
 
-func MulByChar(e2 *field_tower.Ext2, in *groups.G2Affine) *groups.G2Affine {
+func MulByChar(e2 *field_tower.Ext2, Q *groups.G2Affine) *groups.G2Affine {
 
 	TWIST_MUL_BY_Q_X_A0, _ := new(big.Int).SetString("21575463638280843010398324269430826099269044274347216827212613867836435027261", 10)
 	TWIST_MUL_BY_Q_X_A0Var := frontend.Variable(*TWIST_MUL_BY_Q_X_A0)
@@ -530,21 +528,21 @@ func MulByChar(e2 *field_tower.Ext2, in *groups.G2Affine) *groups.G2Affine {
 		A1: TWIST_MUL_BY_Q_Y_A1Var,
 	}
 
-	// Compute Frobenius of in.x and in.y
-	t1 := e2.Conjugate(&in.X)
-	t2 := e2.Conjugate(&in.Y)
+	// Compute Frobenius of Q.x and Q.y
+	t1 := e2.Conjugate(&Q.X)
+	t2 := e2.Conjugate(&Q.Y)
 
-	// Compute out.x and out.y
+	// Compute res.x and res.y
 	outX := e2.Mul(t1, &TWIST_MUL_BY_Q_X)
 	outY := e2.Mul(t2, &TWIST_MUL_BY_Q_Y)
 
 	// Construct the output groups.G2Affine element
-	out := &groups.G2Affine{
+	res := &groups.G2Affine{
 		X: *outX,
 		Y: *outY,
 	}
 
-	return out
+	return res
 }
 
 func (e PairingAPI) MillerLoop(Q *groups.G2Affine, P *groups.G1Projective) *field_tower.Fp12 {
@@ -564,16 +562,9 @@ func (e PairingAPI) MillerLoop(Q *groups.G2Affine, P *groups.G1Projective) *fiel
 	// Compute ell_coeff using EllCoeffs
 	ell_coeff, _ := e.EllCoeffs(Q)
 
-	// Initialize Fp2 and Fp6 constants
-	zero_2 := field_tower.Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)}
-	one_2 := field_tower.Fp2{A0: frontend.Variable(1), A1: frontend.Variable(0)}
-
-	zero_6 := field_tower.Fp6{A0: zero_2, A1: zero_2, A2: zero_2}
-	one_6 := field_tower.Fp6{A0: one_2, A1: zero_2, A2: zero_2}
-
 	// Initialize Fp12 array
 	f := make([]field_tower.Fp12, 3*n+3)
-	f[0] = field_tower.Fp12{A0: one_6, A1: zero_6}
+	f[0] = *e.e12.One()
 
 	// Main loop
 	for i := 0; i < n; i++ {
@@ -624,6 +615,6 @@ func New(api frontend.API) *PairingAPI {
 func (e PairingAPI) Pairing(Q *groups.G2Affine, P *groups.G1Projective) *field_tower.Fp12 {
 
 	miller_output := e.MillerLoop(Q, P)
-	out := FinalExp(&e.e2, &e.e12, miller_output)
-	return out
+	res := FinalExp(&e.e2, &e.e12, miller_output)
+	return res
 }

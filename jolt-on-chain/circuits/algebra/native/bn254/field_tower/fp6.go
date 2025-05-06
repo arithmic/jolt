@@ -223,7 +223,7 @@ func (e Ext6) MulByNonResidue(x *Fp6) *Fp6 {
 	return &result
 }
 
-// Select a if bit is condition is 1  otherwise b
+// Select a if condition is 1, and b if it is 0
 func (e Ext6) Select(condition frontend.Variable, a, b *Fp6) *Fp6 {
 	// Select the components of a and b based on the condition
 	z0 := e.e2.Select(condition, &a.A0, &b.A0)
