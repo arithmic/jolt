@@ -14,8 +14,8 @@ type Ext2 struct {
 	api frontend.API
 }
 
-// NewExt2 creates a new instance of Ext2
-func NewExt2(api frontend.API) *Ext2 {
+// New creates a new instance of Ext2
+func New(api frontend.API) *Ext2 {
 	return &Ext2{api: api}
 }
 

@@ -22,7 +22,7 @@ type Fp2AddCircuit struct {
 }
 
 func (circuit *Fp2AddCircuit) Define(api frontend.API) error {
-	e := NewExt2(api)
+	e := New(api)
 	expected := *e.Add(&circuit.A, &circuit.B)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -73,7 +73,7 @@ type Fp2DoubleCircuit struct {
 }
 
 func (circuit *Fp2DoubleCircuit) Define(api frontend.API) error {
-	e := NewExt2(api)
+	e := New(api)
 	expected := e.Double(&circuit.A)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -124,7 +124,7 @@ type Fp2SubCircuit struct {
 }
 
 func (circuit *Fp2SubCircuit) Define(api frontend.API) error {
-	e := NewExt2(api)
+	e := New(api)
 	expected := e.Sub(&circuit.A, &circuit.B)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -175,7 +175,7 @@ type Fp2NegCircuit struct {
 }
 
 func (circuit *Fp2NegCircuit) Define(api frontend.API) error {
-	e := NewExt2(api)
+	e := New(api)
 	expected := *e.Neg(&circuit.A)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -225,7 +225,7 @@ type Fp2ConjugateCircuit struct {
 }
 
 func (circuit *Fp2ConjugateCircuit) Define(api frontend.API) error {
-	e := NewExt2(api)
+	e := New(api)
 	expected := e.Conjugate(&circuit.A)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -275,7 +275,7 @@ type Fp2MulCircuit struct {
 }
 
 func (circuit *Fp2MulCircuit) Define(api frontend.API) error {
-	e := NewExt2(api)
+	e := New(api)
 	expected := *e.Mul(&circuit.A, &circuit.B)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -328,7 +328,7 @@ type Fp2SquareCircuit struct {
 }
 
 func (circuit *Fp2SquareCircuit) Define(api frontend.API) error {
-	e := NewExt2(api)
+	e := New(api)
 	expected := *e.Square(&circuit.A)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
@@ -378,7 +378,7 @@ type Fp2InverseCircuit struct {
 }
 
 func (circuit *Fp2InverseCircuit) Define(api frontend.API) error {
-	e := NewExt2(api)
+	e := New(api)
 	expected := e.Inverse(&circuit.A)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -428,7 +428,7 @@ type Fp2MulByNonResidueCircuit struct {
 }
 
 func (circuit *Fp2MulByNonResidueCircuit) Define(api frontend.API) error {
-	e := NewExt2(api)
+	e := New(api)
 	expected := e.MulByNonResidue(&circuit.A)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -479,7 +479,7 @@ type Fp2MulByElementCircuit struct {
 }
 
 func (circuit *Fp2MulByElementCircuit) Define(api frontend.API) error {
-	e := NewExt2(api)
+	e := New(api)
 	expected := e.MulByElement(&circuit.A, &circuit.B)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -533,7 +533,7 @@ type Fp2Exp struct {
 }
 
 func (circuit *Fp2Exp) Define(api frontend.API) error {
-	e := NewExt2(api)
+	e := New(api)
 	expected := e.Exp(&circuit.A, &circuit.B)
 	e.AssertIsEqual(expected, &circuit.C)
 	return nil

@@ -9,6 +9,7 @@ import (
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
 	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
+	groups "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/groups"
 	bn254_fr "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -21,10 +22,9 @@ type FrobeniusCircuit struct {
 }
 
 func (circuit *FrobeniusCircuit) Define(api frontend.API) error {
-
-	expected := Frobenius(&api, &circuit.A)
-
+	e2 := field_tower.New(api)
 	e12 := field_tower.NewExt12(api)
+	expected := Frobenius(e2, &circuit.A)
 	e12.AssertIsEqual(expected, &circuit.C)
 	return nil
 }
@@ -74,9 +74,9 @@ type FrobeniusSquareCircuit struct {
 }
 
 func (circuit *FrobeniusSquareCircuit) Define(api frontend.API) error {
-	expected := FrobeniusSquare(&api, &circuit.A)
-
+	e2 := field_tower.New(api)
 	e12 := field_tower.NewExt12(api)
+	expected := FrobeniusSquare(e2, &circuit.A)
 	e12.AssertIsEqual(expected, &circuit.C)
 	return nil
 }
@@ -126,7 +126,8 @@ type FrobeniusCubeCircuit struct {
 }
 
 func (circuit *FrobeniusCubeCircuit) Define(api frontend.API) error {
-	expected := FrobeniusCube(&api, &circuit.A)
+	e2 := field_tower.New(api)
+	expected := FrobeniusCube(e2, &circuit.A)
 	e12 := field_tower.NewExt12(api)
 	e12.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -135,7 +136,6 @@ func (circuit *FrobeniusCubeCircuit) Define(api frontend.API) error {
 func TestFrobeniusCube(t *testing.T) {
 
 	var circuit FrobeniusCubeCircuit
-
 	start := time.Now()
 	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
 	if err != nil {
@@ -168,7 +168,6 @@ func TestFrobeniusCube(t *testing.T) {
 	}
 	duration_witness := time.Since(start_witness)
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
-
 }
 
 type MulBy01Circuit struct {
@@ -179,8 +178,9 @@ type MulBy01Circuit struct {
 }
 
 func (circuit *MulBy01Circuit) Define(api frontend.API) error {
-	expected := MulBy01(&api, &circuit.A, &circuit.B, &circuit.C)
+	e2 := field_tower.New(api)
 	e6 := field_tower.NewExt6(api)
+	expected := MulBy01(e2, &circuit.A, &circuit.B, &circuit.C)
 	e6.AssertIsEqual(expected, &circuit.D)
 	return nil
 }
@@ -240,8 +240,10 @@ type MulBy034Circuit struct {
 }
 
 func (circuit *MulBy034Circuit) Define(api frontend.API) error {
-	expected := MulBy034(&api, &circuit.A, &circuit.B, &circuit.C, &circuit.D)
+	e2 := field_tower.New(api)
+	e6 := field_tower.NewExt6(api)
 	e12 := field_tower.NewExt12(api)
+	expected := MulBy034(e2, e6, &circuit.A, &circuit.B, &circuit.C, &circuit.D)
 	e12.AssertIsEqual(expected, &circuit.E)
 	return nil
 }
@@ -300,9 +302,9 @@ type FinalExponentiationCircuit struct {
 }
 
 func (circuit *FinalExponentiationCircuit) Define(api frontend.API) error {
-
-	expected := FinalExp(&api, &circuit.A)
+	e2 := field_tower.New(api)
 	e12 := field_tower.NewExt12(api)
+	expected := FinalExp(e2, e12, &circuit.A)
 	e12.AssertIsEqual(expected, &circuit.C)
 	return nil
 }
@@ -347,14 +349,14 @@ func TestFinalExponentiation(t *testing.T) {
 }
 
 type PairingCircuit struct {
-	A G2Affine
-	B G1Projective
+	A groups.G2Affine
+	B groups.G1Projective
 	C field_tower.Fp12 `gnark:",public"`
 }
 
 func (circuit *PairingCircuit) Define(api frontend.API) error {
-
-	expected := Pairing(&api, &circuit.A, &circuit.B)
+	pairing_api := New(api)
+	expected := pairing_api.Pairing(&circuit.A, &circuit.B)
 	e12 := field_tower.NewExt12(api)
 	e12.AssertIsEqual(expected, &circuit.C)
 	return nil
@@ -389,8 +391,8 @@ func TestPairing(t *testing.T) {
 	res, _ := bn254.Pair(P, Q)
 
 	assignment := &PairingCircuit{
-		A: G2AffineFromBNG2Affine(&Q[0]),
-		B: FromG1Affine(&P[0]),
+		A: groups.G2AffineFromBNG2Affine(&Q[0]),
+		B: groups.FromG1Affine(&P[0]),
 		C: field_tower.FromE12(&res),
 	}
 

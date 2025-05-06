@@ -5,13 +5,10 @@ import (
 
 	"github.com/arithmic/gnark/frontend"
 	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
-	"github.com/consensys/gnark-crypto/ecc/bn254"
-	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
+	groups "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/groups"
 )
 
-func ExpByNegX(e *frontend.API, x *field_tower.Fp12) *field_tower.Fp12 {
-
-	e12 := field_tower.NewExt12(*e)
+func ExpByNegX(e12 *field_tower.Ext12, x *field_tower.Fp12) *field_tower.Fp12 {
 
 	XVar := frontend.Variable(4965661367192848881)
 	t := e12.Exp(x, &XVar)
@@ -22,8 +19,7 @@ func ExpByNegX(e *frontend.API, x *field_tower.Fp12) *field_tower.Fp12 {
 
 }
 
-func Gamma1(e *frontend.API) [6]field_tower.Fp2 {
-	e2 := field_tower.NewExt2(*e)
+func Gamma1(e2 *field_tower.Ext2) [6]field_tower.Fp2 {
 	var gamma1 [6]field_tower.Fp2
 	// Define the constant shi = (9, 1)
 	shi := field_tower.Fp2{
@@ -49,10 +45,8 @@ func Gamma1(e *frontend.API) [6]field_tower.Fp2 {
 	return gamma1
 }
 
-func Gamma2(e *frontend.API, gamma1 [6]field_tower.Fp2) [6]field_tower.Fp2 {
+func Gamma2(e2 *field_tower.Ext2, gamma1 [6]field_tower.Fp2) [6]field_tower.Fp2 {
 	var gamma2 [6]field_tower.Fp2
-
-	e2 := field_tower.NewExt2(*e)
 
 	// Compute gamma2[i] = gamma1[i] * Fp2conjugate()(gamma1[i]) for i = 1 to 5
 	for i := 1; i <= 5; i++ {
@@ -66,10 +60,8 @@ func Gamma2(e *frontend.API, gamma1 [6]field_tower.Fp2) [6]field_tower.Fp2 {
 	return gamma2
 }
 
-func Gamma3(e *frontend.API, gamma1 [6]field_tower.Fp2, gamma2 [6]field_tower.Fp2) [6]field_tower.Fp2 {
+func Gamma3(e2 *field_tower.Ext2, gamma1 [6]field_tower.Fp2, gamma2 [6]field_tower.Fp2) [6]field_tower.Fp2 {
 	var gamma3 [6]field_tower.Fp2
-
-	e2 := field_tower.NewExt2(*e)
 
 	// Compute gamma3[i] = gamma1[i] * gamma2[i] for i = 1 to 5
 	for i := 1; i <= 5; i++ {
@@ -80,8 +72,7 @@ func Gamma3(e *frontend.API, gamma1 [6]field_tower.Fp2, gamma2 [6]field_tower.Fp
 }
 
 // Computes Frobenius(x)
-func Frobenius(e *frontend.API, op1 *field_tower.Fp12) *field_tower.Fp12 {
-	e2 := field_tower.NewExt2(*e)
+func Frobenius(e2 *field_tower.Ext2, op1 *field_tower.Fp12) *field_tower.Fp12 {
 
 	var t [7]field_tower.Fp2
 	var u [7]field_tower.Fp2
@@ -95,7 +86,7 @@ func Frobenius(e *frontend.API, op1 *field_tower.Fp12) *field_tower.Fp12 {
 	t[6] = *e2.Conjugate(&op1.A1.A2)
 
 	// Compute gamma1
-	gamma1 := Gamma1(e)
+	gamma1 := Gamma1(e2)
 
 	// Compute u[i] = t[i] * gamma1[i-1] for i = 2 to 6
 	for i := 2; i <= 6; i++ {
@@ -125,14 +116,13 @@ func Frobenius(e *frontend.API, op1 *field_tower.Fp12) *field_tower.Fp12 {
 }
 
 // Computes Frobenius^2(x)
-func FrobeniusSquare(e *frontend.API, op1 *field_tower.Fp12) *field_tower.Fp12 {
-	e2 := field_tower.NewExt2(*e)
+func FrobeniusSquare(e2 *field_tower.Ext2, op1 *field_tower.Fp12) *field_tower.Fp12 {
 
 	// Compute gamma1
-	gamma1 := Gamma1(e)
+	gamma1 := Gamma1(e2)
 
 	// Compute gamma2 using gamma1
-	gamma2 := Gamma2(e, gamma1)
+	gamma2 := Gamma2(e2, gamma1)
 
 	// Compute intermediate values u2, u3, u4, u5, u6
 	u2 := *e2.Mul(&op1.A1.A0, &gamma2[1])
@@ -152,7 +142,6 @@ func FrobeniusSquare(e *frontend.API, op1 *field_tower.Fp12) *field_tower.Fp12 {
 		A1: u4,
 		A2: u6,
 	}
-
 	// Construct the output Fp12 element
 	out := field_tower.Fp12{
 		A0: c0,
@@ -163,8 +152,7 @@ func FrobeniusSquare(e *frontend.API, op1 *field_tower.Fp12) *field_tower.Fp12 {
 }
 
 // Computes Frobenius^3(x)
-func FrobeniusCube(e *frontend.API, op1 *field_tower.Fp12) *field_tower.Fp12 {
-	e2 := field_tower.NewExt2(*e)
+func FrobeniusCube(e2 *field_tower.Ext2, op1 *field_tower.Fp12) *field_tower.Fp12 {
 
 	var t [7]field_tower.Fp2
 	var u [7]field_tower.Fp2
@@ -178,13 +166,13 @@ func FrobeniusCube(e *frontend.API, op1 *field_tower.Fp12) *field_tower.Fp12 {
 	t[6] = *e2.Conjugate(&op1.A1.A2)
 
 	// Compute gamma1
-	gamma1 := Gamma1(e)
+	gamma1 := Gamma1(e2)
 
 	// Compute gamma2 using gamma1
-	gamma2 := Gamma2(e, gamma1)
+	gamma2 := Gamma2(e2, gamma1)
 
 	// Compute gamma3 using gamma1 and gamma2
-	gamma3 := Gamma3(e, gamma1, gamma2)
+	gamma3 := Gamma3(e2, gamma1, gamma2)
 
 	// Compute u[i] = t[i] * gamma3[i-1] for i = 2 to 6
 	for i := 2; i <= 6; i++ {
@@ -214,9 +202,7 @@ func FrobeniusCube(e *frontend.API, op1 *field_tower.Fp12) *field_tower.Fp12 {
 
 // Computes the multiplication of an Fp12 element by a sparse element of the form (c0, 0, 0, c3, c4, 0).
 // This optimization leverages the sparsity of the multiplier to reduce the number of operations required.
-func MulBy034(e *frontend.API, f *field_tower.Fp12, c0, c3, c4 *field_tower.Fp2) *field_tower.Fp12 {
-	e6 := field_tower.NewExt6(*e)
-	e2 := field_tower.NewExt2(*e)
+func MulBy034(e2 *field_tower.Ext2, e6 *field_tower.Ext6, f *field_tower.Fp12, c0, c3, c4 *field_tower.Fp2) *field_tower.Fp12 {
 
 	// Compute a.x, a.y, a.z
 	a := field_tower.Fp6{
@@ -225,13 +211,13 @@ func MulBy034(e *frontend.API, f *field_tower.Fp12, c0, c3, c4 *field_tower.Fp2)
 		A2: *e2.Mul(&f.A0.A2, c0),
 	}
 
-	b := MulBy01(e, &f.A1, c3, c4)
+	b := MulBy01(e2, &f.A1, c3, c4)
 
 	c0_new := e2.Add(c0, c3)
 
 	temp_e := e6.Add(&f.A0, &f.A1)
 
-	e_result := MulBy01(e, temp_e, c0_new, c4)
+	e_result := MulBy01(e2, temp_e, c0_new, c4)
 
 	updated_y := e6.Sub(e_result, e6.Add(&a, b))
 
@@ -248,8 +234,7 @@ func MulBy034(e *frontend.API, f *field_tower.Fp12, c0, c3, c4 *field_tower.Fp2)
 }
 
 // Computes the multiplication of an Fp6 element by a sparse element of the form (c0, c1, 0).
-func MulBy01(e *frontend.API, op1 *field_tower.Fp6, c0, c1 *field_tower.Fp2) *field_tower.Fp6 {
-	e2 := field_tower.NewExt2(*e)
+func MulBy01(e2 *field_tower.Ext2, op1 *field_tower.Fp6, c0, c1 *field_tower.Fp2) *field_tower.Fp6 {
 
 	a_a := e2.Mul(&op1.A0, c0)
 
@@ -289,24 +274,23 @@ func MulBy01(e *frontend.API, op1 *field_tower.Fp6, c0, c1 *field_tower.Fp2) *fi
 // where d = (p¹²-1)/r = (p¹²-1)/Φ₁₂(p) ⋅ Φ₁₂(p)/r = (p⁶-1)(p²+1)(p⁴ - p² +1)/r
 // we use instead d=s ⋅ (p⁶-1)(p²+1)(p⁴ - p² +1)/r
 // where s is the cofactor 2x₀(6x₀²+3x₀+1)
-func FinalExp(e *frontend.API, f *field_tower.Fp12) *field_tower.Fp12 {
-	e12 := field_tower.NewExt12(*e)
+func FinalExp(e2 *field_tower.Ext2, e12 *field_tower.Ext12, f *field_tower.Fp12) *field_tower.Fp12 {
 
 	// Easy part
 	f1 := e12.Conjugate(f)
 	f2 := e12.Inverse(f)
 	f3 := e12.Mul(f1, f2)
-	f4 := FrobeniusSquare(e, f3)
+	f4 := FrobeniusSquare(e2, f3)
 	r := e12.Mul(f4, f3)
 
 	// Hard part
-	y0 := ExpByNegX(e, r)
+	y0 := ExpByNegX(e12, r)
 	y1 := e12.Square(y0)
 	y2 := e12.Square(y1)
 	y3 := e12.Mul(y2, y1)
-	y4 := ExpByNegX(e, y3)
+	y4 := ExpByNegX(e12, y3)
 	y5 := e12.Square(y4)
-	y6 := ExpByNegX(e, y5)
+	y6 := ExpByNegX(e12, y5)
 	y3_cyclo_inv := e12.Conjugate(y3)
 	y6_cyclo_inv := e12.Conjugate(y6)
 	y7 := e12.Mul(y6_cyclo_inv, y4)
@@ -314,90 +298,20 @@ func FinalExp(e *frontend.API, f *field_tower.Fp12) *field_tower.Fp12 {
 	y9 := e12.Mul(y8, y1)
 	y10 := e12.Mul(y8, y4)
 	y11 := e12.Mul(y10, r)
-	y12 := Frobenius(e, y9)
+	y12 := Frobenius(e2, y9)
 	y13 := e12.Mul(y12, y11)
-	y8_frobenius := FrobeniusSquare(e, y8)
+	y8_frobenius := FrobeniusSquare(e2, y8)
 	y14 := e12.Mul(y8_frobenius, y13)
 	r_cyclo_inv := e12.Conjugate(r)
 	y15 := e12.Mul(r_cyclo_inv, y9)
-	y15_frobenius := FrobeniusCube(e, y15)
+	y15_frobenius := FrobeniusCube(e2, y15)
 	out := e12.Mul(y15_frobenius, y14)
 
 	return out
 }
 
-// ///////////////////////////////////////
-// ToDo : Remove these and call these from groups
-type G1Projective struct {
-	X, Y, Z frontend.Variable
-}
-
-type G1Affine struct {
-	X, Y frontend.Variable
-}
-
-type G2Projective struct {
-	X, Y, Z field_tower.Fp2
-}
-
-type G2Affine struct {
-	X, Y field_tower.Fp2
-}
-type G2 struct {
-	e2 field_tower.Ext2
-}
-
-type G1 struct {
-	api frontend.API
-}
-
-func NewG2(api frontend.API) *G2 {
-	return &G2{e2: *field_tower.NewExt2(api)}
-}
-
-func (g G1) ToAffine(A *G1Projective) *G1Affine {
-	return &G1Affine{
-		X: g.api.Div(A.X, A.Z),
-		Y: g.api.Div(A.Y, A.Z),
-	}
-}
-
-// G2toProjective converts an affine G2 point into projective coordinates.
-func (g2 *G2) G2toProjective(affine *G2Affine) *G2Projective {
-	var one field_tower.Fp2
-	var out G2Projective
-
-	one.A0 = frontend.Variable(1)
-	one.A1 = frontend.Variable(0)
-
-	out.X = affine.X
-	out.Y = affine.Y
-	out.Z = one
-
-	return &out
-}
-
-func G2AffineFromBNG2Affine(y *bn254.G2Affine) G2Affine {
-
-	return G2Affine{
-		X: field_tower.FromE2(&y.X),
-		Y: field_tower.FromE2(&y.Y),
-	}
-}
-
-func FromG1Affine(p *bn254.G1Affine) G1Projective {
-	return G1Projective{
-		X: grumpkin_fr.Element(p.X),
-		Y: grumpkin_fr.Element(p.Y),
-		Z: grumpkin_fr.One(),
-	}
-}
-
-////////////////////////////////////////////////////////////////
-
 // Ell computes the line evaluation in the pairing computation
-func Ell(e *frontend.API, f *field_tower.Fp12, coeff *field_tower.Fp6, p *G1Affine) *field_tower.Fp12 {
-	e2 := field_tower.NewExt2(*e)
+func Ell(e2 *field_tower.Ext2, e6 *field_tower.Ext6, f *field_tower.Fp12, coeff *field_tower.Fp6, p *groups.G1Affine) *field_tower.Fp12 {
 
 	// Compute c0
 	c0 := e2.MulByElement(&coeff.A0, &p.Y)
@@ -406,17 +320,16 @@ func Ell(e *frontend.API, f *field_tower.Fp12, coeff *field_tower.Fp6, p *G1Affi
 	c1 := e2.MulByElement(&coeff.A1, &p.X)
 
 	// Compute updated_f = MulBy034()(f, c0, c1, coeff.z)
-	updated_f := MulBy034(e, f, c0, c1, &coeff.A2)
+	updated_f := MulBy034(e2, e6, f, c0, c1, &coeff.A2)
 
 	return updated_f
 }
 
 // Computes the line coefficients and the resulting point when doubling a point on the G2 curve in projective coordinates.
-func LineDouble(e *frontend.API, R *G2Projective, twoInv frontend.Variable) (*G2Projective, *field_tower.Fp6) {
-	e2 := field_tower.NewExt2(*e)
+func LineDouble(e *frontend.API, e2 *field_tower.Ext2, R *groups.G2Projective, twoInv frontend.Variable) (*groups.G2Projective, *field_tower.Fp6) {
 
 	// Initialize output variables
-	var R_Double G2Projective
+	var R_Double groups.G2Projective
 	var ell_coeff field_tower.Fp6
 
 	// Compute intermediate values
@@ -477,11 +390,10 @@ func LineDouble(e *frontend.API, R *G2Projective, twoInv frontend.Variable) (*G2
 
 // Computes the line coefficients and the resulting point when adding a G2 projective point (R) and a G2 affine point (Q).
 
-func LineAddition(e *frontend.API, R *G2Projective, Q *G2Affine) (*G2Projective, *field_tower.Fp6) {
-	e2 := field_tower.NewExt2(*e)
+func LineAddition(e *frontend.API, e2 *field_tower.Ext2, R *groups.G2Projective, Q *groups.G2Affine) (*groups.G2Projective, *field_tower.Fp6) {
 
 	// Initialize output variables
-	var R_New G2Projective
+	var R_New groups.G2Projective
 	var ell_coeff field_tower.Fp6
 
 	// Compute intermediate values
@@ -525,25 +437,24 @@ func LineAddition(e *frontend.API, R *G2Projective, Q *G2Affine) (*G2Projective,
 	return &R_New, &ell_coeff
 }
 
-func EllCoeffs(e *frontend.API, Q *G2Affine) ([]field_tower.Fp6, []G2Projective) {
+func (e PairingAPI) EllCoeffs(Q *groups.G2Affine) ([]field_tower.Fp6, []groups.G2Projective) {
 
 	// Define constants
 	n := 64
-	twoInv := (*e).Inverse(frontend.Variable(2))
+	twoInv := e.api.Inverse(frontend.Variable(2))
 
 	// Initialize arrays for ell_coeff and R
 	ell_coeff := make([]field_tower.Fp6, 2*n+2)
-	R := make([]G2Projective, 2*n+2)
+	R := make([]groups.G2Projective, 2*n+2)
 
-	g2_api := NewG2(*e)
 	// Convert Q to projective coordinates
-	R[0] = *g2_api.G2toProjective(Q)
+	R[0] = *e.g2_api.ToProjective(Q)
 
 	// Compute neg_Q
-	var neg_Q G2Affine
+	var neg_Q groups.G2Affine
 	neg_Q.X = Q.X
-	neg_Q.Y.A1 = (*e).Neg(Q.Y.A1)
-	neg_Q.Y.A0 = (*e).Neg(Q.Y.A0)
+	neg_Q.Y.A1 = e.api.Neg(Q.Y.A1)
+	neg_Q.Y.A0 = e.api.Neg(Q.Y.A0)
 
 	// Define bits array
 	bits := []int{
@@ -555,17 +466,17 @@ func EllCoeffs(e *frontend.API, Q *G2Affine) ([]field_tower.Fp6, []G2Projective)
 	// Main loop
 	for i := 0; i < n; i++ {
 		// Perform LineDouble
-		R_New, ell_coeff_New := LineDouble(e, &R[2*i], twoInv)
+		R_New, ell_coeff_New := LineDouble(&e.api, &e.e2, &R[2*i], twoInv)
 		R[2*i+1] = *R_New
 		ell_coeff[2*i] = *ell_coeff_New
 
 		// Perform LineAddition based on bits
 		if bits[n-i-1] == 1 {
-			R_New, ell_coeff_New := LineAddition(e, &R[2*i+1], Q)
+			R_New, ell_coeff_New := LineAddition(&e.api, &e.e2, &R[2*i+1], Q)
 			R[2*i+2] = *R_New
 			ell_coeff[2*i+1] = *ell_coeff_New
 		} else if bits[n-i-1] == -1 {
-			R_New, ell_coeff_New := LineAddition(e, &R[2*i+1], &neg_Q)
+			R_New, ell_coeff_New := LineAddition(&e.api, &e.e2, &R[2*i+1], &neg_Q)
 			R[2*i+2] = *R_New
 			ell_coeff[2*i+1] = *ell_coeff_New
 		} else {
@@ -575,27 +486,26 @@ func EllCoeffs(e *frontend.API, Q *G2Affine) ([]field_tower.Fp6, []G2Projective)
 	}
 
 	// Compute Q1 and Q2 using MulByChar
-	Q1 := MulByChar(e, Q)
-	Q2 := MulByChar(e, Q1)
+	Q1 := MulByChar(&e.e2, Q)
+	Q2 := MulByChar(&e.e2, Q1)
 
 	// Compute Q2_neg
-	var Q2_neg G2Affine
+	var Q2_neg groups.G2Affine
 	Q2_neg.X = Q2.X
-	Q2_neg.Y.A0 = (*e).Neg(Q2.Y.A0)
-	Q2_neg.Y.A1 = (*e).Neg(Q2.Y.A1)
+	Q2_neg.Y.A0 = e.api.Neg(Q2.Y.A0)
+	Q2_neg.Y.A1 = e.api.Neg(Q2.Y.A1)
 
 	// Final LineAddition operations
-	R_New, ell_coeff_New := LineAddition(e, &R[2*n], Q1)
+	R_New, ell_coeff_New := LineAddition(&e.api, &e.e2, &R[2*n], Q1)
 	R[2*n+1] = *R_New
 	ell_coeff[2*n] = *ell_coeff_New
-	_, ell_coeffs := LineAddition(e, &R[2*n+1], &Q2_neg)
+	_, ell_coeffs := LineAddition(&e.api, &e.e2, &R[2*n+1], &Q2_neg)
 	ell_coeff[2*n+1] = *ell_coeffs
 
 	return ell_coeff, R
 }
 
-func MulByChar(e *frontend.API, in *G2Affine) *G2Affine {
-	e2 := field_tower.NewExt2(*e)
+func MulByChar(e2 *field_tower.Ext2, in *groups.G2Affine) *groups.G2Affine {
 
 	TWIST_MUL_BY_Q_X_A0, _ := new(big.Int).SetString("21575463638280843010398324269430826099269044274347216827212613867836435027261", 10)
 	TWIST_MUL_BY_Q_X_A0Var := frontend.Variable(*TWIST_MUL_BY_Q_X_A0)
@@ -628,8 +538,8 @@ func MulByChar(e *frontend.API, in *G2Affine) *G2Affine {
 	outX := e2.Mul(t1, &TWIST_MUL_BY_Q_X)
 	outY := e2.Mul(t2, &TWIST_MUL_BY_Q_Y)
 
-	// Construct the output G2Affine element
-	out := &G2Affine{
+	// Construct the output groups.G2Affine element
+	out := &groups.G2Affine{
 		X: *outX,
 		Y: *outY,
 	}
@@ -637,8 +547,7 @@ func MulByChar(e *frontend.API, in *G2Affine) *G2Affine {
 	return out
 }
 
-func MillerLoop(e *frontend.API, Q *G2Affine, P *G1Projective) *field_tower.Fp12 {
-	e12 := field_tower.NewExt12(*e)
+func (e PairingAPI) MillerLoop(Q *groups.G2Affine, P *groups.G1Projective) *field_tower.Fp12 {
 
 	// Define constants
 	n := 64
@@ -649,11 +558,11 @@ func MillerLoop(e *frontend.API, Q *G2Affine, P *G1Projective) *field_tower.Fp12
 	}
 
 	// Convert P to affine coordinates
-	g1 := G1{api: *e}
-	p := g1.ToAffine(P)
+
+	p := e.g1_api.ToAffine(P)
 
 	// Compute ell_coeff using EllCoeffs
-	ell_coeff, _ := EllCoeffs(e, Q)
+	ell_coeff, _ := e.EllCoeffs(Q)
 
 	// Initialize Fp2 and Fp6 constants
 	zero_2 := field_tower.Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)}
@@ -669,33 +578,52 @@ func MillerLoop(e *frontend.API, Q *G2Affine, P *G1Projective) *field_tower.Fp12
 	// Main loop
 	for i := 0; i < n; i++ {
 		// Square f[3*i]
-		f[3*i+1] = *e12.Mul(&f[3*i], &f[3*i])
+		f[3*i+1] = *e.e12.Mul(&f[3*i], &f[3*i])
 
 		// Apply Ell with ell_coeff[2*i]
-		f[3*i+2] = *Ell(e, &f[3*i+1], &ell_coeff[2*i], p)
+		f[3*i+2] = *Ell(&e.e2, &e.e6, &f[3*i+1], &ell_coeff[2*i], p)
 
 		// Apply Ell or propagate based on bits
 		if bits[n-i-1] == 1 {
-			f[3*i+3] = *Ell(e, &f[3*i+2], &ell_coeff[2*i+1], p)
+			f[3*i+3] = *Ell(&e.e2, &e.e6, &f[3*i+2], &ell_coeff[2*i+1], p)
 		} else if bits[n-i-1] == -1 {
-			f[3*i+3] = *Ell(e, &f[3*i+2], &ell_coeff[2*i+1], p)
+			f[3*i+3] = *Ell(&e.e2, &e.e6, &f[3*i+2], &ell_coeff[2*i+1], p)
 		} else {
 			f[3*i+3] = f[3*i+2]
 		}
 	}
 
 	// Final Ell applications
-	f[3*n+1] = *Ell(e, &f[3*n], &ell_coeff[2*n], p)
-	f[3*n+2] = *Ell(e, &f[3*n+1], &ell_coeff[2*n+1], p)
+	f[3*n+1] = *Ell(&e.e2, &e.e6, &f[3*n], &ell_coeff[2*n], p)
+	f[3*n+2] = *Ell(&e.e2, &e.e6, &f[3*n+1], &ell_coeff[2*n+1], p)
 
 	// Output the result
 	return &f[3*n+2]
 }
 
-func Pairing(e *frontend.API, Q *G2Affine, P *G1Projective) *field_tower.Fp12 {
+type PairingAPI struct {
+	e2     field_tower.Ext2
+	e6     field_tower.Ext6
+	e12    field_tower.Ext12
+	g1_api groups.G1API
+	g2_api groups.G2API
+	api    frontend.API
+}
 
-	miller_output := MillerLoop(e, Q, P)
+func New(api frontend.API) *PairingAPI {
+	return &PairingAPI{
+		e2:     *field_tower.New(api),
+		e6:     *field_tower.NewExt6(api),
+		e12:    *field_tower.NewExt12(api),
+		g1_api: *groups.NewG1API(api),
+		g2_api: *groups.New(api),
+		api:    api,
+	}
+}
 
-	out := FinalExp(e, miller_output)
+func (e PairingAPI) Pairing(Q *groups.G2Affine, P *groups.G1Projective) *field_tower.Fp12 {
+
+	miller_output := e.MillerLoop(Q, P)
+	out := FinalExp(&e.e2, &e.e12, miller_output)
 	return out
 }
