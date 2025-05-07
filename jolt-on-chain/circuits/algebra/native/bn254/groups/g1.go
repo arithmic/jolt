@@ -20,29 +20,13 @@ type G1Affine struct {
 
 func (g G1API) ToAffine(A *G1Projective) *G1Affine {
 
-	n := 256
-	// Convert op1.Z to binary representation
-	z_bits := g.api.ToBinary(A.Z, n)
-
-	// Compute the complement of z_bits
-	z_bits_comp := make([]frontend.Variable, n)
-	for i := 0; i < n; i++ {
-		z_bits_comp[i] = g.api.Sub(1, z_bits[i])
-	}
-
-	// Compute the product of z_bits_comp
-	z_prod := make([]frontend.Variable, n)
-	z_prod[0] = z_bits_comp[0]
-	for i := 1; i < n; i++ {
-		z_prod[i] = g.api.Mul(z_prod[i-1], z_bits_comp[i])
-	}
-
-	inv_val := g.api.Inverse(g.api.Add(g.api.Mul(A.Z, g.api.Sub(frontend.Variable(1), z_prod[n-1])), z_prod[n-1]))
-	op1_z_inv := g.api.Select(g.api.IsZero(A.Z), frontend.Variable(0), inv_val)
+	z_is_zero := g.api.IsZero(A.Z)
+	inv_val := g.api.Inverse(g.api.Add(g.api.Mul(A.Z, g.api.Sub(frontend.Variable(1), z_is_zero)), z_is_zero))
+	z_inv := g.api.Select(g.api.IsZero(A.Z), frontend.Variable(0), inv_val)
 
 	// Compute the affine coordinates
-	resX := g.api.Mul(A.X, op1_z_inv)
-	resY := g.api.Mul(A.Y, op1_z_inv)
+	resX := g.api.Mul(A.X, z_inv)
+	resY := g.api.Mul(A.Y, z_inv)
 
 	return &G1Affine{
 		X: resX,

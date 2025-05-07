@@ -171,21 +171,12 @@ func (g2 *G2API) Double(P *G2Projective) *G2Projective {
 // Mul performs scalar multiplication on a G2 point with a scalar in the constraint system.
 func (g2 *G2API) Mul(P *G2Projective, exp *frontend.Variable) *G2Projective {
 	const n = 254
-
-	bits := make([]frontend.Variable, n)
-	bits = g2.api.ToBinary(*exp, n)
-
-	// Identity point (0, 1, 0)
-	zero := frontend.Variable(0)
-	one := frontend.Variable(1)
-
-	zeroFp2 := fp2.Fp2{A0: zero, A1: zero}
-	oneFp2 := fp2.Fp2{A0: one, A1: zero}
+	bits := g2.api.ToBinary(*exp, n)
 
 	res := G2Projective{
-		X: zeroFp2,
-		Y: oneFp2,
-		Z: zeroFp2,
+		X: *g2.e2.Zero(),
+		Y: *g2.e2.One(),
+		Z: *g2.e2.Zero(),
 	}
 
 	for i := 0; i < n; i++ {
@@ -199,73 +190,20 @@ func (g2 *G2API) Mul(P *G2Projective, exp *frontend.Variable) *G2Projective {
 }
 
 func (g2 *G2API) ToProjective(A *G2Affine) *G2Projective {
-	const n = 256
-	var out G2Projective
-
-	xA0Bits := make([]frontend.Variable, n)
-	xA1Bits := make([]frontend.Variable, n)
-	yA0Bits := make([]frontend.Variable, n)
-	yA1Bits := make([]frontend.Variable, n)
-
-	// Decompose each Fp2 component into bits
-	xA0Bits = g2.api.ToBinary(A.X.A0, n)
-	xA1Bits = g2.api.ToBinary(A.X.A1, n)
-	yA0Bits = g2.api.ToBinary(A.Y.A0, n)
-	yA1Bits = g2.api.ToBinary(A.Y.A1, n)
-
-	comp := func(bits []frontend.Variable) []frontend.Variable {
-		out := make([]frontend.Variable, len(bits))
-		for i := 0; i < len(bits); i++ {
-			out[i] = g2.api.Sub(1, bits[i])
-		}
-		return out
-	}
-
-	xA0Bits = comp(xA0Bits)
-	xA1Bits = comp(xA1Bits)
-	yA0Bits = comp(yA0Bits)
-	yA1Bits = comp(yA1Bits)
-
-	// Compute product of complements
-	prod := func(bits []frontend.Variable) frontend.Variable {
-		acc := bits[0]
-		for i := 1; i < len(bits); i++ {
-			acc = g2.api.Mul(acc, bits[i])
-		}
-		return acc
-	}
-
-	xA0Zero := prod(xA0Bits)
-	xA1Zero := prod(xA1Bits)
-	yA0Zero := prod(yA0Bits)
-	yA1Zero := prod(yA1Bits)
-
-	identityIndicator := g2.api.Mul(xA0Zero, g2.api.Mul(xA1Zero, g2.api.Mul(yA0Zero, yA1Zero)))
+	i1 := g2.e2.IsZero(&A.X)
+	i2 := g2.e2.IsZero(&A.Y)
+	i := g2.api.Mul(i1, i2)
 
 	projective_identity := G2Projective{
-		X: fp2.Fp2{
-			A0: frontend.Variable(0),
-			A1: frontend.Variable(0),
-		},
-		Y: fp2.Fp2{
-			A0: frontend.Variable(1),
-			A1: frontend.Variable(0),
-		},
-		Z: fp2.Fp2{
-			A0: frontend.Variable(0),
-			A1: frontend.Variable(0),
-		},
+		X: *g2.e2.Zero(),
+		Y: *g2.e2.One(),
+		Z: *g2.e2.Zero(),
 	}
-
-	out = *g2.Select(identityIndicator, &projective_identity, &G2Projective{
+	out := *g2.Select(i, &projective_identity, &G2Projective{
 		X: A.X,
 		Y: A.Y,
-		Z: fp2.Fp2{
-			A0: frontend.Variable(1),
-			A1: frontend.Variable(0),
-		},
+		Z: *g2.e2.One(),
 	})
-
 	return &out
 }
 

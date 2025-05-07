@@ -28,6 +28,12 @@ func FromE2(y *bn254.E2) Fp2 {
 	}
 }
 
+
+func (e Ext2) IsZero(x *Fp2) frontend.Variable {
+	return e.api.Mul(e.api.IsZero(x.A0), e.api.IsZero(x.A1))
+}
+
+
 func (e Ext2) One() *Fp2 {
 	return &Fp2{
 		A0: frontend.Variable(grumpkin_fr.One()),
