@@ -18,12 +18,37 @@ type G1Affine struct {
 	X, Y frontend.Variable
 }
 
-// ToDo:=  Change this
 func (g G1API) ToAffine(A *G1Projective) *G1Affine {
-	return &G1Affine{
-		X: g.api.Div(A.X, A.Z),
-		Y: g.api.Div(A.Y, A.Z),
+
+	n := 256
+	// Convert op1.Z to binary representation
+	z_bits := g.api.ToBinary(A.Z, n)
+
+	// Compute the complement of z_bits
+	z_bits_comp := make([]frontend.Variable, n)
+	for i := 0; i < n; i++ {
+		z_bits_comp[i] = g.api.Sub(1, z_bits[i])
 	}
+
+	// Compute the product of z_bits_comp
+	z_prod := make([]frontend.Variable, n)
+	z_prod[0] = z_bits_comp[0]
+	for i := 1; i < n; i++ {
+		z_prod[i] = g.api.Mul(z_prod[i-1], z_bits_comp[i])
+	}
+
+	inv_val := g.api.Inverse(g.api.Add(g.api.Mul(A.Z, g.api.Sub(frontend.Variable(1), z_prod[n-1])), z_prod[n-1]))
+	op1_z_inv := g.api.Select(g.api.IsZero(A.Z), frontend.Variable(0), inv_val)
+
+	// Compute the affine coordinates
+	resX := g.api.Mul(A.X, op1_z_inv)
+	resY := g.api.Mul(A.Y, op1_z_inv)
+
+	return &G1Affine{
+		X: resX,
+		Y: resY,
+	}
+
 }
 
 func NewG1API(api frontend.API) *G1API {
@@ -127,6 +152,11 @@ func (g G1API) ScalarMul(A *G1Projective, exp *frontend.Variable) *G1Projective 
 func (g G1API) AssertIsEqual(A, B *G1Projective) {
 	g.api.AssertIsEqual(g.api.Mul(A.X, B.Z), g.api.Mul(B.X, A.Z))
 	g.api.AssertIsEqual(g.api.Mul(A.Y, B.Z), g.api.Mul(B.Y, A.Z))
+}
+
+func (g G1API) AssertIsEqualAffinePoints(A, B *G1Affine) {
+	g.api.AssertIsEqual(A.X, B.X)
+	g.api.AssertIsEqual(A.Y, B.Y)
 }
 
 func (g G1API) Select(bit frontend.Variable, A, B *G1Projective) *G1Projective {

@@ -10,11 +10,23 @@ import (
 
 func ExpByNegX(e12 *field_tower.Ext12, x *field_tower.Fp12) *field_tower.Fp12 {
 
-	XVar := frontend.Variable(4965661367192848881)
-	t := e12.Exp(x, &XVar)
+	bits := []int{
+		1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1,
+	}
 
-	res := e12.Conjugate(t)
+	z := e12.One()
+	// Perform binary exponentiation
+	for i := 0; i < len(bits); i++ {
 
+		// Square z
+		z = e12.Square(z)
+
+		// Conditionally multiply z by x if the current bit is 1
+		if bits[i] == 1 {
+			z = e12.Mul(z, x)
+		}
+	}
+	res := e12.Conjugate(z)
 	return res
 
 }
