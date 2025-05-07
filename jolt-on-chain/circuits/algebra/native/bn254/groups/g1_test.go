@@ -11,6 +11,7 @@ import (
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
+	bn254_fr "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
@@ -142,7 +143,7 @@ func (circuit *G1ScalarMulCircuit) Define(api frontend.API) error {
 }
 
 func TestCircuitG1ScalarMul(t *testing.T) {
-	
+
 	var circuit G1ScalarMulCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -169,6 +170,61 @@ func TestCircuitG1ScalarMul(t *testing.T) {
 		A:   FromG1Affine(&a),
 		Exp: b1,
 		C:   FromG1Affine(&c),
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+}
+
+type G1ToAffineCircuit struct {
+	A G1Projective
+	C G1Affine
+}
+
+func (circuit *G1ToAffineCircuit) Define(api frontend.API) error {
+	g := G1API{api: api}
+	result := g.ToAffine(&circuit.A)
+	g.AssertIsEqualAffinePoints(result, &circuit.C)
+	return nil
+}
+
+// To test this one for identity element,  uncomment the line next to ScalarMultiplication.
+func TestCircuitG1ToAffine(t *testing.T) {
+
+	var circuit G1ToAffineCircuit
+	// Compile the circuit into an R1CS
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of G1ToAffineCircuit", r1cs.GetNbConstraints())
+
+	var a bn254.G1Affine
+	_, _, a, _ = bn254.Generators()
+
+	var ag1 bn254.G1Affine
+	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
+	ag1.ScalarMultiplication(&a, scalar)
+	// ag1.ScalarMultiplication(&a, bn254_fr.Modulus())
+
+	assignment := &G1ToAffineCircuit{
+		A: FromG1Affine(&ag1),
+		C: G1Affine{X: fr.Element(ag1.X), Y: fr.Element(ag1.Y)},
 	}
 
 	// Generate witness

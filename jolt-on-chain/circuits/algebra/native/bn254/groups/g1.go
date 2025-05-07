@@ -2,8 +2,8 @@ package groups
 
 import (
 	"github.com/arithmic/gnark/frontend"
-	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
+	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
 type G1Projective struct {
@@ -12,6 +12,31 @@ type G1Projective struct {
 
 type G1API struct {
 	api frontend.API
+}
+
+type G1Affine struct {
+	X, Y frontend.Variable
+}
+
+func (g G1API) ToAffine(A *G1Projective) *G1Affine {
+
+	z_is_zero := g.api.IsZero(A.Z)
+	inv_val := g.api.Inverse(g.api.Add(g.api.Mul(A.Z, g.api.Sub(frontend.Variable(1), z_is_zero)), z_is_zero))
+	z_inv := g.api.Select(g.api.IsZero(A.Z), frontend.Variable(0), inv_val)
+
+	// Compute the affine coordinates
+	resX := g.api.Mul(A.X, z_inv)
+	resY := g.api.Mul(A.Y, z_inv)
+
+	return &G1Affine{
+		X: resX,
+		Y: resY,
+	}
+
+}
+
+func NewG1API(api frontend.API) *G1API {
+	return &G1API{api: api}
 }
 
 func (g G1API) Double(A *G1Projective) *G1Projective {
@@ -111,6 +136,11 @@ func (g G1API) ScalarMul(A *G1Projective, exp *frontend.Variable) *G1Projective 
 func (g G1API) AssertIsEqual(A, B *G1Projective) {
 	g.api.AssertIsEqual(g.api.Mul(A.X, B.Z), g.api.Mul(B.X, A.Z))
 	g.api.AssertIsEqual(g.api.Mul(A.Y, B.Z), g.api.Mul(B.Y, A.Z))
+}
+
+func (g G1API) AssertIsEqualAffinePoints(A, B *G1Affine) {
+	g.api.AssertIsEqual(A.X, B.X)
+	g.api.AssertIsEqual(A.Y, B.Y)
 }
 
 func (g G1API) Select(bit frontend.Variable, A, B *G1Projective) *G1Projective {
