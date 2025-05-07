@@ -19,7 +19,7 @@ func New(api frontend.API) *Ext2 {
 	return &Ext2{api: api}
 }
 
-// This function is required to create an object of Fp2 from an object of E2 provided by gnark-crypto/ecc/bn254/bn254.go/E2.
+// FromE2 This function is required to create an object of Fp2 from an object of E2 provided by gnark-crypto/ecc/bn254/bn254.go/E2.
 // It comes in handy when we want to create random elements of Fp2
 func FromE2(y *bn254.E2) Fp2 {
 	return Fp2{

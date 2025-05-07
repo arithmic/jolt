@@ -18,7 +18,7 @@ func NewExt6(api frontend.API) *Ext6 {
 	return &Ext6{e2: Ext2{api: api}}
 }
 
-// This function is required to create an object of Fp6 from an object of E6 provided by gnark-crypto/ecc/bn254/bn254.go/E6.
+// FromE6 This function is required to create an object of Fp6 from an object of E6 provided by gnark-crypto/ecc/bn254/bn254.go/E6.
 // It comes in handy when we want to create random elements of Fp6
 func FromE6(y *bn254.E6) Fp6 {
 	return Fp6{
