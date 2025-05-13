@@ -144,10 +144,11 @@ func (e Ext12) Inverse(x *Fp12) *Fp12 {
 	}
 }
 
+// Select a if condition is 1, and b if it is 0
 func (e Ext12) Select(condition frontend.Variable, a, b *Fp12) *Fp12 {
 	// Select the components of a and b based on the condition
-	z0 := e.e6.Select(condition, &b.A0, &a.A0)
-	z1 := e.e6.Select(condition, &b.A1, &a.A1)
+	z0 := e.e6.Select(condition, &a.A0, &b.A0)
+	z1 := e.e6.Select(condition, &a.A1, &b.A1)
 
 	return &Fp12{
 		A0: *z0,
@@ -166,7 +167,7 @@ func (e Ext12) Exp(x *Fp12, k *frontend.Variable) *Fp12 {
 		// Square z
 		z = e.Square(z)
 		// Conditionally multiply z by x if the current bit is 1
-		z = e.Select(bits[i], z, e.Mul(z, x))
+		z = e.Select(bits[i],  e.Mul(z, x), z)
 	}
 	return z
 }
