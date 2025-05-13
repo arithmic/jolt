@@ -154,6 +154,17 @@ func (e Ext12) Select(condition frontend.Variable, a, b *Fp12) *Fp12 {
 		A1: *z1,
 	}
 }
+func (e Ext12) Select2(bit frontend.Variable, a, b *Fp12) *Fp12 {
+	api := e.E6.e2.api
+	oneMinusBit := api.Sub(frontend.Variable(1), bit)
+	api.AssertIsEqual(frontend.Variable(0), api.Mul(bit, oneMinusBit))
+
+	// Select the components of a and b based on the condition
+	z0 := e.Fp12MulFp(a, bit)
+	z1 := e.Fp12MulFp(b, oneMinusBit)
+	choice := e.Add(z0, z1)
+	return choice
+}
 
 // Exp TODO: Maybe n = 110. Provides enough security and leads to a smaller circuit.
 func (e Ext12) Exp(x *Fp12, k *frontend.Variable) *Fp12 {
@@ -174,4 +185,13 @@ func (e Ext12) Exp(x *Fp12, k *frontend.Variable) *Fp12 {
 func (e Ext12) AssertIsEqual(x, y *Fp12) {
 	e.E6.AssertIsEqual(&x.A0, &y.A0)
 	e.E6.AssertIsEqual(&x.A1, &y.A1)
+}
+
+func (e Ext12) Fp12MulFp(x *Fp12, y frontend.Variable) *Fp12 {
+	z0 := e.E6.Fp6MulFp(&x.A0, y)
+	z1 := e.E6.Fp6MulFp(&x.A1, y)
+	return &Fp12{
+		A0: *z0,
+		A1: *z1,
+	}
 }

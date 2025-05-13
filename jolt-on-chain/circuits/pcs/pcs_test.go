@@ -12,9 +12,11 @@ import (
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/groups"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
-	bn254_fp "github.com/consensys/gnark-crypto/ecc/bn254/fp"
+	bn254Fp "github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
+	"math/big"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -43,23 +45,128 @@ func (circuit *GTUniformCircuit) Define(api frontend.API) error {
 	gtAPI.Mul(&circuit.Acc, gtAPI.Exp(&circuit.In, &circuit.Exp))
 	return nil
 }
+
+type SingleGTUniformCircuit struct {
+	In  field_tower.Fp12 `gnark:",public"`
+	Acc field_tower.Fp12
+	Bit frontend.Variable
+}
+
+func (circuit *SingleGTUniformCircuit) Define(api frontend.API) error {
+	gtAPI := field_tower.NewExt12(api)
+	//gtAPI.Square(&circuit.Acc)
+	accSquare := gtAPI.Square(&circuit.Acc)
+	//api.Println("accSquare", accSquare)
+	//////gtAPI.Mul(accSquare, &circuit.In)
+	//accSquareMulIn := gtAPI.Mul(accSquare, &circuit.In)
+	//api.Println("accSquareMulIn", accSquareMulIn)
+	//api.Println("bit", circuit.Bit)
+
+	//addition := gtAPI.Select2(circuit.Bit, accSquareMulIn, accSquare)
+	addition := gtAPI.Select2(circuit.Bit, accSquare, &circuit.In)
+	gtAPI.AssertIsEqual(addition, addition)
+	return nil
+}
+
+func TestUniformSingleGTExp(t *testing.T) {
+	var a, c bn254.E12
+	var b bn254Fp.Element
+	//var bBigInt [100]big.Int
+	_, _ = a.SetRandom()
+	_, _ = b.SetRandom()
+	//b[idx].BigInt(&bBigInt[idx])
+
+	var circuit SingleGTUniformCircuit
+	start := time.Now()
+	uniformConstraints, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	circuitJson, _ := json.MarshalIndent(uniformConstraints, "", "  ")
+	_ = os.WriteFile("r1cs.json", circuitJson, 0644)
+
+	duration := time.Since(start)
+	fmt.Printf("Circuit compilation time  : %s\n", duration)
+	_, aCount, bCount, cCount := ExtractConstraints(uniformConstraints)
+	println("aCount:", aCount, "bCount:", bCount, "cCount:", cCount)
+
+	var frZero, frOne fr.Element
+	frZero.SetZero()
+	frOne.SetOne()
+
+	var frBigint big.Int
+	b.BigInt(&frBigint)
+	bit := frBigint.Bit(0)
+	c.Exp(a, &frBigint)
+
+	var one = field_tower.Fp12{A0: field_tower.Fp6{A0: field_tower.Fp2{A0: frOne, A1: frZero},
+		A1: field_tower.Fp2{A0: frZero, A1: frZero},
+		A2: field_tower.Fp2{A0: frZero, A1: frZero}},
+		A1: field_tower.Fp6{A0: field_tower.Fp2{A0: frZero, A1: frZero},
+			A1: field_tower.Fp2{A0: frZero, A1: frZero},
+			A2: field_tower.Fp2{A0: frZero, A1: frZero}}}
+
+	assignment := &SingleGTUniformCircuit{
+		In:  field_tower.FromE12(&a),
+		Acc: one,
+		Bit: frontend.Variable(bit),
+	}
+	println("bit is ", bit)
+
+	start = time.Now()
+	witness, _ := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+
+	wit, _ := uniformConstraints.Solve(witness)
+	z := wit.(*cs.R1CSSolution).W
+	//fmt.Println("z is ", z)
+	var extendZ fr.Vector
+	zLen := len(z)
+	fmt.Println("z is ", z)
+
+	for idx := 0; idx < zLen; idx++ {
+		extendZ = append(extendZ, z[idx])
+	}
+	for idx := 0; idx < 1; idx++ {
+		bit = frBigint.Bit(idx + 1)
+		println("bit is ", bit)
+
+		Acc := field_tower.Fp12{A0: field_tower.Fp6{A0: field_tower.Fp2{A0: z[zLen-12], A1: z[zLen-11]}, A1: field_tower.Fp2{A0: z[zLen-10], A1: z[zLen-9]}, A2: field_tower.Fp2{A0: z[zLen-8], A1: z[zLen-7]}}, A1: field_tower.Fp6{A0: field_tower.Fp2{A0: z[zLen-6], A1: z[zLen-5]}, A1: field_tower.Fp2{A0: z[zLen-4], A1: z[zLen-3]}, A2: field_tower.Fp2{A0: z[zLen-2], A1: z[zLen-1]}}}
+		fmt.Println("acc is ", Acc)
+		assignment := &SingleGTUniformCircuit{
+			In:  field_tower.FromE12(&a),
+			Acc: Acc,
+			Bit: frontend.Variable(bit),
+		}
+
+		witness, _ := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+		wit, _ := uniformConstraints.Solve(witness)
+		z = wit.(*cs.R1CSSolution).W
+		//fmt.Println(z)
+		for idx := 0; idx < len(z); idx++ {
+			extendZ = append(extendZ, z[idx])
+		}
+
+	}
+	duration = time.Since(start)
+	fmt.Printf("Witness generation time 2 : %s\n", duration)
+
+	fmt.Printf("exp res is  : %d\n", c)
+	//extendZLen := len(extendZ)
+	//
+	//acutalResult := field_tower.Fp12{A0: field_tower.Fp6{A0: field_tower.Fp2{A0: extendZ[extendZLen-12], A1: extendZ[extendZLen-11]}, A1: field_tower.Fp2{A0: extendZ[extendZLen-10], A1: extendZ[extendZLen-9]}, A2: field_tower.Fp2{A0: extendZ[extendZLen-8], A1: extendZ[extendZLen-7]}}, A1: field_tower.Fp6{A0: field_tower.Fp2{A0: extendZ[extendZLen-6], A1: extendZ[extendZLen-5]}, A1: field_tower.Fp2{A0: extendZ[extendZLen-4], A1: extendZ[extendZLen-3]}, A2: field_tower.Fp2{A0: extendZ[extendZLen-2], A1: extendZ[extendZLen-1]}}}
+	//
+	//fmt.Printf("exp res is  : %s\n", acutalResult)
+
+	fmt.Println("number of constraints ", uniformConstraints.GetNbConstraints())
+
+}
+
 func TestUniformGTExp(t *testing.T) {
 	var a [100]bn254.E12
-	var b [100]bn254_fp.Element
+	var b [100]bn254Fp.Element
 	//var bBigInt [100]big.Int
 	for idx := 0; idx < 100; idx++ {
 		_, _ = a[idx].SetRandom()
 		_, _ = b[idx].SetRandom()
 		//b[idx].BigInt(&bBigInt[idx])
 	}
-
-	//c.ScalarMultiplication(&a, b1.)
-
-	//var exp [250]fr.Element
-	//for i := 0; i < 250; i++ {
-	//	b_big, _ := rand.Int(rand.Reader, fp.Modulus())
-	//	exp[i].SetBigInt(b_big)
-	//}
 
 	var circuit GTUniformCircuit
 	start := time.Now()
@@ -68,7 +175,7 @@ func TestUniformGTExp(t *testing.T) {
 	fmt.Printf("Circuit compilation time 2 : %s\n", duration)
 	_, aCount, bCount, cCount := ExtractConstraints(uniformConstraints)
 	println("aCount:", aCount, "bCount:", bCount, "cCount:", cCount)
-	
+
 	var frZero, frOne fr.Element
 	frZero.SetZero()
 	frOne.SetOne()
@@ -135,8 +242,6 @@ func TestUniformG1Scalar(t *testing.T) {
 	for i := 0; i < 250; i++ {
 		a[i] = groups.RandomG1Affine()
 	}
-
-	//c.ScalarMultiplication(&a, b1.)
 
 	var exp [250]fr.Element
 	for i := 0; i < 250; i++ {
