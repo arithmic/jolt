@@ -15,25 +15,12 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
-func RandomG1Affine() bn254.G1Affine {
-	_, _, gen, _ := bn254.Generators()
-	mod := bn254.ID.ScalarField()
-	s1, err := rand.Int(rand.Reader, mod)
-	if err != nil {
-		panic(err)
-	}
-	var p bn254.G1Affine
-	p.ScalarMultiplication(&gen, s1)
-
-	return p
-}
-
 type G1DoubleCircuit struct {
 	A, C G1Projective
 }
 
 func (circuit *G1DoubleCircuit) Define(api frontend.API) error {
-	g := &G1API{api: api}
+	g := &G1API{Api: api}
 	result := g.Double(&circuit.A)
 	g.AssertIsEqual(result, &circuit.C)
 	return nil
@@ -83,7 +70,7 @@ type G1AddCircuit struct {
 }
 
 func (circuit *G1AddCircuit) Define(api frontend.API) error {
-	g := G1API{api: api}
+	g := G1API{Api: api}
 	result := g.Add(&circuit.A, &circuit.B)
 	g.AssertIsEqual(result, &circuit.C)
 	return nil
@@ -135,14 +122,14 @@ type G1ScalarMulCircuit struct {
 }
 
 func (circuit *G1ScalarMulCircuit) Define(api frontend.API) error {
-	g := &G1API{api: api}
+	g := &G1API{Api: api}
 	result := g.ScalarMul(&circuit.A, &circuit.Exp)
 	g.AssertIsEqual(result, &circuit.C)
 	return nil
 }
 
 func TestCircuitG1ScalarMul(t *testing.T) {
-	
+
 	var circuit G1ScalarMulCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
