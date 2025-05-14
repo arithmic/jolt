@@ -158,7 +158,6 @@ func (e Ext12) Select2(bit frontend.Variable, a, b *Fp12) *Fp12 {
 	api := e.E6.e2.api
 	oneMinusBit := api.Sub(frontend.Variable(1), bit)
 	api.AssertIsEqual(frontend.Variable(0), api.Mul(bit, oneMinusBit))
-
 	// Select the components of a and b based on the condition
 	z0 := e.Fp12MulFp(a, bit)
 	z1 := e.Fp12MulFp(b, oneMinusBit)
@@ -173,7 +172,7 @@ func (e Ext12) Exp(x *Fp12, k *frontend.Variable) *Fp12 {
 
 	z := e.One()
 	// Perform binary exponentiation
-	for i := 110 - 1; i >= 0; i-- {
+	for i := n - 1; i >= 0; i-- {
 		// Square z
 		z = e.Square(z)
 		// Conditionally multiply z by x if the current bit is 1

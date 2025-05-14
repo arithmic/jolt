@@ -47,9 +47,10 @@ func (circuit *GTUniformCircuit) Define(api frontend.API) error {
 }
 
 type SingleGTUniformCircuit struct {
-	In  field_tower.Fp12 `gnark:",public"`
+	In  field_tower.Fp12
 	Acc field_tower.Fp12
 	Bit frontend.Variable
+	Out field_tower.Fp12 `gnark:",public"`
 }
 
 func (circuit *SingleGTUniformCircuit) Define(api frontend.API) error {
@@ -57,14 +58,18 @@ func (circuit *SingleGTUniformCircuit) Define(api frontend.API) error {
 	//gtAPI.Square(&circuit.Acc)
 	accSquare := gtAPI.Square(&circuit.Acc)
 	//api.Println("accSquare", accSquare)
-	//////gtAPI.Mul(accSquare, &circuit.In)
-	//accSquareMulIn := gtAPI.Mul(accSquare, &circuit.In)
+	//gtAPI.Mul(accSquare, &circuit.In)
+	accSquareMulIn := gtAPI.Mul(accSquare, &circuit.In)
 	//api.Println("accSquareMulIn", accSquareMulIn)
 	//api.Println("bit", circuit.Bit)
 
-	//addition := gtAPI.Select2(circuit.Bit, accSquareMulIn, accSquare)
-	addition := gtAPI.Select2(circuit.Bit, accSquare, &circuit.In)
-	gtAPI.AssertIsEqual(addition, addition)
+	expectedOut := gtAPI.Select2(circuit.Bit, accSquareMulIn, accSquare)
+	//api.Println("circuit.Bit", circuit.Bit)
+	//api.Println("circuit.Acc", circuit.Acc)
+	//api.Println("expectedOut", expectedOut)
+	//api.Println("circuit.Out", circuit.Out)
+	//circuit.Out = *gtAPI.Select2(circuit.Bit, accSquare, &circuit.In)
+	gtAPI.AssertIsEqual(&circuit.Out, expectedOut)
 	return nil
 }
 
@@ -93,7 +98,7 @@ func TestUniformSingleGTExp(t *testing.T) {
 
 	var frBigint big.Int
 	b.BigInt(&frBigint)
-	bit := frBigint.Bit(0)
+	bit := frBigint.Bit(253)
 	c.Exp(a, &frBigint)
 
 	var one = field_tower.Fp12{A0: field_tower.Fp6{A0: field_tower.Fp2{A0: frOne, A1: frZero},
@@ -102,37 +107,43 @@ func TestUniformSingleGTExp(t *testing.T) {
 		A1: field_tower.Fp6{A0: field_tower.Fp2{A0: frZero, A1: frZero},
 			A1: field_tower.Fp2{A0: frZero, A1: frZero},
 			A2: field_tower.Fp2{A0: frZero, A1: frZero}}}
+	var out bn254.E12
+	out.SetOne()
 
+	out = computeOut(a, out, bit)
+
+	in := field_tower.FromE12(&a)
 	assignment := &SingleGTUniformCircuit{
-		In:  field_tower.FromE12(&a),
+		In:  in,
 		Acc: one,
-		Bit: frontend.Variable(bit),
+		Bit: bit,
+		Out: field_tower.FromE12(&out),
 	}
-	println("bit is ", bit)
 
 	start = time.Now()
 	witness, _ := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
 
 	wit, _ := uniformConstraints.Solve(witness)
 	z := wit.(*cs.R1CSSolution).W
-	//fmt.Println("z is ", z)
+
 	var extendZ fr.Vector
 	zLen := len(z)
-	fmt.Println("z is ", z)
 
 	for idx := 0; idx < zLen; idx++ {
 		extendZ = append(extendZ, z[idx])
 	}
-	for idx := 0; idx < 1; idx++ {
-		bit = frBigint.Bit(idx + 1)
-		println("bit is ", bit)
 
-		Acc := field_tower.Fp12{A0: field_tower.Fp6{A0: field_tower.Fp2{A0: z[zLen-12], A1: z[zLen-11]}, A1: field_tower.Fp2{A0: z[zLen-10], A1: z[zLen-9]}, A2: field_tower.Fp2{A0: z[zLen-8], A1: z[zLen-7]}}, A1: field_tower.Fp6{A0: field_tower.Fp2{A0: z[zLen-6], A1: z[zLen-5]}, A1: field_tower.Fp2{A0: z[zLen-4], A1: z[zLen-3]}, A2: field_tower.Fp2{A0: z[zLen-2], A1: z[zLen-1]}}}
-		fmt.Println("acc is ", Acc)
+	for idx := 0; idx < 253; idx++ {
+		bit = frBigint.Bit(253 - idx - 1)
+		out = computeOut(a, out, bit)
+
+		Acc := field_tower.Fp12{A0: field_tower.Fp6{A0: field_tower.Fp2{A0: z[1], A1: z[2]}, A1: field_tower.Fp2{A0: z[3], A1: z[4]}, A2: field_tower.Fp2{A0: z[5], A1: z[6]}}, A1: field_tower.Fp6{A0: field_tower.Fp2{A0: z[7], A1: z[8]}, A1: field_tower.Fp2{A0: z[9], A1: z[10]}, A2: field_tower.Fp2{A0: z[11], A1: z[12]}}}
+
 		assignment := &SingleGTUniformCircuit{
 			In:  field_tower.FromE12(&a),
 			Acc: Acc,
-			Bit: frontend.Variable(bit),
+			Bit: bit,
+			Out: field_tower.FromE12(&out),
 		}
 
 		witness, _ := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
@@ -146,16 +157,21 @@ func TestUniformSingleGTExp(t *testing.T) {
 	}
 	duration = time.Since(start)
 	fmt.Printf("Witness generation time 2 : %s\n", duration)
-
-	fmt.Printf("exp res is  : %d\n", c)
-	//extendZLen := len(extendZ)
 	//
-	//acutalResult := field_tower.Fp12{A0: field_tower.Fp6{A0: field_tower.Fp2{A0: extendZ[extendZLen-12], A1: extendZ[extendZLen-11]}, A1: field_tower.Fp2{A0: extendZ[extendZLen-10], A1: extendZ[extendZLen-9]}, A2: field_tower.Fp2{A0: extendZ[extendZLen-8], A1: extendZ[extendZLen-7]}}, A1: field_tower.Fp6{A0: field_tower.Fp2{A0: extendZ[extendZLen-6], A1: extendZ[extendZLen-5]}, A1: field_tower.Fp2{A0: extendZ[extendZLen-4], A1: extendZ[extendZLen-3]}, A2: field_tower.Fp2{A0: extendZ[extendZLen-2], A1: extendZ[extendZLen-1]}}}
+	//fmt.Printf("exp res is  : %d\n", c)
 	//
-	//fmt.Printf("exp res is  : %s\n", acutalResult)
+	//actualResult := field_tower.Fp12{A0: field_tower.Fp6{A0: field_tower.Fp2{A0: z[1], A1: z[2]}, A1: field_tower.Fp2{A0: z[3], A1: z[4]}, A2: field_tower.Fp2{A0: z[5], A1: z[6]}}, A1: field_tower.Fp6{A0: field_tower.Fp2{A0: z[7], A1: z[8]}, A1: field_tower.Fp2{A0: z[9], A1: z[10]}, A2: field_tower.Fp2{A0: z[11], A1: z[12]}}}
+	//fmt.Printf("actual res is  : %s\n", actualResult)
 
 	fmt.Println("number of constraints ", uniformConstraints.GetNbConstraints())
 
+}
+func computeOut(a bn254.E12, acc bn254.E12, bit uint) bn254.E12 {
+	acc = *acc.Square(&acc)
+	if bit == 1 {
+		acc = *acc.Mul(&a, &acc)
+	}
+	return acc
 }
 
 func TestUniformGTExp(t *testing.T) {

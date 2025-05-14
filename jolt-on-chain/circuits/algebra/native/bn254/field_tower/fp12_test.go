@@ -2,6 +2,7 @@ package field_tower
 
 import (
 	"fmt"
+	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"math/big"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ type Fp12AddCircuit struct {
 func (circuit *Fp12AddCircuit) Define(api frontend.API) error {
 	e := NewExt12(api)
 	expected := *e.Add(&circuit.A, &circuit.B)
+	api.Println("expected:", expected)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
 }
@@ -61,6 +63,10 @@ func TestCircuitFp12Add(t *testing.T) {
 		fmt.Println("Error solving the r1cs", err_1)
 		return
 	}
+	wit, _ := r1cs.Solve(witness)
+	z := wit.(*cs.R1CSSolution).W
+	//fmt.Println("z is ", z)
+	fmt.Println("z is ", z)
 	duration_witness := time.Since(start_witness)
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
 

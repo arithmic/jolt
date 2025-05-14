@@ -230,19 +230,6 @@ func (e Ext2) Select(condition frontend.Variable, a, b *Fp2) *Fp2 {
 	}
 }
 
-func (e Ext2) Select2(condition frontend.Variable, oneMinusBit frontend.Variable, a, b *Fp2) *Fp2 {
-	// Select the components of a and b based on the condition
-	//z0 := e.api.Select(condition, b.A0, a.A0)
-	z0 := e.api.Add(e.api.Mul(condition, a.A0), e.api.Mul(oneMinusBit, b.A0))
-	z1 := e.api.Add(e.api.Mul(condition, a.A0), e.api.Mul(oneMinusBit, b.A0))
-	//z1 := e.api.Select(condition, b.A1, a.A1)
-
-	return &Fp2{
-		A0: z0,
-		A1: z1,
-	}
-}
-
 func (e Ext2) AssertIsEqual(x, y *Fp2) {
 	e.api.AssertIsEqual(x.A0, y.A0)
 	e.api.AssertIsEqual(x.A1, y.A1)

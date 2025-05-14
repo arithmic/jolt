@@ -237,20 +237,6 @@ func (e Ext6) Select(condition frontend.Variable, a, b *Fp6) *Fp6 {
 		A2: *z2,
 	}
 }
-func (e Ext6) Select2(condition frontend.Variable, oneMinusBit frontend.Variable, a, b *Fp6) *Fp6 {
-	// Select the components of a and b based on the condition
-	z0 := e.e2.Select2(condition, oneMinusBit, &b.A0, &a.A0)
-
-	z1 := e.e2.Select2(condition, oneMinusBit, &b.A1, &a.A1)
-
-	z2 := e.e2.Select2(condition, oneMinusBit, &b.A2, &a.A2)
-
-	return &Fp6{
-		A0: *z0,
-		A1: *z1,
-		A2: *z2,
-	}
-}
 
 func (e Ext6) AssertIsEqual(x, y *Fp6) {
 	e.e2.AssertIsEqual(&x.A0, &y.A0)
