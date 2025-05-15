@@ -79,7 +79,6 @@ func (e Ext12) Mul(x, y *Fp12) *Fp12 {
 	// Compute z.A0 = b + NonResidue * c
 	z0 := *e.E6.MulByNonResidue(&c) // z.A0 = NonResidue * c
 	z0 = *e.E6.Add(&z0, &b)         // z.A0 = z.A0 + b
-
 	// Return the result
 	return &Fp12{
 		A0: z0,
