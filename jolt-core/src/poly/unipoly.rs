@@ -38,6 +38,74 @@ impl<F: JoltField> UniPoly<F> {
         }
     }
 
+    /// Bit-reverses indices to prepare for in-place FFT
+    fn bit_reverse(vec: &mut Vec<F>) {
+        let n = vec.len();
+        let mut j = 0;
+
+        for i in 1..n {
+            let mut bit = n >> 1;
+            while (j & bit) != 0 {
+                j ^= bit;
+                bit >>= 1;
+            }
+            j ^= bit;
+
+            if i < j {
+                vec.swap(i, j);
+            }
+        }
+    }
+
+    pub fn fft(a: &mut Vec<F>, omega: F) {
+        let n = a.len();
+        assert!(n.is_power_of_two(), "Length must be power of two");
+
+        UniPoly::bit_reverse(a);
+
+        let mut m = 1;
+        while m < n {
+            let w_m = omega.power((n / (2 * m)) as u64);
+            for k in (0..n).step_by(2 * m) {
+                let mut w = F::one();
+                for j in 0..m {
+                    let t = w * a[k + j + m];
+                    let u = a[k + j];
+                    a[k + j] = u + t;
+                    a[k + j + m] = u - t;
+                    w.mul_assign(w_m);
+                }
+            }
+            m *= 2;
+        }
+    }
+
+    /// Multiplies f and g and returns result in f.
+    pub fn multiply(f: &mut Vec<F>, g: &mut Vec<F>) {
+        assert_eq!(f.len(), g.len());
+        assert!(f.len().is_power_of_two());
+
+        let n = f.len() * 2;
+        f.resize(n, F::zero());
+        g.resize(n, F::zero());
+
+        let (ord, mut omega) = F::primitive_root_of_unity();
+        omega = omega.power(1 << ((ord - n.ilog2()) as u64));
+
+        UniPoly::fft(f, omega);
+        UniPoly::fft(g, omega);
+
+        for i in 0..n {
+            f[i] *= g[i];
+        }
+
+        UniPoly::fft(f, omega.inverse().unwrap());
+
+        for i in 0..n {
+            f[i] *= F::from_u64(n as u64).inverse().unwrap();
+        }
+    }
+
     fn vandermonde_interpolation(evals: &[F]) -> Vec<F> {
         let n = evals.len();
         let xs: Vec<F> = (0..n).map(|x| F::from_u64(x as u64)).collect();
@@ -212,7 +280,9 @@ impl<F: JoltField> UniPoly<F> {
     }
 
     pub fn shift_coefficients(&mut self, rhs: &F) {
-        self.coeffs.par_iter_mut().for_each(|c| *c += *rhs);
+        self.coeffs.par_iter_mut().for_each(|c| {
+            *c += *rhs;
+        });
     }
 }
 
@@ -281,7 +351,9 @@ impl<F: JoltField> IndexMut<usize> for UniPoly<F> {
 
 impl<F: JoltField> MulAssign<&F> for UniPoly<F> {
     fn mul_assign(&mut self, rhs: &F) {
-        self.coeffs.par_iter_mut().for_each(|c| *c *= *rhs);
+        self.coeffs.par_iter_mut().for_each(|c| {
+            *c *= *rhs;
+        });
     }
 }
 
@@ -336,8 +408,11 @@ impl<F: JoltField> AppendToTranscript for CompressedUniPoly<F> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use super::*;
     use ark_bn254::Fr;
+    use ark_ff::{AdditiveGroup, Field};
     use rand_chacha::ChaCha20Rng;
     use rand_core::SeedableRng;
 
@@ -432,9 +507,30 @@ mod tests {
                 {
                     let mut prod = naive_mul(&divisor, &quotient);
                     prod += &remainder;
-                    assert_eq!(dividend, prod)
+                    assert_eq!(dividend, prod);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_multiply() {
+        let rng = &mut ChaCha20Rng::from_seed([0u8; 32]);
+
+        for i in 0..15 {
+            let mut a = UniPoly::<Fr>::random(1 << i, rng);
+            let mut b = UniPoly::<Fr>::random(1 << i, rng);
+            let now = Instant::now();
+            let c = naive_mul(&a, &b);
+            println!("degree = {}", 1 << i);
+            println!("naive_mul took {:?}", now.elapsed());
+
+            let now = Instant::now();
+            UniPoly::multiply(&mut a.coeffs, &mut b.coeffs);
+            println!("multiply took {:?}", now.elapsed());
+            println!();
+
+            assert_eq!(a.coeffs[0..a.coeffs.len() - 1], c.coeffs, "i = {}", i);
         }
     }
 }

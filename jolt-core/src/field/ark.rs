@@ -1,4 +1,4 @@
-use ark_ff::{prelude::*, BigInt, PrimeField, UniformRand};
+use ark_ff::{prelude::*, BigInt, FftField, PrimeField, UniformRand};
 use rayon::prelude::*;
 
 use crate::utils::thread::unsafe_allocate_zero_vec;
@@ -166,6 +166,10 @@ impl JoltField for ark_bn254::Fr {
         <Self as ark_ff::Field>::square(self)
     }
 
+    fn power(&self, exponent: u64) -> Self {
+        <Self as ark_ff::Field>::pow(self, [exponent])
+    }
+
     fn inverse(&self) -> Option<Self> {
         <Self as ark_ff::Field>::inverse(self)
     }
@@ -187,6 +191,13 @@ impl JoltField for ark_bn254::Fr {
     #[inline(always)]
     fn mul_i128(&self, n: i128) -> Self {
         ark_ff::Fp::mul_i128(*self, n)
+    }
+
+    fn primitive_root_of_unity() -> (u32, Self) {
+        (
+            ark_bn254::Fr::TWO_ADICITY,
+            ark_bn254::Fr::TWO_ADIC_ROOT_OF_UNITY,
+        )
     }
 }
 
