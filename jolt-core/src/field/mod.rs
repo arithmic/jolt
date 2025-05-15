@@ -2,6 +2,7 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
+use ark_ff::BigInt;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{One, Zero};
 
@@ -65,6 +66,7 @@ pub trait JoltField:
     fn from_i128(val: i128) -> Self;
     fn square(&self) -> Self;
     fn from_bytes(bytes: &[u8]) -> Self;
+    fn power(&self, exponent: u64) -> Self;
     fn inverse(&self) -> Option<Self>;
     fn to_u64(&self) -> Option<u64> {
         unimplemented!("conversion to u64 not implemented");
@@ -83,6 +85,8 @@ pub trait JoltField:
     fn mul_i128(&self, n: i128) -> Self {
         *self * Self::from_i128(n)
     }
+
+    fn primitive_root_of_unity() -> (u32, Self);
 }
 
 pub trait OptimizedMul<Rhs, Output>: Sized + Mul<Rhs, Output = Output> {
