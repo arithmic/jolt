@@ -2027,6 +2027,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "jolt-on-chain"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "jolt-sdk"
 version = "0.1.0"
 dependencies = [
