@@ -515,6 +515,91 @@ func (e PairingAPI) EllCoeffs(Q *groups.G2Affine) ([]field_tower.Fp6, []groups.G
 	return ell_coeff, R
 }
 
+func (e PairingAPI) EllCoeffStep(
+	Rin *groups.G2Projective, // R[2*i]
+	Q, negQ *groups.G2Affine, // Q and -Q
+	bit int, // {-1, 0, 1}
+	twoInv frontend.Variable,
+) (Rmid, Rout groups.G2Projective, ell1, ell2 *field_tower.Fp6) {
+	// Step 1: LineDouble
+	RmidPtr, ell1Ptr := LineDouble(&e.api, &e.e2, Rin, twoInv)
+	Rmid = *RmidPtr
+	ell1 = ell1Ptr
+
+	// Step 2: LineAddition or Propagation
+	if bit == 1 {
+		RoutPtr, ell2Ptr := LineAddition(&e.api, &e.e2, &Rmid, Q)
+		Rout = *RoutPtr
+		ell2 = ell2Ptr
+	} else if bit == -1 {
+		RoutPtr, ell2Ptr := LineAddition(&e.api, &e.e2, &Rmid, negQ)
+		Rout = *RoutPtr
+		ell2 = ell2Ptr
+	} else {
+		Rout = Rmid
+		ell2 = ell1
+	}
+
+	return
+}
+
+func (e PairingAPI) EllCoeffsNew(Q *groups.G2Affine) ([]field_tower.Fp6, []groups.G2Projective) {
+	// Define constants
+	n := 64
+	twoInv := e.api.Inverse(frontend.Variable(2))
+
+	// Initialize arrays for ell_coeff and R
+	ell_coeff := make([]field_tower.Fp6, 2*n+2)
+	R := make([]groups.G2Projective, 2*n+2)
+
+	// Convert Q to projective coordinates
+	R[0] = *e.g2_api.ToProjective(Q)
+
+	// Compute neg_Q
+	var neg_Q groups.G2Affine
+	neg_Q.X = Q.X
+	neg_Q.Y.A1 = e.api.Neg(Q.Y.A1)
+	neg_Q.Y.A0 = e.api.Neg(Q.Y.A0)
+
+	// Define bits array
+	bits := []int{
+		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
+		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
+		-1, 0, 0, 0, 1, 0, 1,
+	}
+
+	// Main loop
+	for i := 0; i < n; i++ {
+		bit := bits[n-1-i]
+		Rmid, Rout, ell1, ell2 := e.EllCoeffStep(&R[2*i], Q, &neg_Q, bit, twoInv)
+
+		R[2*i+1] = Rmid
+		ell_coeff[2*i] = *ell1
+
+		R[2*i+2] = Rout
+		ell_coeff[2*i+1] = *ell2
+	}
+
+	// Compute Q1 and Q2 using MulByChar
+	Q1 := MulByChar(&e.e2, Q)
+	Q2 := MulByChar(&e.e2, Q1)
+
+	// Compute Q2_neg
+	var Q2_neg groups.G2Affine
+	Q2_neg.X = Q2.X
+	Q2_neg.Y.A0 = e.api.Neg(Q2.Y.A0)
+	Q2_neg.Y.A1 = e.api.Neg(Q2.Y.A1)
+
+	// Final LineAddition operations
+	R_New, ell_coeff_New := LineAddition(&e.api, &e.e2, &R[2*n], Q1)
+	R[2*n+1] = *R_New
+	ell_coeff[2*n] = *ell_coeff_New
+	_, ell_coeffs := LineAddition(&e.api, &e.e2, &R[2*n+1], &Q2_neg)
+	ell_coeff[2*n+1] = *ell_coeffs
+
+	return ell_coeff, R
+}
+
 func MulByChar(e2 *field_tower.Ext2, Q *groups.G2Affine) *groups.G2Affine {
 
 	TWIST_MUL_BY_Q_X_A0, _ := new(big.Int).SetString("21575463638280843010398324269430826099269044274347216827212613867836435027261", 10)
@@ -602,6 +687,71 @@ func (e PairingAPI) MillerLoop(Q *groups.G2Affine, P *groups.G1Projective) *fiel
 
 	// Output the result
 	return &f[3*n+2]
+}
+
+func (e PairingAPI) MillerLoopStep(
+	fIn *field_tower.Fp12, // f[3*i]
+	ell []field_tower.Fp6, // ell_coeff[2*i], ell_coeff[2*i+1]
+	p *groups.G1Affine, // affine P
+	bit int, // bits[n-1-i]
+) (f1, f2, f3 field_tower.Fp12) {
+	// Step 1: f1 = fIn^2
+	f1 = *e.e12.Mul(fIn, fIn)
+
+	// Step 2: f2 = Ell(f1, ell1)
+	f2 = *Ell(&e.e2, &e.e6, &f1, &ell[0], p)
+
+	// Step 3: f3 = Ell(f2, ell2) if bit != 0 else f2
+	if bit == 1 || bit == -1 {
+		f3 = *Ell(&e.e2, &e.e6, &f2, &ell[1], p)
+	} else {
+		f3 = f2
+	}
+
+	return
+}
+
+func (e PairingAPI) MillerLoopNew(Q *groups.G2Affine, P *groups.G1Projective) *field_tower.Fp12 {
+
+	// Define constants
+	n := 64
+	bits := []int{
+		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
+		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
+		-1, 0, 0, 0, 1, 0, 1,
+	}
+
+	// Convert P to affine coordinates
+
+	p := e.g1_api.ToAffine(P)
+
+	// Compute ell_coeff using EllCoeffs
+	ell_coeff, _ := e.EllCoeffs(Q)
+
+	// Initialize Fp12 array
+	f := make([]field_tower.Fp12, 4)
+
+	f[0] = *e.e12.One()
+
+	for i := 0; i < n; i++ {
+		bit := bits[n-1-i]
+		f1, f2, f3 := e.MillerLoopStep(
+			&f[0],
+			ell_coeff[2*i:2*i+2],
+			p,
+			bit,
+		)
+		f[0] = f3
+		f[1] = f1
+		f[2] = f2
+	}
+
+	// Final Ell applications
+	f[1] = *Ell(&e.e2, &e.e6, &f[0], &ell_coeff[2*n], p)
+	f[2] = *Ell(&e.e2, &e.e6, &f[1], &ell_coeff[2*n+1], p)
+
+	// Output the result
+	return &f[2]
 }
 
 type PairingAPI struct {

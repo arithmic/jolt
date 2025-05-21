@@ -170,3 +170,10 @@ func FromG1Affine(p *bn254.G1Affine) G1Projective {
 		Z: fr.One(),
 	}
 }
+
+func AffineFromG1Affine(p *bn254.G1Affine) G1Affine {
+	return G1Affine{
+		X: fr.Element(p.X),
+		Y: fr.Element(p.Y),
+	}
+}

@@ -410,3 +410,178 @@ func TestCircuitPairing(t *testing.T) {
 	duration_witness := time.Since(start_witness)
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
 }
+
+type MillerUniformCircuit struct {
+	FIn       field_tower.Fp12 `gnark:",public"`
+	P         groups.G1Affine  `gnark:",public"`
+	Ell_Coeff [2]field_tower.Fp6
+	FOut      [3]field_tower.Fp12
+	Bit       int
+	Step      int
+}
+
+func (circuit *MillerUniformCircuit) Define(api frontend.API) error {
+	pairing_api := New(api)
+
+	f1, f2, f3 := pairing_api.MillerLoopStep(&circuit.FIn, circuit.Ell_Coeff[:], &circuit.P, circuit.Bit)
+	e12 := field_tower.NewExt12(api)
+	e12.AssertIsEqual(&f1, &circuit.FOut[0])
+	e12.AssertIsEqual(&f2, &circuit.FOut[1])
+	e12.AssertIsEqual(&f3, &circuit.FOut[2])
+
+	return nil
+}
+
+func TestCircuitMillerStep(t *testing.T) {
+	// Define the circuit
+
+	var circuit MillerUniformCircuit
+	// Compile the circuit into an R1CS
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of MillerUniformCircuit", r1cs.GetNbConstraints())
+
+	_, _, g1GenAff, g2GenAff := bn254.Generators()
+
+	var P bn254.G1Affine
+	var Q bn254.G2Affine
+
+	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
+	P.ScalarMultiplication(&g1GenAff, scalar)
+	Q.ScalarMultiplication(&g2GenAff, scalar)
+
+	// P := bn254.G1Affine{ag1}
+	// Q := []bn254.G2Affine{bg2}
+	bits := []int{
+		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
+		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
+		-1, 0, 0, 0, 1, 0, 1,
+	}
+	var c bn254.E12
+	// make FOut an array of lenght 3 for FOut
+	var FOut [3]field_tower.Fp12
+	// _ = c.SetOne()
+	// c_vector[0] = field_tower.FromE12(&c)
+	// c_vector[1] = field_tower.FromE12(&c)
+	// c_vector[2] = field_tower.FromE12(&c)
+	Ell_coeff, _ := EllCoeffs_fn(&Q)
+	var FIn bn254.E12
+	FIn.SetOne()
+
+	var Ell_coeff_new [2]field_tower.Fp6
+
+	for i := 0; i < 2; i++ {
+		Ell_coeff_new[i] = field_tower.FromE6(&Ell_coeff[i])
+	}
+	f1, f2, f3 := MillerLoopStep_fn(&FIn, Ell_coeff[0:2], &P, bits[0])
+	FOut[0] = field_tower.FromE12(&f1)
+	FOut[1] = field_tower.FromE12(&f2)
+	FOut[2] = field_tower.FromE12(&f3)
+
+	assignment := &MillerUniformCircuit{
+		FIn:       field_tower.FromE12(c.SetOne()),
+		P:         groups.AffineFromG1Affine(&P),
+		Ell_Coeff: Ell_coeff_new,
+		FOut:      FOut,
+		Bit:       bits[0],
+		Step:      0,
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
+}
+
+type EllCoeffsCircuit struct {
+	Q         groups.G2Affine
+	Ell_coeff [130]field_tower.Fp6
+}
+
+func (circuit *EllCoeffsCircuit) Define(api frontend.API) error {
+	pairing_api := New(api)
+	Ell_coeffsss, _ := pairing_api.EllCoeffs(&circuit.Q)
+	e6 := field_tower.NewExt6(api)
+	for i := 0; i < 130; i++ {
+		e6.AssertIsEqual(&Ell_coeffsss[i], &circuit.Ell_coeff[i])
+	}
+	return nil
+}
+
+func TestCircuitEllCoeffs(t *testing.T) {
+	var circuit EllCoeffsCircuit
+	// Compile the circuit into an R1CS
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of EllCoeffsCircuit", r1cs.GetNbConstraints())
+
+	_, a := randomG1G2Affines()
+
+	Ell_coeff, _ := EllCoeffs_fn(&a)
+
+	var Ell_coeff_new [130]field_tower.Fp6
+
+	for i := 0; i < 130; i++ {
+		Ell_coeff_new[i] = field_tower.FromE6(&Ell_coeff[i])
+	}
+
+	assignment := &EllCoeffsCircuit{
+		Q:         groups.G2AffineFromBNG2Affine(&a),
+		Ell_coeff: Ell_coeff_new,
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+}
+
+func randomG1G2Affines() (bn254.G1Affine, bn254.G2Affine) {
+	_, _, G1AffGen, G2AffGen := bn254.Generators()
+	mod := bn254.ID.ScalarField()
+	s1, err := rand.Int(rand.Reader, mod)
+	if err != nil {
+		panic(err)
+	}
+	s2, err := rand.Int(rand.Reader, mod)
+	if err != nil {
+		panic(err)
+	}
+
+	var p bn254.G1Affine
+	p.ScalarMultiplication(&G1AffGen, s1)
+	var q bn254.G2Affine
+	q.ScalarMultiplication(&G2AffGen, s2)
+	return p, q
+}
