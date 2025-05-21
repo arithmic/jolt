@@ -693,7 +693,7 @@ func (e PairingAPI) MillerLoopStep(
 	fIn *field_tower.Fp12, // f[3*i]
 	ell []field_tower.Fp6, // ell_coeff[2*i], ell_coeff[2*i+1]
 	p *groups.G1Affine, // affine P
-	bit int, // bits[n-1-i]
+	bit frontend.Variable, // bits[n-1-i]
 ) (f1, f2, f3 field_tower.Fp12) {
 	// Step 1: f1 = fIn^2
 	f1 = *e.e12.Mul(fIn, fIn)
@@ -701,14 +701,17 @@ func (e PairingAPI) MillerLoopStep(
 	// Step 2: f2 = Ell(f1, ell1)
 	f2 = *Ell(&e.e2, &e.e6, &f1, &ell[0], p)
 
-	// Step 3: f3 = Ell(f2, ell2) if bit != 0 else f2
-	if bit == 1 || bit == -1 {
-		f3 = *Ell(&e.e2, &e.e6, &f2, &ell[1], p)
-	} else {
-		f3 = f2
-	}
+	// e.api.IsZero(bit)
 
-	return
+	f3_val := *Ell(&e.e2, &e.e6, &f2, &ell[1], p)
+
+	val := e.api.IsZero(bit)
+	f3 = *(e).e12.Select(
+		val,
+		&f2,
+		&f3_val)
+
+	return f1, f2, f3
 }
 
 func (e PairingAPI) MillerLoopNew(Q *groups.G2Affine, P *groups.G1Projective) *field_tower.Fp12 {

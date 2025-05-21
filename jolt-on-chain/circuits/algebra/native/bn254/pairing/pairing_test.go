@@ -418,8 +418,7 @@ type MillerUniformCircuit struct {
 	P         groups.G1Affine  `gnark:",public"`
 	Ell_Coeff [2]field_tower.Fp6
 	FOut      [3]field_tower.Fp12
-	Bit       int
-	Step      int
+	Bit       frontend.Variable
 }
 
 func (circuit *MillerUniformCircuit) Define(api frontend.API) error {
@@ -480,28 +479,14 @@ func TestCircuitMillerStep(t *testing.T) {
 	FOut[0] = field_tower.FromE12(&f1)
 	FOut[1] = field_tower.FromE12(&f2)
 	FOut[2] = field_tower.FromE12(&f3)
-
+	
 	assignment := &MillerUniformCircuit{
 		FIn:       field_tower.FromE12(c.SetOne()),
 		P:         groups.AffineFromG1Affine(&P),
 		Ell_Coeff: Ell_coeff_new,
 		FOut:      FOut,
 		Bit:       bits[0],
-		Step:      0,
 	}
-
-	// fmt.Println("f3.C0.B0.A0)", f3.C0.B0.A0.String())
-	// fmt.Println("f3.C0.B0.A1)", f3.C0.B0.A1.String())
-	// fmt.Println("f3.C0.B1.A0)", f3.C0.B1.A0.String())
-	// fmt.Println("f3.C0.B1.A1)", f3.C0.B1.A1.String())
-	// fmt.Println("f3.C0.B2.A0)", f3.C0.B2.A0.String())
-	// fmt.Println("f3.C0.B2.A1)", f3.C0.B2.A1.String())
-	// fmt.Println("f3.C1.B0.A0)", f3.C1.B0.A0.String())
-	// fmt.Println("f3.C1.B0.A1)", f3.C1.B0.A1.String())
-	// fmt.Println("f3.C1.B1.A0)", f3.C1.B1.A0.String())
-	// fmt.Println("f3.C1.B1.A1)", f3.C1.B1.A1.String())
-	// fmt.Println("f3.C1.B2.A0)", f3.C1.B2.A0.String())
-	// fmt.Println("f3.C1.B2.A1)", f3.C1.B2.A1.String())
 
 	start_witness := time.Now()
 	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
@@ -515,9 +500,7 @@ func TestCircuitMillerStep(t *testing.T) {
 	}
 
 	z := wit.(*cs.R1CSSolution).W
-	// for i := 51; i < 63; i++ {
-	// 	fmt.Println("z[", i, "] = ", z[i].String())
-	// }
+
 	duration_witness := time.Since(start_witness)
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
@@ -530,7 +513,7 @@ func TestCircuitMillerStep(t *testing.T) {
 	}
 
 	var FIn_val field_tower.Fp12
-	for idx := 1; idx < 3; idx++ {
+	for idx := 1; idx < 64; idx++ {
 		println("idx ========================================================", idx)
 
 		FIn_val.A0.A0.A0 = z[51]
@@ -554,18 +537,6 @@ func TestCircuitMillerStep(t *testing.T) {
 		FOut[0] = field_tower.FromE12(&f1)
 		FOut[1] = field_tower.FromE12(&f2)
 		FOut[2] = field_tower.FromE12(&f3)
-		// fmt.Println("f3.C0.B0.A0)", f3.C0.B0.A0.String())
-		// fmt.Println("f3.C0.B0.A1)", f3.C0.B0.A1.String())
-		// fmt.Println("f3.C0.B1.A0)", f3.C0.B1.A0.String())
-		// fmt.Println("f3.C0.B1.A1)", f3.C0.B1.A1.String())
-		// fmt.Println("f3.C0.B2.A0)", f3.C0.B2.A0.String())
-		// fmt.Println("f3.C0.B2.A1)", f3.C0.B2.A1.String())
-		// fmt.Println("f3.C1.B0.A0)", f3.C1.B0.A0.String())
-		// fmt.Println("f3.C1.B0.A1)", f3.C1.B0.A1.String())
-		// fmt.Println("f3.C1.B1.A0)", f3.C1.B1.A0.String())
-		// fmt.Println("f3.C1.B1.A1)", f3.C1.B1.A1.String())
-		// fmt.Println("f3.C1.B2.A0)", f3.C1.B2.A0.String())
-		// fmt.Println("f3.C1.B2.A1)", f3.C1.B2.A1.String())
 
 		assignment := &MillerUniformCircuit{
 			FIn:       FIn_val,
@@ -586,12 +557,6 @@ func TestCircuitMillerStep(t *testing.T) {
 		}
 
 		z = wit.(*cs.R1CSSolution).W
-		// for i := 0; i < len(z); i++ {
-		// 	fmt.Println("z[", i, "] = ", z[i].String())
-		// }
-		// for i := 51; i < 63; i++ {
-		// 	fmt.Println("z[", i, "] = ", z[i].String())
-		// }
 		for idx := 0; idx < len(z); idx++ {
 			extendZ = append(extendZ, z[idx])
 		}
