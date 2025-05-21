@@ -151,6 +151,238 @@ func TestUniformSingleGTExp(t *testing.T) {
 
 }
 
+func gTExpWitness(base bn254.E12, exp big.Int, constraintsStep *constraint.ConstraintSystem, ch chan fr.Vector) {
+	var acc, out bn254.E12
+	acc.SetOne()
+	out.SetOne()
+
+	var witness fr.Vector
+	var witnessStep fr.Vector
+
+	// var circuitStep SingleGTUniformCircuit
+	// constraintsStep, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuitStep)
+
+	for idx := 0; idx < 254; idx++ {
+		bit := exp.Bit(253 - idx)
+		acc = out
+		out = computeOut(base, acc, bit)
+
+		circuitStep := SingleGTUniformCircuit{
+			In:  field_tower.FromE12(&base),
+			Acc: field_tower.FromE12(&acc),
+			Bit: bit,
+			Out: field_tower.FromE12(&out),
+		}
+
+		w, _ := frontend.NewWitness(&circuitStep, ecc.GRUMPKIN.ScalarField())
+		wSolved, err := (*constraintsStep).Solve(w)
+		if err != nil {
+			fmt.Println(err)
+		}
+		witnessStep = wSolved.(*cs.R1CSSolution).W
+		for idx := 0; idx < len(witnessStep); idx++ {
+			witness = append(witness, witnessStep[idx])
+		}
+	}
+
+	ch <- witness
+}
+
+func gTAccWitness(in bn254.E12, acc bn254.E12, out bn254.E12, constraintsStep *constraint.ConstraintSystem, ch chan fr.Vector) {
+	var witness fr.Vector
+	// fmt.Println("out = ", out)
+
+	circuitStep := GTUniformCircuit{
+		Out: field_tower.FromE12(&out),
+		In:  field_tower.FromE12(&in),
+		Acc: field_tower.FromE12(&acc),
+	}
+
+	w, _ := frontend.NewWitness(&circuitStep, ecc.GRUMPKIN.ScalarField())
+	wSolved, _ := (*constraintsStep).Solve(w)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
+	witness = wSolved.(*cs.R1CSSolution).W
+	// fmt.Println("Witness = ", witness[1])
+	ch <- witness
+}
+
+// func TestUniformGTMSEParallel(t *testing.T) {
+// 	var a [100]bn254.E12
+// 	var b [100]bn254Fp.Element
+// 	var frBigInt [100]big.Int
+// 	for idx := 0; idx < 100; idx++ {
+// 		_, _ = a[idx].SetRandom()
+// 		_, _ = b[idx].SetRandom()
+// 		b[idx].BigInt(&frBigInt[idx])
+// 	}
+
+// 	var witnessGTExp fr.Vector
+// 	var gTExpResult []bn254.E12
+// 	ch := make(chan fr.Vector, 100)
+
+// 	var circuitStep SingleGTUniformCircuit
+// 	constraintsStep, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuitStep)
+
+// 	// var circuitStep GTUniformCircuit
+// 	// constraintsStep, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuitStep)
+
+// 	start := time.Now()
+
+// 	for outerIdx := 0; outerIdx < 100; outerIdx++ {
+// 		go gTExpWitness(a[outerIdx], frBigInt[outerIdx], &constraintsStep, ch)
+// 	}
+
+// 	for outerIdx := 0; outerIdx < 100; outerIdx++ {
+// 		w := <-ch
+// 		idx := len(w) - 152
+// 		computedResult := bn254.E12{C0: bn254.E6{B0: bn254.E2{A0: bn254Fp.Element(w[idx]), A1: bn254Fp.Element(w[idx+1])}, B1: bn254.E2{A0: bn254Fp.Element(w[idx+2]), A1: bn254Fp.Element(w[idx+3])}, B2: bn254.E2{A0: bn254Fp.Element(w[idx+4]), A1: bn254Fp.Element(w[idx+5])}}, C1: bn254.E6{B0: bn254.E2{A0: bn254Fp.Element(w[idx+6]), A1: bn254Fp.Element(w[idx+7])}, B1: bn254.E2{A0: bn254Fp.Element(w[idx+8]), A1: bn254Fp.Element(w[idx+9])}, B2: bn254.E2{A0: bn254Fp.Element(w[idx+10]), A1: bn254Fp.Element(w[idx+11])}}}
+
+// 		gTExpResult = append(gTExpResult, computedResult)
+
+// 		for i := 0; i < len(w); i++ {
+// 			witnessGTExp = append(witnessGTExp, w[i])
+// 		}
+// 	}
+
+// 	var acc, out [100]bn254.E12
+// 	acc[0].SetOne()
+// 	out[0].SetOne()
+
+// 	for i := 0; i < 10; i++ {
+// 		acc[i] = out[i]
+// 		fmt.Println("acc[i] = ", acc[i])
+// 		fmt.Println("gTExpResult[i] = ", gTExpResult[i])
+
+// 		out[i] = *computeOut2(acc[i], gTExpResult[i])
+// 	}
+
+// 	var circuitStep_1 GTUniformCircuit
+// 	constraintsStep, _ = frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuitStep_1)
+
+// 	ch_1 := make(chan fr.Vector, 100)
+
+// 	for i := 0; i < 100; i++ {
+// 		go gTAccWitness(gTExpResult[i], acc[i], out[i], &constraintsStep, ch_1)
+// 	}
+
+// 	// fmt.Println("HERE HERE")
+
+// 	var witnessAcc fr.Vector
+
+// 	for outerIdx := 0; outerIdx < 100; outerIdx++ {
+// 		witnessAcc = <-ch_1
+// 		// idx := len(w) - 152
+// 		// computedResult := bn254.E12{C0: bn254.E6{B0: bn254.E2{A0: bn254Fp.Element(w[idx]), A1: bn254Fp.Element(w[idx+1])}, B1: bn254.E2{A0: bn254Fp.Element(w[idx+2]), A1: bn254Fp.Element(w[idx+3])}, B2: bn254.E2{A0: bn254Fp.Element(w[idx+4]), A1: bn254Fp.Element(w[idx+5])}}, C1: bn254.E6{B0: bn254.E2{A0: bn254Fp.Element(w[idx+6]), A1: bn254Fp.Element(w[idx+7])}, B1: bn254.E2{A0: bn254Fp.Element(w[idx+8]), A1: bn254Fp.Element(w[idx+9])}, B2: bn254.E2{A0: bn254Fp.Element(w[idx+10]), A1: bn254Fp.Element(w[idx+11])}}}
+
+// 		// gTExpResult = append(gTExpResult, computedResult)
+
+// 		for i := 0; i < len(witnessAcc); i++ {
+// 			witnessGTExp = append(witnessGTExp, witnessAcc[i])
+// 			// fmt.Println(witnessAcc[i])
+// 		}
+// 	}
+
+// 	fmt.Println("Witness generation time = ", time.Since(start))
+// 	fmt.Println()
+
+// 	var finalResult bn254.E12
+// 	finalResult.SetOne()
+// 	for i := 0; i < 100; i++ {
+// 		var exp bn254.E12
+// 		exp.Exp(a[i], &frBigInt[i])
+// 		finalResult.Mul(&finalResult, &exp)
+// 	}
+
+// 	actualResult := field_tower.Fp12{A0: field_tower.Fp6{A0: field_tower.Fp2{A0: witnessAcc[1], A1: witnessAcc[2]}, A1: field_tower.Fp2{A0: witnessAcc[3], A1: witnessAcc[4]}, A2: field_tower.Fp2{A0: witnessAcc[5], A1: witnessAcc[6]}}, A1: field_tower.Fp6{A0: field_tower.Fp2{A0: witnessAcc[7], A1: witnessAcc[8]}, A1: field_tower.Fp2{A0: witnessAcc[9], A1: witnessAcc[10]}, A2: field_tower.Fp2{A0: witnessAcc[11], A1: witnessAcc[12]}}}
+
+// 	fmt.Println("Expected Result is ", finalResult)
+// 	fmt.Println()
+// 	fmt.Println("Actual Result is ", actualResult)
+// }
+
+func TestUniformGTMSEParallel(t *testing.T) {
+	var a [100]bn254.E12
+	var b [100]bn254Fp.Element
+	var frBigInt [100]big.Int
+	for idx := 0; idx < 100; idx++ {
+		_, _ = a[idx].SetRandom()
+		_, _ = b[idx].SetRandom()
+		b[idx].BigInt(&frBigInt[idx])
+	}
+
+	var witnessGTExp fr.Vector
+	var gTExpResult []bn254.E12
+	ch := make(chan fr.Vector, 100)
+
+	var circuitStep SingleGTUniformCircuit
+	constraintsStep, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuitStep)
+
+	start := time.Now()
+
+	for outerIdx := 0; outerIdx < 100; outerIdx++ {
+		go gTExpWitness(a[outerIdx], frBigInt[outerIdx], &constraintsStep, ch)
+	}
+
+	for outerIdx := 0; outerIdx < 100; outerIdx++ {
+		w := <-ch
+		idx := len(w) - 152
+		computedResult := bn254.E12{C0: bn254.E6{B0: bn254.E2{A0: bn254Fp.Element(w[idx]), A1: bn254Fp.Element(w[idx+1])}, B1: bn254.E2{A0: bn254Fp.Element(w[idx+2]), A1: bn254Fp.Element(w[idx+3])}, B2: bn254.E2{A0: bn254Fp.Element(w[idx+4]), A1: bn254Fp.Element(w[idx+5])}}, C1: bn254.E6{B0: bn254.E2{A0: bn254Fp.Element(w[idx+6]), A1: bn254Fp.Element(w[idx+7])}, B1: bn254.E2{A0: bn254Fp.Element(w[idx+8]), A1: bn254Fp.Element(w[idx+9])}, B2: bn254.E2{A0: bn254Fp.Element(w[idx+10]), A1: bn254Fp.Element(w[idx+11])}}}
+
+		gTExpResult = append(gTExpResult, computedResult)
+
+		for i := 0; i < len(w); i++ {
+			witnessGTExp = append(witnessGTExp, w[i])
+		}
+	}
+
+	var acc, out bn254.E12
+	acc.SetOne()
+	out.SetOne()
+
+	var witnessMSE fr.Vector
+	var witnessStep fr.Vector
+
+	var accCircuitStep GTUniformCircuit
+	accConstraintsStep, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &accCircuitStep)
+
+	for idx := 0; idx < 100; idx++ {
+		acc = out
+		out = *computeOut2(acc, gTExpResult[idx])
+
+		accCircuitStep = GTUniformCircuit{
+			Out: field_tower.FromE12(&out),
+			In:  field_tower.FromE12(&gTExpResult[idx]),
+			Acc: field_tower.FromE12(&acc),
+		}
+
+		w, _ := frontend.NewWitness(&accCircuitStep, ecc.GRUMPKIN.ScalarField())
+		wSolved, _ := accConstraintsStep.Solve(w)
+		witnessStep = wSolved.(*cs.R1CSSolution).W
+		for idx := 0; idx < len(witnessStep); idx++ {
+			witnessMSE = append(witnessMSE, witnessStep[idx])
+		}
+	}
+
+	fmt.Println("Witness generation time = ", time.Since(start))
+	fmt.Println()
+
+	var finalResult bn254.E12
+	finalResult.SetOne()
+	for i := 0; i < 100; i++ {
+		var exp bn254.E12
+		exp.Exp(a[i], &frBigInt[i])
+		finalResult.Mul(&finalResult, &exp)
+	}
+
+	actualResult := field_tower.Fp12{A0: field_tower.Fp6{A0: field_tower.Fp2{A0: witnessStep[1], A1: witnessStep[2]}, A1: field_tower.Fp2{A0: witnessStep[3], A1: witnessStep[4]}, A2: field_tower.Fp2{A0: witnessStep[5], A1: witnessStep[6]}}, A1: field_tower.Fp6{A0: field_tower.Fp2{A0: witnessStep[7], A1: witnessStep[8]}, A1: field_tower.Fp2{A0: witnessStep[9], A1: witnessStep[10]}, A2: field_tower.Fp2{A0: witnessStep[11], A1: witnessStep[12]}}}
+
+	fmt.Println("Expected Result is ", finalResult)
+	fmt.Println()
+	fmt.Println("Actual Result is ", actualResult)
+}
+
 func TestUniformGTExp(t *testing.T) {
 	var a [100]bn254.E12
 	var b [100]bn254Fp.Element
