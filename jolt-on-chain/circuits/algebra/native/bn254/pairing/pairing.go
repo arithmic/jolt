@@ -776,7 +776,7 @@ func New(api frontend.API) *PairingAPI {
 
 func (e PairingAPI) Pairing(Q *groups.G2Affine, P *groups.G1Projective) *field_tower.Fp12 {
 
-	miller_output := e.MillerLoop(Q, P)
+	miller_output := e.MillerLoopNew(Q, P)
 	res := FinalExp(&e.e2, &e.e12, miller_output)
 	return res
 }

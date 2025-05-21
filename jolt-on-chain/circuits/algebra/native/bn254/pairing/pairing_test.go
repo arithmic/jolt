@@ -6,11 +6,13 @@ import (
 	"testing"
 	"time"
 
+	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
 	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
 	groups "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/groups"
 	bn254_fr "github.com/consensys/gnark-crypto/ecc/bn254/fr"
+	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
@@ -456,8 +458,6 @@ func TestCircuitMillerStep(t *testing.T) {
 	P.ScalarMultiplication(&g1GenAff, scalar)
 	Q.ScalarMultiplication(&g2GenAff, scalar)
 
-	// P := bn254.G1Affine{ag1}
-	// Q := []bn254.G2Affine{bg2}
 	bits := []int{
 		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
 		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
@@ -466,10 +466,7 @@ func TestCircuitMillerStep(t *testing.T) {
 	var c bn254.E12
 	// make FOut an array of lenght 3 for FOut
 	var FOut [3]field_tower.Fp12
-	// _ = c.SetOne()
-	// c_vector[0] = field_tower.FromE12(&c)
-	// c_vector[1] = field_tower.FromE12(&c)
-	// c_vector[2] = field_tower.FromE12(&c)
+
 	Ell_coeff, _ := EllCoeffs_fn(&Q)
 	var FIn bn254.E12
 	FIn.SetOne()
@@ -493,20 +490,115 @@ func TestCircuitMillerStep(t *testing.T) {
 		Step:      0,
 	}
 
-	// Generate witness
+	// fmt.Println("f3.C0.B0.A0)", f3.C0.B0.A0.String())
+	// fmt.Println("f3.C0.B0.A1)", f3.C0.B0.A1.String())
+	// fmt.Println("f3.C0.B1.A0)", f3.C0.B1.A0.String())
+	// fmt.Println("f3.C0.B1.A1)", f3.C0.B1.A1.String())
+	// fmt.Println("f3.C0.B2.A0)", f3.C0.B2.A0.String())
+	// fmt.Println("f3.C0.B2.A1)", f3.C0.B2.A1.String())
+	// fmt.Println("f3.C1.B0.A0)", f3.C1.B0.A0.String())
+	// fmt.Println("f3.C1.B0.A1)", f3.C1.B0.A1.String())
+	// fmt.Println("f3.C1.B1.A0)", f3.C1.B1.A0.String())
+	// fmt.Println("f3.C1.B1.A1)", f3.C1.B1.A1.String())
+	// fmt.Println("f3.C1.B2.A0)", f3.C1.B2.A0.String())
+	// fmt.Println("f3.C1.B2.A1)", f3.C1.B2.A1.String())
+
 	start_witness := time.Now()
 	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err_1 := r1cs.Solve(witness)
+	wit, err_1 := r1cs.Solve(witness)
 	if err_1 != nil {
 		fmt.Println("Error solving the r1cs", err_1)
 		return
 	}
+
+	z := wit.(*cs.R1CSSolution).W
+	// for i := 51; i < 63; i++ {
+	// 	fmt.Println("z[", i, "] = ", z[i].String())
+	// }
 	duration_witness := time.Since(start_witness)
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
+	var extendZ grumpkin_fr.Vector
+	zLen := len(z)
+
+	n := 64
+	for idx := 0; idx < zLen; idx++ {
+		extendZ = append(extendZ, z[idx])
+	}
+
+	var FIn_val field_tower.Fp12
+	for idx := 1; idx < 3; idx++ {
+		println("idx ========================================================", idx)
+
+		FIn_val.A0.A0.A0 = z[51]
+		FIn_val.A0.A0.A1 = z[52]
+		FIn_val.A0.A1.A0 = z[53]
+		FIn_val.A0.A1.A1 = z[54]
+		FIn_val.A0.A2.A0 = z[55]
+		FIn_val.A0.A2.A1 = z[56]
+		FIn_val.A1.A0.A0 = z[57]
+		FIn_val.A1.A0.A1 = z[58]
+		FIn_val.A1.A1.A0 = z[59]
+		FIn_val.A1.A1.A1 = z[60]
+		FIn_val.A1.A2.A0 = z[61]
+		FIn_val.A1.A2.A1 = z[62]
+
+		for i := 0; i < 2; i++ {
+			Ell_coeff_new[i] = field_tower.FromE6(&Ell_coeff[idx*2+i])
+		}
+
+		f1, f2, f3 = MillerLoopStep_fn(&f3, Ell_coeff[idx*2:idx*2+2], &P, bits[n-1-idx])
+		FOut[0] = field_tower.FromE12(&f1)
+		FOut[1] = field_tower.FromE12(&f2)
+		FOut[2] = field_tower.FromE12(&f3)
+		// fmt.Println("f3.C0.B0.A0)", f3.C0.B0.A0.String())
+		// fmt.Println("f3.C0.B0.A1)", f3.C0.B0.A1.String())
+		// fmt.Println("f3.C0.B1.A0)", f3.C0.B1.A0.String())
+		// fmt.Println("f3.C0.B1.A1)", f3.C0.B1.A1.String())
+		// fmt.Println("f3.C0.B2.A0)", f3.C0.B2.A0.String())
+		// fmt.Println("f3.C0.B2.A1)", f3.C0.B2.A1.String())
+		// fmt.Println("f3.C1.B0.A0)", f3.C1.B0.A0.String())
+		// fmt.Println("f3.C1.B0.A1)", f3.C1.B0.A1.String())
+		// fmt.Println("f3.C1.B1.A0)", f3.C1.B1.A0.String())
+		// fmt.Println("f3.C1.B1.A1)", f3.C1.B1.A1.String())
+		// fmt.Println("f3.C1.B2.A0)", f3.C1.B2.A0.String())
+		// fmt.Println("f3.C1.B2.A1)", f3.C1.B2.A1.String())
+
+		assignment := &MillerUniformCircuit{
+			FIn:       FIn_val,
+			P:         groups.AffineFromG1Affine(&P),
+			Ell_Coeff: Ell_coeff_new,
+			FOut:      FOut,
+			Bit:       bits[n-1-idx],
+		}
+
+		witness, _ := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+		if err != nil {
+			t.Fatal(err)
+		}
+		wit, err_1 := r1cs.Solve(witness)
+		if err_1 != nil {
+			fmt.Println("Error solving the r1cs", err_1)
+			return
+		}
+
+		z = wit.(*cs.R1CSSolution).W
+		// for i := 0; i < len(z); i++ {
+		// 	fmt.Println("z[", i, "] = ", z[i].String())
+		// }
+		// for i := 51; i < 63; i++ {
+		// 	fmt.Println("z[", i, "] = ", z[i].String())
+		// }
+		for idx := 0; idx < len(z); idx++ {
+			extendZ = append(extendZ, z[idx])
+		}
+
+	}
+	duration = time.Since(start)
+	fmt.Printf("Witness generation time 2 : %s\n", duration)
 }
 
 type EllCoeffsCircuit struct {

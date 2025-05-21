@@ -22,9 +22,11 @@ func Ell_fn(x *bn254.E12, b *bn254.E6, P *bn254.G1Affine) *bn254.E12 {
 	c1.MulByElement(&b.B1, &P.X)
 
 	// Compute updated_f = x * (1 + c0 * v^0 + c1 * v^3 + b.A2 * v^4)
-	x.MulBy034(&c0, &c1, &b.B2)
+	var updated_f bn254.E12
+	updated_f = *x
+	updated_f.MulBy034(&c0, &c1, &b.B2)
 
-	return x
+	return &updated_f
 }
 
 type G2Proj struct {
