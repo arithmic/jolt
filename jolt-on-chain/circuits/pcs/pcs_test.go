@@ -18,6 +18,7 @@ import (
 	"math/big"
 	"os"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 )
@@ -151,7 +152,8 @@ func TestUniformSingleGTExp(t *testing.T) {
 
 }
 
-func gTExpWitness(base bn254.E12, exp big.Int, constraintsStep *constraint.ConstraintSystem, ch chan fr.Vector) {
+// func gTExpWitness(base bn254.E12, exp big.Int, constraintsStep *constraint.ConstraintSystem, ch chan fr.Vector) {
+func gTExpWitness(base bn254.E12, exp big.Int, constraintsStep *constraint.ConstraintSystem) fr.Vector {
 	var acc, out bn254.E12
 	acc.SetOne()
 	out.SetOne()
@@ -185,7 +187,13 @@ func gTExpWitness(base bn254.E12, exp big.Int, constraintsStep *constraint.Const
 		}
 	}
 
-	ch <- witness
+	//ch <- witness
+	return witness
+}
+
+type indexedResult struct {
+	idx int
+	vec fr.Vector
 }
 
 func gTAccWitness(in bn254.E12, acc bn254.E12, out bn254.E12, constraintsStep *constraint.ConstraintSystem, ch chan fr.Vector) {
@@ -314,19 +322,28 @@ func TestUniformGTMSEParallel(t *testing.T) {
 
 	var witnessGTExp fr.Vector
 	var gTExpResult []bn254.E12
-	ch := make(chan fr.Vector, 100)
 
 	var circuitStep SingleGTUniformCircuit
 	constraintsStep, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuitStep)
 
 	start := time.Now()
+	var (
+		wg      sync.WaitGroup
+		results = make([]fr.Vector, 100)
+	)
 
+	wg.Add(100)
 	for outerIdx := 0; outerIdx < 100; outerIdx++ {
-		go gTExpWitness(a[outerIdx], frBigInt[outerIdx], &constraintsStep, ch)
+		go func(i int) {
+			defer wg.Done()
+			results[i] = gTExpWitness(a[i], frBigInt[i], &constraintsStep)
+		}(outerIdx)
 	}
 
+	wg.Wait()
+
 	for outerIdx := 0; outerIdx < 100; outerIdx++ {
-		w := <-ch
+		w := results[outerIdx]
 		idx := len(w) - 152
 		computedResult := bn254.E12{C0: bn254.E6{B0: bn254.E2{A0: bn254Fp.Element(w[idx]), A1: bn254Fp.Element(w[idx+1])}, B1: bn254.E2{A0: bn254Fp.Element(w[idx+2]), A1: bn254Fp.Element(w[idx+3])}, B2: bn254.E2{A0: bn254Fp.Element(w[idx+4]), A1: bn254Fp.Element(w[idx+5])}}, C1: bn254.E6{B0: bn254.E2{A0: bn254Fp.Element(w[idx+6]), A1: bn254Fp.Element(w[idx+7])}, B1: bn254.E2{A0: bn254Fp.Element(w[idx+8]), A1: bn254Fp.Element(w[idx+9])}, B2: bn254.E2{A0: bn254Fp.Element(w[idx+10]), A1: bn254Fp.Element(w[idx+11])}}}
 
