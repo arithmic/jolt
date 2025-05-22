@@ -1,14 +1,10 @@
 package pairing
 
 import (
-	// "math/big"
-
-	// "github.com/arithmic/gnark/frontend"
-	// field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
-	// groups "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/groups"
+	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/groups"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
-	// "github.com/consensys/gnark-crypto/ecc/bls24-315/fr"
 )
 
 func Ell_fn(x *bn254.E12, b *bn254.E6, P *bn254.G1Affine) *bn254.E12 {
@@ -232,6 +228,14 @@ func ToProjective_fn(A *bn254.G2Affine) G2Proj {
 	}
 
 	return out
+}
+
+func G2ProjectiveFromBNG2Proj(y *G2Proj) groups.G2Projective {
+	return groups.G2Projective{
+		X: field_tower.FromE2(&y.X),
+		Y: field_tower.FromE2(&y.Y),
+		Z: field_tower.FromE2(&y.Z),
+	}
 }
 
 func MulByChar_fn(Q *bn254.G2Affine) *bn254.G2Affine {

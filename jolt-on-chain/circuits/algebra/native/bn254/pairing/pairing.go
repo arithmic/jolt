@@ -399,7 +399,6 @@ func LineDouble(e *frontend.API, e2 *field_tower.Ext2, R *groups.G2Projective, t
 }
 
 // Computes the line coefficients and the resulting point when adding a G2 projective point (R) and a G2 affine point (Q).
-
 func LineAddition(e *frontend.API, e2 *field_tower.Ext2, R *groups.G2Projective, Q *groups.G2Affine) (*groups.G2Projective, *field_tower.Fp6) {
 
 	// Initialize output variables
@@ -520,84 +519,42 @@ func (e PairingAPI) EllCoeffStep(
 	Q, negQ *groups.G2Affine, // Q and -Q
 	bit frontend.Variable, // {-1, 0, 1}
 	twoInv frontend.Variable,
-) (Rmid, Rout groups.G2Projective, ell1, ell2 *field_tower.Fp6) {
+) (Rmid, Rout groups.G2Projective, ell1, ell2 field_tower.Fp6) {
 	// Step 1: LineDouble
 	RmidPtr, ell1Ptr := LineDouble(&e.api, &e.e2, Rin, twoInv)
 	Rmid = *RmidPtr
-	ell1 = ell1Ptr
+	ell1 = *ell1Ptr
 
-	// Step 2: LineAddition or Propagation
-	if bit == 1 {
-		RoutPtr, ell2Ptr := LineAddition(&e.api, &e.e2, &Rmid, Q)
-		Rout = *RoutPtr
-		ell2 = ell2Ptr
-	} else if bit == -1 {
-		RoutPtr, ell2Ptr := LineAddition(&e.api, &e.e2, &Rmid, negQ)
-		Rout = *RoutPtr
-		ell2 = ell2Ptr
-	} else {
-		Rout = Rmid
-		ell2 = ell1
+	// Compute selectors for bit == 1, bit == -1, bit == 0
+	isOne := e.api.IsZero(e.api.Sub(bit, frontend.Variable(1)))      // 1 if bit==1 else 0
+	isMinusOne := e.api.IsZero(e.api.Add(bit, frontend.Variable(1))) // 1 if bit==-1 else 0
+	// isZero := e.api.IsZero(bit)                                      // 1 if bit==0 else 0
+
+	// Compute Rout and ell2 for each case
+	Rout1Ptr, ell2_1Ptr := LineAddition(&e.api, &e.e2, &Rmid, Q)
+	RoutMinus1Ptr, ell2_minus1Ptr := LineAddition(&e.api, &e.e2, &Rmid, negQ)
+
+	// Select Rout.X
+	RoutX := e.e2.Select(isOne, &Rout1Ptr.X, &Rmid.X)
+	RoutX = e.e2.Select(isMinusOne, &RoutMinus1Ptr.X, RoutX)
+	// Select Rout.Y
+	RoutY := e.e2.Select(isOne, &Rout1Ptr.Y, &Rmid.Y)
+	RoutY = e.e2.Select(isMinusOne, &RoutMinus1Ptr.Y, RoutY)
+	// Select Rout.Z
+	RoutZ := e.e2.Select(isOne, &Rout1Ptr.Z, &Rmid.Z)
+	RoutZ = e.e2.Select(isMinusOne, &RoutMinus1Ptr.Z, RoutZ)
+
+	// Select ell2
+	ell2 = *e.e6.Select(isOne, ell2_1Ptr, &ell1)
+	ell2 = *e.e6.Select(isMinusOne, ell2_minus1Ptr, &ell2)
+
+	Rout = groups.G2Projective{
+		X: *RoutX,
+		Y: *RoutY,
+		Z: *RoutZ,
 	}
 
 	return
-}
-
-func (e PairingAPI) EllCoeffsNew(Q *groups.G2Affine) ([]field_tower.Fp6, []groups.G2Projective) {
-	// Define constants
-	n := 64
-	twoInv := e.api.Inverse(frontend.Variable(2))
-
-	// Initialize arrays for ell_coeff and R
-	ell_coeff := make([]field_tower.Fp6, 2*n+2)
-	R := make([]groups.G2Projective, 2*n+2)
-
-	// Convert Q to projective coordinates
-	R[0] = *e.g2_api.ToProjective(Q)
-
-	// Compute neg_Q
-	var neg_Q groups.G2Affine
-	neg_Q.X = Q.X
-	neg_Q.Y.A1 = e.api.Neg(Q.Y.A1)
-	neg_Q.Y.A0 = e.api.Neg(Q.Y.A0)
-
-	// Define bits array
-	bits := []int{
-		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
-		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
-		-1, 0, 0, 0, 1, 0, 1,
-	}
-
-	// Main loop
-	for i := 0; i < n; i++ {
-		bit := bits[n-1-i]
-		Rmid, Rout, ell1, ell2 := e.EllCoeffStep(&R[2*i], Q, &neg_Q, bit, twoInv)
-
-		R[2*i+1] = Rmid
-		ell_coeff[2*i] = *ell1
-
-		R[2*i+2] = Rout
-		ell_coeff[2*i+1] = *ell2
-	}
-
-	// Compute Q1 and Q2 using MulByChar
-	Q1 := MulByChar(&e.e2, Q)
-	Q2 := MulByChar(&e.e2, Q1)
-
-	// Compute Q2_neg
-	var Q2_neg groups.G2Affine
-	Q2_neg.X = Q2.X
-	Q2_neg.Y.A0 = e.api.Neg(Q2.Y.A0)
-	Q2_neg.Y.A1 = e.api.Neg(Q2.Y.A1)
-
-	// Final LineAddition operations
-	R_New, ell_coeff_New := LineAddition(&e.api, &e.e2, &R[2*n], Q1)
-	R[2*n+1] = *R_New
-	ell_coeff[2*n] = *ell_coeff_New
-	_, ell_coeffs := LineAddition(&e.api, &e.e2, &R[2*n+1], &Q2_neg)
-	ell_coeff[2*n+1] = *ell_coeffs
-
-	return ell_coeff, R
 }
 
 func MulByChar(e2 *field_tower.Ext2, Q *groups.G2Affine) *groups.G2Affine {
@@ -714,49 +671,6 @@ func (e PairingAPI) MillerLoopStep(
 	return f1, f2, f3
 }
 
-func (e PairingAPI) MillerLoopNew(Q *groups.G2Affine, P *groups.G1Projective) *field_tower.Fp12 {
-
-	// Define constants
-	n := 64
-	bits := []int{
-		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
-		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
-		-1, 0, 0, 0, 1, 0, 1,
-	}
-
-	// Convert P to affine coordinates
-
-	p := e.g1_api.ToAffine(P)
-
-	// Compute ell_coeff using EllCoeffs
-	ell_coeff, _ := e.EllCoeffsNew(Q)
-
-	// Initialize Fp12 array
-	f := make([]field_tower.Fp12, 4)
-
-	f[0] = *e.e12.One()
-
-	for i := 0; i < n; i++ {
-		bit := bits[n-1-i]
-		f1, f2, f3 := e.MillerLoopStep(
-			&f[0],
-			ell_coeff[2*i:2*i+2],
-			p,
-			bit,
-		)
-		f[0] = f3
-		f[1] = f1
-		f[2] = f2
-	}
-
-	// Final Ell applications
-	f[1] = *Ell(&e.e2, &e.e6, &f[0], &ell_coeff[2*n], p)
-	f[2] = *Ell(&e.e2, &e.e6, &f[1], &ell_coeff[2*n+1], p)
-
-	// Output the result
-	return &f[2]
-}
-
 type PairingAPI struct {
 	e2     field_tower.Ext2
 	e6     field_tower.Ext6
@@ -779,7 +693,7 @@ func New(api frontend.API) *PairingAPI {
 
 func (e PairingAPI) Pairing(Q *groups.G2Affine, P *groups.G1Projective) *field_tower.Fp12 {
 
-	miller_output := e.MillerLoopNew(Q, P)
+	miller_output := e.MillerLoop(Q, P)
 	res := FinalExp(&e.e2, &e.e12, miller_output)
 	return res
 }

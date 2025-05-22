@@ -2,10 +2,13 @@ package pairing
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/arithmic/gnark/constraint"
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
@@ -446,6 +449,8 @@ func TestCircuitMillerStep(t *testing.T) {
 	fmt.Printf("Circuit compiled in: %s\n", duration)
 
 	fmt.Println("number of constraints of MillerUniformCircuit", r1cs.GetNbConstraints())
+	_, aCount, bCount, cCount := ExtractConstraints(r1cs)
+	println("aCount:", aCount, "bCount:", bCount, "cCount:", cCount)
 
 	_, _, g1GenAff, g2GenAff := bn254.Generators()
 
@@ -462,7 +467,7 @@ func TestCircuitMillerStep(t *testing.T) {
 		-1, 0, 0, 0, 1, 0, 1,
 	}
 	var c bn254.E12
-	
+
 	var FOut [3]field_tower.Fp12
 
 	Ell_coeff, _ := EllCoeffs_fn(&Q)
@@ -475,7 +480,7 @@ func TestCircuitMillerStep(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		Ell_coeff_new[i] = field_tower.FromE6(&Ell_coeff[i])
 	}
-	f1, f2, f3 := MillerLoopStep_fn(&FIn, Ell_coeff[0:2], &P, bits[n - 1])
+	f1, f2, f3 := MillerLoopStep_fn(&FIn, Ell_coeff[0:2], &P, bits[n-1])
 	FOut[0] = field_tower.FromE12(&f1)
 	FOut[1] = field_tower.FromE12(&f2)
 	FOut[2] = field_tower.FromE12(&f3)
@@ -485,7 +490,7 @@ func TestCircuitMillerStep(t *testing.T) {
 		P:         groups.AffineFromG1Affine(&P),
 		Ell_Coeff: Ell_coeff_new,
 		FOut:      FOut,
-		Bit:       bits[n - 1],
+		Bit:       bits[n-1],
 	}
 
 	start_witness := time.Now()
@@ -512,8 +517,8 @@ func TestCircuitMillerStep(t *testing.T) {
 	}
 
 	var FIn_val field_tower.Fp12
-	for idx := 1; idx < 64; idx++ {
-		
+	for idx := 1; idx < n; idx++ {
+
 		FIn_val.A0.A0.A0 = z[51]
 		FIn_val.A0.A0.A1 = z[52]
 		FIn_val.A0.A1.A0 = z[53]
@@ -616,8 +621,10 @@ func TestCircuitEllCoeffs(t *testing.T) {
 	fmt.Printf("Circuit compiled in: %s\n", duration)
 
 	fmt.Println("number of constraints of EllCoeffsCircuit", r1cs.GetNbConstraints())
+	_, aCount, bCount, cCount := ExtractConstraints(r1cs)
+	println("aCount:", aCount, "bCount:", bCount, "cCount:", cCount)
 
-	_, a := randomG1G2Affines()
+	_, a := groups.RandomG1G2Affines()
 
 	Ell_coeff, _ := EllCoeffs_fn(&a)
 
@@ -647,21 +654,237 @@ func TestCircuitEllCoeffs(t *testing.T) {
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
 }
 
-func randomG1G2Affines() (bn254.G1Affine, bn254.G2Affine) {
-	_, _, G1AffGen, G2AffGen := bn254.Generators()
-	mod := bn254.ID.ScalarField()
-	s1, err := rand.Int(rand.Reader, mod)
+type EllCoeffsUniformCircuit struct {
+	Rin        groups.G2Projective
+	Q          groups.G2Affine
+	NegQ       groups.G2Affine
+	Bit        frontend.Variable
+	Rmid, Rout groups.G2Projective
+	Ell1, Ell2 field_tower.Fp6
+}
+
+func (circuit *EllCoeffsUniformCircuit) Define(api frontend.API) error {
+	pairing_api := New(api)
+
+	twoInv := api.Inverse(frontend.Variable(2))
+
+	rmid, rout, ell1, ell2 := pairing_api.EllCoeffStep(&circuit.Rin, &circuit.Q, &circuit.NegQ, circuit.Bit, twoInv)
+	e6 := field_tower.NewExt6(api)
+	g2 := groups.New(api)
+
+	g2.AssertIsEqual(&rmid, &circuit.Rmid)
+	g2.AssertIsEqual(&rout, &circuit.Rout)
+	e6.AssertIsEqual(&ell1, &circuit.Ell1)
+	e6.AssertIsEqual(&ell2, &circuit.Ell2)
+
+	return nil
+}
+
+func TestCircuitEllCoeffStep(t *testing.T) {
+	// Define the circuit
+
+	var circuit EllCoeffsUniformCircuit
+	// Compile the circuit into an R1CS
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
 	if err != nil {
-		panic(err)
+		t.Fatalf("Error compiling circuit: %s", err)
 	}
-	s2, err := rand.Int(rand.Reader, mod)
-	if err != nil {
-		panic(err)
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of EllCoeffsUniformCircuit", r1cs.GetNbConstraints())
+	_, aCount, bCount, cCount := ExtractConstraints(r1cs)
+	println("aCount:", aCount, "bCount:", bCount, "cCount:", cCount)
+
+	_, _, _, g2GenAff := bn254.Generators()
+
+	var Q bn254.G2Affine
+
+	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
+	Q.ScalarMultiplication(&g2GenAff, scalar)
+
+	bits := []int{
+		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
+		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
+		-1, 0, 0, 0, 1, 0, 1,
 	}
 
-	var p bn254.G1Affine
-	p.ScalarMultiplication(&G1AffGen, s1)
-	var q bn254.G2Affine
-	q.ScalarMultiplication(&G2AffGen, s2)
-	return p, q
+	Rin := ToProjective_fn(&Q)
+	var neg_Q bn254.G2Affine
+	neg_Q.X = Q.X
+	neg_Q.Y.A1.Neg(&Q.Y.A1)
+	neg_Q.Y.A0.Neg(&Q.Y.A0)
+	n := 64
+
+	Rmid, Rout, ell1, ell2 := EllCoeffStep_fn(&Rin, &Q, &neg_Q, bits[n-1])
+
+	assignment := &EllCoeffsUniformCircuit{
+		Rin:  groups.FromBNG2Affine(&Q),
+		Q:    groups.G2AffineFromBNG2Affine(&Q),
+		NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
+		Rmid: G2ProjectiveFromBNG2Proj(&Rmid),
+		Rout: G2ProjectiveFromBNG2Proj(&Rout),
+		Ell1: field_tower.FromE6(ell1),
+		Ell2: field_tower.FromE6(ell2),
+		Bit:  bits[n-1],
+	}
+
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wit, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+
+	z := wit.(*cs.R1CSSolution).W
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
+	var extendZ grumpkin_fr.Vector
+	zLen := len(z)
+	fmt.Println("zlen is ", len(z))
+
+	for idx := 0; idx < zLen; idx++ {
+		extendZ = append(extendZ, z[idx])
+	}
+
+	var RIn_val groups.G2Projective
+	for idx := 1; idx < n; idx++ {
+
+		// R[2 * i] for next step
+		RIn_val.X.A0 = z[22]
+		RIn_val.X.A1 = z[23]
+		RIn_val.Y.A0 = z[24]
+		RIn_val.Y.A1 = z[25]
+		RIn_val.Z.A0 = z[26]
+		RIn_val.Z.A1 = z[27]
+
+		// Q, NegQ for next step same as in step 1
+		// Rmid, Rout
+		Rmid, Rout, ell1, ell2 = EllCoeffStep_fn(&Rout, &Q, &neg_Q, bits[n-1-idx])
+
+		assignment := &EllCoeffsUniformCircuit{
+			Rin:  RIn_val,
+			Q:    groups.G2AffineFromBNG2Affine(&Q),
+			NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
+			Rmid: G2ProjectiveFromBNG2Proj(&Rmid),
+			Rout: G2ProjectiveFromBNG2Proj(&Rout),
+			Ell1: field_tower.FromE6(ell1),
+			Ell2: field_tower.FromE6(ell2),
+			Bit:  bits[n-1-idx],
+		}
+
+		witness, _ := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+		if err != nil {
+			t.Fatal(err)
+		}
+		wit, err_1 := r1cs.Solve(witness)
+		if err_1 != nil {
+			fmt.Println("Error solving the r1cs", err_1)
+			return
+		}
+
+		z = wit.(*cs.R1CSSolution).W
+		for idx := 0; idx < len(z); idx++ {
+			extendZ = append(extendZ, z[idx])
+		}
+	}
+
+	Q1 := MulByChar_fn(&Q)
+	Q2 := MulByChar_fn(Q1)
+
+	var neg_Q2 bn254.G2Affine
+	neg_Q2.X = Q2.X
+	neg_Q2.Y.A1.Neg(&Q2.Y.A1)
+	neg_Q2.Y.A0.Neg(&Q2.Y.A0)
+
+	var RIn_val_2n G2Proj
+
+	RIn_val_2n.X.A0.SetString(z[22].String())
+	RIn_val_2n.X.A1.SetString(z[23].String())
+	RIn_val_2n.Y.A0.SetString(z[24].String())
+	RIn_val_2n.Y.A1.SetString(z[25].String())
+	RIn_val_2n.Z.A0.SetString(z[26].String())
+	RIn_val_2n.Z.A1.SetString(z[27].String())
+
+	R_New, computed_ell_coeff := LineAddition_fn(&RIn_val_2n, Q1)
+
+	_, ell_coeffs_last := LineAddition_fn(R_New, &neg_Q2)
+
+	actual_ell_coeff, actual_r := EllCoeffs_fn(&Q)
+
+	val1_x := R_New.X.Equal(&actual_r[2*n+1].X)
+	val1_y := R_New.Y.Equal(&actual_r[2*n+1].Y)
+	val1_z := R_New.Z.Equal(&actual_r[2*n+1].Z)
+
+	val2 := computed_ell_coeff.Equal(&actual_ell_coeff[2*n])
+	val3 := ell_coeffs_last.Equal(&actual_ell_coeff[2*n+1])
+
+	if val1_x && val1_y && val1_z && val2 && val3 == false {
+		fmt.Println("The result is not equal")
+	} else {
+		fmt.Println("The result is equal")
+	}
+}
+
+type Constraint struct {
+	A map[string]string
+	B map[string]string
+	C map[string]string
+}
+
+func PrettyPrintConstraints(constraints []Constraint) {
+	bytes, err := json.MarshalIndent(constraints, "", "  ")
+	if err != nil {
+		fmt.Println("Error while pretty printing:", err)
+		return
+	}
+	fmt.Println(string(bytes))
+}
+
+func ExtractConstraints(r1cs constraint.ConstraintSystem) ([]Constraint, int, int, int) {
+	var outputConstraints []Constraint
+	var aCount, bCount, cCount int
+
+	// Assert to R1CS to get access to R1CS-specific methods
+	nR1CS, ok := r1cs.(constraint.R1CS)
+	if !ok {
+		return outputConstraints, 0, 0, 0 // or handle error
+	}
+	constraints := nR1CS.GetR1Cs()
+	for _, r1c := range constraints {
+		singular := Constraint{
+			A: make(map[string]string),
+			B: make(map[string]string),
+			C: make(map[string]string),
+		}
+
+		for _, term := range r1c.L {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.A[col] = val
+			aCount++
+		}
+		for _, term := range r1c.R {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.B[col] = val
+			bCount++
+		}
+		for _, term := range r1c.O {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.C[col] = val
+			cCount++
+		}
+
+		outputConstraints = append(outputConstraints, singular)
+	}
+
+	return outputConstraints, aCount, bCount, cCount
 }
