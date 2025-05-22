@@ -59,7 +59,7 @@ func (circuit *SingleGTUniformCircuit) Define(api frontend.API) error {
 	gtAPI := field_tower.NewExt12(api)
 	accSquare := gtAPI.Square(&circuit.Acc)
 	accSquareMulIn := gtAPI.Mul(accSquare, &circuit.In)
-	expectedOut := gtAPI.Select2(circuit.Bit, accSquareMulIn, accSquare)
+	expectedOut := gtAPI.Select(circuit.Bit, accSquareMulIn, accSquare)
 	gtAPI.AssertIsEqual(&circuit.Out, expectedOut)
 	return nil
 }
