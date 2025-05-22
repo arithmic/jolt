@@ -1,15 +1,11 @@
 package pcs
 
 import (
-	// "fmt"
-	"fmt"
-	"math/big"
-	"testing"
-
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
-	"github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/uniform_circuits"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	bn254Fp "github.com/consensys/gnark-crypto/ecc/bn254/fp"
+	"math/big"
+	"testing"
 )
 
 func TestGtExpUniformCircuit(t *testing.T) {
@@ -20,14 +16,8 @@ func TestGtExpUniformCircuit(t *testing.T) {
 	var frBigInt big.Int
 	b.BigInt(&frBigInt)
 
-	var dummyCircuit gtExpUniformCircuit
+	var dummyCircuit *gtExpUniformCircuit
 
-	_, ok := any(dummyCircuit).(uniform_circuits.UniformCircuit[gtExpUniformCircuit])
-	if ok {
-		fmt.Println("S implements I")
-	} else {
-		fmt.Println("S does NOT implement I")
-	}
 	circuits := make([]*gtExpUniformCircuit, 254)
 
 	var ext field_tower.Ext12
@@ -47,7 +37,8 @@ func TestGtExpUniformCircuit(t *testing.T) {
 			out: *e.SetOne(),
 		}
 	}
-
+	dummyCircuit = &gtExpUniformCircuit{}
 	r1cs := dummyCircuit.Compile()
+	_, _, _, _ = dummyCircuit.ExtractMatrices(*r1cs)
 	_ = dummyCircuit.GenerateWitness(circuits, r1cs, 254)
 }
