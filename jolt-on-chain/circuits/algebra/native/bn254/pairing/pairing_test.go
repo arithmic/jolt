@@ -435,7 +435,6 @@ func (circuit *MillerUniformCircuit) Define(api frontend.API) error {
 
 func TestCircuitMillerStep(t *testing.T) {
 	// Define the circuit
-
 	var circuit MillerUniformCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
@@ -463,29 +462,30 @@ func TestCircuitMillerStep(t *testing.T) {
 		-1, 0, 0, 0, 1, 0, 1,
 	}
 	var c bn254.E12
-	// make FOut an array of lenght 3 for FOut
+	
 	var FOut [3]field_tower.Fp12
 
 	Ell_coeff, _ := EllCoeffs_fn(&Q)
 	var FIn bn254.E12
 	FIn.SetOne()
 
+	n := 64
 	var Ell_coeff_new [2]field_tower.Fp6
 
 	for i := 0; i < 2; i++ {
 		Ell_coeff_new[i] = field_tower.FromE6(&Ell_coeff[i])
 	}
-	f1, f2, f3 := MillerLoopStep_fn(&FIn, Ell_coeff[0:2], &P, bits[0])
+	f1, f2, f3 := MillerLoopStep_fn(&FIn, Ell_coeff[0:2], &P, bits[n - 1])
 	FOut[0] = field_tower.FromE12(&f1)
 	FOut[1] = field_tower.FromE12(&f2)
 	FOut[2] = field_tower.FromE12(&f3)
-	
+
 	assignment := &MillerUniformCircuit{
 		FIn:       field_tower.FromE12(c.SetOne()),
 		P:         groups.AffineFromG1Affine(&P),
 		Ell_Coeff: Ell_coeff_new,
 		FOut:      FOut,
-		Bit:       bits[0],
+		Bit:       bits[n - 1],
 	}
 
 	start_witness := time.Now()
@@ -507,15 +507,13 @@ func TestCircuitMillerStep(t *testing.T) {
 	var extendZ grumpkin_fr.Vector
 	zLen := len(z)
 
-	n := 64
 	for idx := 0; idx < zLen; idx++ {
 		extendZ = append(extendZ, z[idx])
 	}
 
 	var FIn_val field_tower.Fp12
 	for idx := 1; idx < 64; idx++ {
-		println("idx ========================================================", idx)
-
+		
 		FIn_val.A0.A0.A0 = z[51]
 		FIn_val.A0.A0.A1 = z[52]
 		FIn_val.A0.A1.A0 = z[53]
@@ -562,6 +560,31 @@ func TestCircuitMillerStep(t *testing.T) {
 		}
 
 	}
+	// Compute f3 from witness
+	f3.C0.B0.A0.SetString(z[51].String())
+	f3.C0.B0.A1.SetString(z[52].String())
+	f3.C0.B1.A0.SetString(z[53].String())
+	f3.C0.B1.A1.SetString(z[54].String())
+	f3.C0.B2.A0.SetString(z[55].String())
+	f3.C0.B2.A1.SetString(z[56].String())
+	f3.C1.B0.A0.SetString(z[57].String())
+	f3.C1.B0.A1.SetString(z[58].String())
+	f3.C1.B1.A0.SetString(z[59].String())
+	f3.C1.B1.A1.SetString(z[60].String())
+	f3.C1.B2.A0.SetString(z[61].String())
+	f3.C1.B2.A1.SetString(z[62].String())
+
+	res_1 := Ell_fn(&f3, &Ell_coeff[2*n], &P)
+	res := Ell_fn(res_1, &Ell_coeff[2*n+1], &P)
+
+	actual_result := MillerLoopNew_fn(&Q, &P)
+	val := res.Equal(actual_result)
+	if val == false {
+		fmt.Println("The result is not equal")
+	} else {
+		fmt.Println("The result is equal")
+	}
+
 	duration = time.Since(start)
 	fmt.Printf("Witness generation time 2 : %s\n", duration)
 }

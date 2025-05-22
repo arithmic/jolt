@@ -518,7 +518,7 @@ func (e PairingAPI) EllCoeffs(Q *groups.G2Affine) ([]field_tower.Fp6, []groups.G
 func (e PairingAPI) EllCoeffStep(
 	Rin *groups.G2Projective, // R[2*i]
 	Q, negQ *groups.G2Affine, // Q and -Q
-	bit int, // {-1, 0, 1}
+	bit frontend.Variable, // {-1, 0, 1}
 	twoInv frontend.Variable,
 ) (Rmid, Rout groups.G2Projective, ell1, ell2 *field_tower.Fp6) {
 	// Step 1: LineDouble
@@ -729,7 +729,7 @@ func (e PairingAPI) MillerLoopNew(Q *groups.G2Affine, P *groups.G1Projective) *f
 	p := e.g1_api.ToAffine(P)
 
 	// Compute ell_coeff using EllCoeffs
-	ell_coeff, _ := e.EllCoeffs(Q)
+	ell_coeff, _ := e.EllCoeffsNew(Q)
 
 	// Initialize Fp12 array
 	f := make([]field_tower.Fp12, 4)

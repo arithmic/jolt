@@ -185,7 +185,6 @@ func LineAddition_fn(R *G2Proj, Q *bn254.G2Affine) (*G2Proj, *bn254.E6) {
 }
 
 func EllCoeffStep_fn(
-	e2 *bn254.E2,
 	Rin *G2Proj, // R[2*i]
 	Q, negQ *bn254.G2Affine, // Q and -Q
 	bit int, // {-1, 0, 1}
