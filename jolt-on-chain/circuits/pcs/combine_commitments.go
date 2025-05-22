@@ -1,6 +1,7 @@
 package pcs
 
 import (
+	"fmt"
 	"github.com/arithmic/gnark/constraint"
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
@@ -44,11 +45,14 @@ func (circuit *gtExpUniformCircuit) Hint() {
 }
 
 func (circuit *gtExpUniformCircuit) Compile() *constraint.ConstraintSystem {
-	r1cs, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit)
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit)
+	if err != nil {
+		fmt.Println("err in compilation is ", err)
+	}
 	return &r1cs
 }
 
-func (dummyCircuit *gtExpUniformCircuit) GenerateWitness(circuits []*gtExpUniformCircuit, r1cs *constraint.ConstraintSystem, numSteps uint32) fr.Vector {
+func (circuit *gtExpUniformCircuit) GenerateWitness(circuits []*gtExpUniformCircuit, r1cs *constraint.ConstraintSystem, numSteps uint32) fr.Vector {
 	var witness fr.Vector
 
 	circuits[0].Hint()
@@ -61,16 +65,16 @@ func (dummyCircuit *gtExpUniformCircuit) GenerateWitness(circuits []*gtExpUnifor
 	}
 
 	for i := 0; i < 254; i++ {
-		w, _ := frontend.NewWitness(circuits[i], ecc.GRUMPKIN.ScalarField())
-
+		w, err := frontend.NewWitness(circuits[i], ecc.GRUMPKIN.ScalarField())
+		if err != nil {
+			fmt.Println("err in generate witness is ", err)
+		}
 		wSolved, _ := (*r1cs).Solve(w)
 
 		witnessStep := wSolved.(*cs.R1CSSolution).W
 		for _, elem := range witnessStep {
 			witness = append(witness, fr.Element(elem))
 		}
-
 	}
-
 	return witness
 }
