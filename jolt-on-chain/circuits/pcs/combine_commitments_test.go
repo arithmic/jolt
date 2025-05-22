@@ -39,5 +39,6 @@ func TestGtExpUniformCircuit(t *testing.T) {
 	}
 	dummyCircuit = &gtExpUniformCircuit{}
 	r1cs := dummyCircuit.Compile()
+	_, _, _, _ = dummyCircuit.ExtractMatrices(*r1cs)
 	_ = dummyCircuit.GenerateWitness(circuits, r1cs, 254)
 }

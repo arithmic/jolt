@@ -1,4 +1,4 @@
-package uniform_circuits
+package uniform
 
 import (
 	"github.com/arithmic/gnark/constraint"
@@ -14,4 +14,10 @@ type UniformCircuit[T any] interface {
 	Compile() *constraint.ConstraintSystem
 
 	GenerateWitness(circuits []*T, r1cs *constraint.ConstraintSystem, numSteps uint32) fr.Vector
+	ExtractMatrices(r1cs constraint.ConstraintSystem) ([]Constraint, int, int, int)
+}
+type Constraint struct {
+	A map[string]string
+	B map[string]string
+	C map[string]string
 }

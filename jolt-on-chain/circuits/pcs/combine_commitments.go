@@ -7,9 +7,11 @@ import (
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/uniform"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
+	"strconv"
 )
 
 type gtExpUniformCircuit struct {
@@ -45,14 +47,14 @@ func (circuit *gtExpUniformCircuit) Hint() {
 }
 
 func (circuit *gtExpUniformCircuit) Compile() *constraint.ConstraintSystem {
-	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit)
+	circuitR1CS, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit)
 	if err != nil {
 		fmt.Println("err in compilation is ", err)
 	}
-	return &r1cs
+	return &circuitR1CS
 }
 
-func (circuit *gtExpUniformCircuit) GenerateWitness(circuits []*gtExpUniformCircuit, r1cs *constraint.ConstraintSystem, numSteps uint32) fr.Vector {
+func (circuit *gtExpUniformCircuit) GenerateWitness(circuits []*gtExpUniformCircuit, r1cs *constraint.ConstraintSystem, _ uint32) fr.Vector {
 	var witness fr.Vector
 
 	circuits[0].Hint()
@@ -77,4 +79,45 @@ func (circuit *gtExpUniformCircuit) GenerateWitness(circuits []*gtExpUniformCirc
 		}
 	}
 	return witness
+}
+func (circuit *gtExpUniformCircuit) ExtractMatrices(circuitR1CS constraint.ConstraintSystem) ([]uniform.Constraint, int, int, int) {
+	var outputConstraints []uniform.Constraint
+	var aCount, bCount, cCount int
+
+	// Assert to R1CS to get access to R1CS-specific methods
+	nR1CS, ok := circuitR1CS.(constraint.R1CS)
+	if !ok {
+		return outputConstraints, 0, 0, 0 // or handle error
+	}
+	constraints := nR1CS.GetR1Cs()
+	for _, r1c := range constraints {
+		singular := uniform.Constraint{
+			A: make(map[string]string),
+			B: make(map[string]string),
+			C: make(map[string]string),
+		}
+
+		for _, term := range r1c.L {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.A[col] = val
+			aCount++
+		}
+		for _, term := range r1c.R {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.B[col] = val
+			bCount++
+		}
+		for _, term := range r1c.O {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.C[col] = val
+			cCount++
+		}
+
+		outputConstraints = append(outputConstraints, singular)
+	}
+
+	return outputConstraints, aCount, bCount, cCount
 }
