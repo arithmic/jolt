@@ -3,6 +3,7 @@ package field_tower
 import (
 	"github.com/arithmic/gnark/frontend"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
+	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
@@ -25,6 +26,13 @@ func FromE2(y *bn254.E2) Fp2 {
 	return Fp2{
 		A0: grumpkin_fr.Element(y.A0),
 		A1: grumpkin_fr.Element(y.A1),
+	}
+}
+
+func ToE2(y Fp2) bn254.E2 {
+	return bn254.E2{
+		A0: y.A0.(fp.Element),
+		A1: y.A1.(fp.Element),
 	}
 }
 
@@ -213,21 +221,32 @@ func (e Ext2) Exp(x *Fp2, k *frontend.Variable) *Fp2 {
 		z = e.Square(z)
 
 		// Conditionally multiply z by x if the current bit is 1
-		z = e.Select(bits[i], z, e.Mul(z, x))
+		z = e.Select(bits[i], e.Mul(z, x), z)
 	}
 
 	return z
 }
 
-func (e Ext2) Select(condition frontend.Variable, a, b *Fp2) *Fp2 {
-	// Select the components of a and b based on the condition
-	z0 := e.api.Select(condition, b.A0, a.A0)
-	z1 := e.api.Select(condition, b.A1, a.A1)
+// func (e Ext2) Select(condition frontend.Variable, a, b *Fp2) *Fp2 {
+// 	// Select the components of a and b based on the condition
+// 	z0 := e.api.Select(condition, b.A0, a.A0)
+// 	z1 := e.api.Select(condition, b.A1, a.A1)
 
-	return &Fp2{
-		A0: z0,
-		A1: z1,
-	}
+// 	return &Fp2{
+// 		A0: z0,
+// 		A1: z1,
+// 	}
+// }
+
+func (e Ext2) Select(bit frontend.Variable, a, b *Fp2) *Fp2 {
+	api := e.api
+	oneMinusBit := api.Sub(frontend.Variable(1), bit)
+	api.AssertIsEqual(frontend.Variable(0), api.Mul(bit, oneMinusBit))
+	// Select the components of a and b based on the condition
+	z0 := e.Fp2MulFp(a, bit)
+	z1 := e.Fp2MulFp(b, oneMinusBit)
+	choice := e.Add(z0, z1)
+	return choice
 }
 
 func (e Ext2) AssertIsEqual(x, y *Fp2) {

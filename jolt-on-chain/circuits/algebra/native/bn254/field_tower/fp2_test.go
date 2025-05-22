@@ -580,3 +580,16 @@ func TestCircuitFp2Exp(t *testing.T) {
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
 }
+
+// func TestToE2(t *testing.T) {
+// 	var a bn254.E2
+
+// 	b := FromE2(&a)
+
+// 	c := ToE2(b)
+
+// 	fmt.Println("a", a)
+// 	fmt.Println("b", b)
+// 	fmt.Println("c", c)
+
+// }
