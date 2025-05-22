@@ -223,19 +223,30 @@ func (e Ext6) MulByNonResidue(x *Fp6) *Fp6 {
 	return &result
 }
 
-func (e Ext6) Select(condition frontend.Variable, a, b *Fp6) *Fp6 {
+// func (e Ext6) Select(condition frontend.Variable, a, b *Fp6) *Fp6 {
+// 	// Select the components of a and b based on the condition
+// 	z0 := e.e2.Select(condition, &b.A0, &a.A0)
+
+// 	z1 := e.e2.Select(condition, &b.A1, &a.A1)
+
+// 	z2 := e.e2.Select(condition, &b.A2, &a.A2)
+
+// 	return &Fp6{
+// 		A0: *z0,
+// 		A1: *z1,
+// 		A2: *z2,
+// 	}
+// }
+
+func (e Ext6) Select(bit frontend.Variable, a, b *Fp6) *Fp6 {
+	api := e.e2.api
+	oneMinusBit := api.Sub(frontend.Variable(1), bit)
+	api.AssertIsEqual(frontend.Variable(0), api.Mul(bit, oneMinusBit))
 	// Select the components of a and b based on the condition
-	z0 := e.e2.Select(condition, &b.A0, &a.A0)
-
-	z1 := e.e2.Select(condition, &b.A1, &a.A1)
-
-	z2 := e.e2.Select(condition, &b.A2, &a.A2)
-
-	return &Fp6{
-		A0: *z0,
-		A1: *z1,
-		A2: *z2,
-	}
+	z0 := e.Fp6MulFp(a, bit)
+	z1 := e.Fp6MulFp(b, oneMinusBit)
+	choice := e.Add(z0, z1)
+	return choice
 }
 
 func (e Ext6) AssertIsEqual(x, y *Fp6) {

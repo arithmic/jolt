@@ -27,6 +27,13 @@ func FromE12(y *bn254.E12) Fp12 {
 	}
 }
 
+// func ToE12(y *Fp12) bn254.E12 {
+// 	return Fp12{
+// 		A0: FromE6(&y.C0),
+// 		A1: FromE6(&y.C1),
+// 	}
+// }
+
 func (e Ext12) One() *Fp12 {
 	return &Fp12{
 		A0: *e.E6.One(),
@@ -143,17 +150,18 @@ func (e Ext12) Inverse(x *Fp12) *Fp12 {
 	}
 }
 
-func (e Ext12) Select(condition frontend.Variable, a, b *Fp12) *Fp12 {
-	// Select the components of a and b based on the condition
-	z0 := e.E6.Select(condition, &b.A0, &a.A0)
-	z1 := e.E6.Select(condition, &b.A1, &a.A1)
+// func (e Ext12) Select(condition frontend.Variable, a, b *Fp12) *Fp12 {
+// 	// Select the components of a and b based on the condition
+// 	z0 := e.E6.Select(condition, &b.A0, &a.A0)
+// 	z1 := e.E6.Select(condition, &b.A1, &a.A1)
 
-	return &Fp12{
-		A0: *z0,
-		A1: *z1,
-	}
-}
-func (e Ext12) Select2(bit frontend.Variable, a, b *Fp12) *Fp12 {
+// 	return &Fp12{
+// 		A0: *z0,
+// 		A1: *z1,
+// 	}
+// }
+
+func (e Ext12) Select(bit frontend.Variable, a, b *Fp12) *Fp12 {
 	api := e.E6.e2.api
 	oneMinusBit := api.Sub(frontend.Variable(1), bit)
 	api.AssertIsEqual(frontend.Variable(0), api.Mul(bit, oneMinusBit))
@@ -175,7 +183,7 @@ func (e Ext12) Exp(x *Fp12, k *frontend.Variable) *Fp12 {
 		// Square z
 		z = e.Square(z)
 		// Conditionally multiply z by x if the current bit is 1
-		z = e.Select(bits[i], z, e.Mul(z, x))
+		z = e.Select(bits[i], e.Mul(z, x), z)
 	}
 	return z
 }
