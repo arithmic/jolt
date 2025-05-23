@@ -1,6 +1,7 @@
 package groups
 
 import (
+	"crypto/rand"
 	"math/big"
 
 	"github.com/arithmic/gnark/frontend"
@@ -239,4 +240,23 @@ func (g2 G2API) Select(bit frontend.Variable, A, B *G2Projective) *G2Projective 
 		Y: *g2.e2.Select(bit, &A.Y, &B.Y),
 		Z: *g2.e2.Select(bit, &A.Z, &B.Z),
 	}
+}
+
+func RandomG1G2Affines() (bn254.G1Affine, bn254.G2Affine) {
+	_, _, G1AffGen, G2AffGen := bn254.Generators()
+	mod := bn254.ID.ScalarField()
+	s1, err := rand.Int(rand.Reader, mod)
+	if err != nil {
+		panic(err)
+	}
+	s2, err := rand.Int(rand.Reader, mod)
+	if err != nil {
+		panic(err)
+	}
+
+	var p bn254.G1Affine
+	p.ScalarMultiplication(&G1AffGen, s1)
+	var q bn254.G2Affine
+	q.ScalarMultiplication(&G2AffGen, s2)
+	return p, q
 }
