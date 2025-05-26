@@ -395,3 +395,47 @@ func MillerLoopNew_fn(
 
 	return &f[2]
 }
+
+
+func MillerLoopStepIntegrated_fn(
+	Rin *G2Proj,                 // R[2*i]
+	Q, negQ *bn254.G2Affine,     // Q and -Q
+	p *bn254.G1Affine,           // affine P
+	fIn *bn254.E12,              // f[3*i]
+	bit int,                     // {-1, 0, 1}
+) (Rout G2Proj, f1, f2, f3 bn254.E12) {
+
+	// Step 1: LineDouble
+	RmidPtr, ell1 := LineDouble_fn(Rin)
+	Rmid := *RmidPtr
+
+	// Step 2: LineAddition or Propagation
+	var ell2 *bn254.E6
+	if bit == 1 {
+		RoutPtr, ell2Ptr := LineAddition_fn(&Rmid, Q)
+		Rout = *RoutPtr
+		ell2 = ell2Ptr
+	} else if bit == -1 {
+		RoutPtr, ell2Ptr := LineAddition_fn(&Rmid, negQ)
+		Rout = *RoutPtr
+		ell2 = ell2Ptr
+	} else {
+		Rout = Rmid
+		ell2 = ell1
+	}
+
+	// Step 3: f1 = fIn^2
+	f1.Mul(fIn, fIn)
+
+	// Step 4: f2 = Ell(f1, ell1)
+	f2 = *Ell_fn(&f1, ell1, p)
+
+	// Step 5: f3 = Ell(f2, ell2) if bit == ±1
+	if bit == 1 || bit == -1 {
+		f3 = *Ell_fn(&f2, ell2, p)
+	} else {
+		f3 = f2
+	}
+
+	return
+}

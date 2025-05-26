@@ -697,3 +697,56 @@ func (e PairingAPI) Pairing(Q *groups.G2Affine, P *groups.G1Projective) *field_t
 	res := FinalExp(&e.e2, &e.e12, miller_output)
 	return res
 }
+
+func (e PairingAPI) MillerLoopStepIntegrated(
+	Rin *groups.G2Projective, // R[2*i]
+	Q, negQ *groups.G2Affine, // Q and -Q
+	p *groups.G1Affine, // affine P
+	fIn *field_tower.Fp12, // f[3*i]
+	bit frontend.Variable, // {-1, 0, 1}
+	twoInv frontend.Variable,
+) (Rout groups.G2Projective, f1, f2, f3 field_tower.Fp12) {
+	// Step 1: LineDouble
+	RmidPtr, ell1Ptr := LineDouble(&e.api, &e.e2, Rin, twoInv)
+	Rmid := *RmidPtr
+	ell1 := *ell1Ptr
+
+	// Compute selectors for bit == 1, bit == -1
+	isOne := e.api.IsZero(e.api.Sub(bit, frontend.Variable(1)))      // bit == 1
+	isMinusOne := e.api.IsZero(e.api.Add(bit, frontend.Variable(1))) // bit == -1
+
+	// Line additions
+	Rout1Ptr, ell2_1Ptr := LineAddition(&e.api, &e.e2, &Rmid, Q)
+	RoutMinus1Ptr, ell2_minus1Ptr := LineAddition(&e.api, &e.e2, &Rmid, negQ)
+
+	// Select Rout.X
+	RoutX := e.e2.Select(isOne, &Rout1Ptr.X, &Rmid.X)
+	RoutX = e.e2.Select(isMinusOne, &RoutMinus1Ptr.X, RoutX)
+	// Select Rout.Y
+	RoutY := e.e2.Select(isOne, &Rout1Ptr.Y, &Rmid.Y)
+	RoutY = e.e2.Select(isMinusOne, &RoutMinus1Ptr.Y, RoutY)
+	// Select Rout.Z
+	RoutZ := e.e2.Select(isOne, &Rout1Ptr.Z, &Rmid.Z)
+	RoutZ = e.e2.Select(isMinusOne, &RoutMinus1Ptr.Z, RoutZ)
+
+	Rout = groups.G2Projective{
+		X: *RoutX,
+		Y: *RoutY,
+		Z: *RoutZ,
+	}
+
+	// Select ell2
+	ell2 := *e.e6.Select(isOne, ell2_1Ptr, &ell1)
+	ell2 = *e.e6.Select(isMinusOne, ell2_minus1Ptr, &ell2)
+
+	// Miller loop evaluation
+	f1 = *e.e12.Mul(fIn, fIn)                   // f1 = fIn^2
+	f2 = *Ell(&e.e2, &e.e6, &f1, &ell1, p)      // f2 = Ell(f1, ell1)
+	f3_val := *Ell(&e.e2, &e.e6, &f2, &ell2, p) // f3_val = Ell(f2, ell2)
+
+	// Conditionally select f3
+	isZero := e.api.IsZero(bit)
+	f3 = *e.e12.Select(isZero, &f2, &f3_val)
+
+	return
+}

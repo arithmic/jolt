@@ -888,3 +888,223 @@ func ExtractConstraints(r1cs constraint.ConstraintSystem) ([]Constraint, int, in
 
 	return outputConstraints, aCount, bCount, cCount
 }
+
+type MillerUniformIntegratedCircuit struct {
+	FIn     field_tower.Fp12 `gnark:",public"`
+	P       groups.G1Affine  `gnark:",public"`
+	Rin     groups.G2Projective
+	Q, NegQ groups.G2Affine
+	Rout    groups.G2Projective
+	Bit     frontend.Variable
+
+	// for output assertions
+	FOut [3]field_tower.Fp12
+}
+
+func (circuit *MillerUniformIntegratedCircuit) Define(api frontend.API) error {
+	pairing_api := New(api)
+	twoInv := api.Inverse(frontend.Variable(2))
+
+	_, f1, f2, f3 := pairing_api.MillerLoopStepIntegrated(
+		&circuit.Rin, &circuit.Q, &circuit.NegQ,
+		&circuit.P, &circuit.FIn, circuit.Bit, twoInv,
+	)
+	e12 := field_tower.NewExt12(api)
+	e12.AssertIsEqual(&f1, &circuit.FOut[0])
+	e12.AssertIsEqual(&f2, &circuit.FOut[1])
+	e12.AssertIsEqual(&f3, &circuit.FOut[2])
+
+	return nil
+}
+
+func TestCircuitMillerUniformIntegrated(t *testing.T) {
+	// Define the circuit
+
+	var circuit MillerUniformIntegratedCircuit
+	// Compile the circuit into an R1CS
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of EllCoeffsUniformCircuit", r1cs.GetNbConstraints())
+	_, aCount, bCount, cCount := ExtractConstraints(r1cs)
+	println("aCount:", aCount, "bCount:", bCount, "cCount:", cCount)
+
+	_, _, g1GenAff, g2GenAff := bn254.Generators()
+
+	var P bn254.G1Affine
+	var Q bn254.G2Affine
+
+	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
+	P.ScalarMultiplication(&g1GenAff, scalar)
+	Q.ScalarMultiplication(&g2GenAff, scalar)
+
+	bits := []int{
+		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
+		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
+		-1, 0, 0, 0, 1, 0, 1,
+	}
+
+	Rin := ToProjective_fn(&Q)
+	var neg_Q bn254.G2Affine
+	neg_Q.X = Q.X
+	neg_Q.Y.A1.Neg(&Q.Y.A1)
+	neg_Q.Y.A0.Neg(&Q.Y.A0)
+	n := 64
+
+	var FIn bn254.E12
+	FIn.SetOne()
+
+	Rout, f1, f2, f3 := MillerLoopStepIntegrated_fn(&Rin, &Q, &neg_Q, &P, &FIn, bits[n-1])
+
+	var FOut [3]field_tower.Fp12
+
+	FOut[0] = field_tower.FromE12(&f1)
+	FOut[1] = field_tower.FromE12(&f2)
+	FOut[2] = field_tower.FromE12(&f3)
+
+	assignment := &MillerUniformIntegratedCircuit{
+		FIn:  field_tower.FromE12(&FIn),
+		P:    groups.AffineFromG1Affine(&P),
+		Rin:  groups.FromBNG2Affine(&Q),
+		Q:    groups.G2AffineFromBNG2Affine(&Q),
+		NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
+		Rout: G2ProjectiveFromBNG2Proj(&Rout),
+		FOut: FOut,
+		Bit:  bits[n-1],
+	}
+
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wit, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+
+	z := wit.(*cs.R1CSSolution).W
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
+	var extendZ grumpkin_fr.Vector
+	zLen := len(z)
+	fmt.Println("zlen is ", len(z))
+
+	for idx := 0; idx < zLen; idx++ {
+		extendZ = append(extendZ, z[idx])
+	}
+
+	var RIn_val groups.G2Projective
+
+	var FIn_val field_tower.Fp12
+	for idx := 1; idx < n; idx++ {
+
+		RIn_val.X.A0 = z[29]
+		RIn_val.X.A1 = z[30]
+		RIn_val.Y.A0 = z[31]
+		RIn_val.Y.A1 = z[32]
+		RIn_val.Z.A0 = z[33]
+		RIn_val.Z.A1 = z[34]
+
+		FIn_val.A0.A0.A0 = z[60]
+		FIn_val.A0.A0.A1 = z[61]
+		FIn_val.A0.A1.A0 = z[62]
+		FIn_val.A0.A1.A1 = z[63]
+		FIn_val.A0.A2.A0 = z[64]
+		FIn_val.A0.A2.A1 = z[65]
+		FIn_val.A1.A0.A0 = z[66]
+		FIn_val.A1.A0.A1 = z[67]
+		FIn_val.A1.A1.A0 = z[68]
+		FIn_val.A1.A1.A1 = z[69]
+		FIn_val.A1.A2.A0 = z[70]
+		FIn_val.A1.A2.A1 = z[71]
+
+		Rout, f1, f2, f3 = MillerLoopStepIntegrated_fn(&Rout, &Q, &neg_Q, &P, &f3, bits[n-1-idx])
+
+		FOut[0] = field_tower.FromE12(&f1)
+		FOut[1] = field_tower.FromE12(&f2)
+		FOut[2] = field_tower.FromE12(&f3)
+
+		assignment := &MillerUniformIntegratedCircuit{
+			FIn:  FIn_val,
+			P:    groups.AffineFromG1Affine(&P),
+			Rin:  RIn_val,
+			Q:    groups.G2AffineFromBNG2Affine(&Q),
+			NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
+			Rout: G2ProjectiveFromBNG2Proj(&Rout),
+			FOut: FOut,
+			Bit:  bits[n-1-idx],
+		}
+
+		witness, _ := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+		if err != nil {
+			t.Fatal(err)
+		}
+		wit, err_1 := r1cs.Solve(witness)
+		if err_1 != nil {
+			fmt.Println("Error solving the r1cs", err_1)
+			return
+		}
+
+		z = wit.(*cs.R1CSSolution).W
+		for idx := 0; idx < len(z); idx++ {
+			extendZ = append(extendZ, z[idx])
+		}
+	}
+
+	f3.C0.B0.A0.SetString(z[60].String())
+	f3.C0.B0.A1.SetString(z[61].String())
+	f3.C0.B1.A0.SetString(z[62].String())
+	f3.C0.B1.A1.SetString(z[63].String())
+	f3.C0.B2.A0.SetString(z[64].String())
+	f3.C0.B2.A1.SetString(z[65].String())
+	f3.C1.B0.A0.SetString(z[66].String())
+	f3.C1.B0.A1.SetString(z[67].String())
+	f3.C1.B1.A0.SetString(z[68].String())
+	f3.C1.B1.A1.SetString(z[69].String())
+	f3.C1.B2.A0.SetString(z[70].String())
+	f3.C1.B2.A1.SetString(z[71].String())
+
+	Q1 := MulByChar_fn(&Q)
+	Q2 := MulByChar_fn(Q1)
+
+	var neg_Q2 bn254.G2Affine
+	neg_Q2.X = Q2.X
+	neg_Q2.Y.A1.Neg(&Q2.Y.A1)
+	neg_Q2.Y.A0.Neg(&Q2.Y.A0)
+
+	var RIn_val_2n G2Proj
+
+	k := 29
+	RIn_val_2n.X.A0.SetString(z[k].String())
+	RIn_val_2n.X.A1.SetString(z[k+1].String())
+	RIn_val_2n.Y.A0.SetString(z[k+2].String())
+	RIn_val_2n.Y.A1.SetString(z[k+3].String())
+	RIn_val_2n.Z.A0.SetString(z[k+4].String())
+	RIn_val_2n.Z.A1.SetString(z[k+5].String())
+
+	R_New, computed_ell_coeff := LineAddition_fn(&RIn_val_2n, Q1)
+
+	_, ell_coeffs_last := LineAddition_fn(R_New, &neg_Q2)
+	res := Ell_fn(&f3, computed_ell_coeff, &P)
+	miller_final_res := Ell_fn(res, ell_coeffs_last, &P)
+
+	actual_result := MillerLoopNew_fn(&Q, &P)
+	val := miller_final_res.Equal(actual_result)
+	if val == false {
+		fmt.Println("The result is not equal")
+	} else {
+		fmt.Println("The result is equal")
+	}
+
+	duration = time.Since(start)
+	fmt.Printf("Witness generation time 2 : %s\n", duration)
+}
