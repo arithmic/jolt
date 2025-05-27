@@ -5,10 +5,8 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
-// TODO: any is too broad. Use something more restrictive.
+// UniformCircuit TODO: any is too broad. Use something more restrictive.
 type UniformCircuit[T any] interface {
-	//frontend.Circuit
-
 	Hint()
 
 	Compile() *constraint.ConstraintSystem
