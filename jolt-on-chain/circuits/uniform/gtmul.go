@@ -55,14 +55,14 @@ func multiplyPolynomials(a, b []fr.Element) []fr.Element {
 	return result
 }
 
-func computeQuotientPoly(f, d, r []fr.Element) []fr.Element {
-	// First, compute f - r
-	fMinusR := make([]fr.Element, len(f))
-	copy(fMinusR, f)
+func computeQuotientPoly(divPoly, redPoly, remPoly []fr.Element) []fr.Element {
+	// First, compute divPoly - remPoly
+	fMinusR := make([]fr.Element, len(divPoly))
+	copy(fMinusR, divPoly)
 
-	// Subtract r from fMinusR (element-wise for corresponding indices)
-	for i := 0; i < len(r) && i < len(fMinusR); i++ {
-		fMinusR[i].Sub(&fMinusR[i], &r[i])
+	// Subtract remPoly from fMinusR (element-wise for corresponding indices)
+	for i := 0; i < len(remPoly) && i < len(fMinusR); i++ {
+		fMinusR[i].Sub(&fMinusR[i], &remPoly[i])
 	}
 
 	// Find the actual degree of the dividend (fMinusR) by removing leading zeros
@@ -71,9 +71,9 @@ func computeQuotientPoly(f, d, r []fr.Element) []fr.Element {
 		dividendDegree--
 	}
 
-	// Find the actual degree of the divisor (d) by removing leading zeros
-	divisorDegree := len(d) - 1
-	for divisorDegree >= 0 && d[divisorDegree].IsZero() {
+	// Find the actual degree of the divisor (redPoly) by removing leading zeros
+	divisorDegree := len(redPoly) - 1
+	for divisorDegree >= 0 && redPoly[divisorDegree].IsZero() {
 		divisorDegree--
 	}
 
@@ -88,7 +88,7 @@ func computeQuotientPoly(f, d, r []fr.Element) []fr.Element {
 
 	// Get inverse of leading coefficient of divisor
 	var invLeading fr.Element
-	invLeading.Inverse(&d[divisorDegree])
+	invLeading.Inverse(&redPoly[divisorDegree])
 
 	// Polynomial long division
 	for i := dividendDegree; i >= divisorDegree; i-- {
@@ -101,10 +101,10 @@ func computeQuotientPoly(f, d, r []fr.Element) []fr.Element {
 		coeff.Mul(&fMinusR[i], &invLeading)
 		q[i-divisorDegree].Set(&coeff)
 
-		// Subtract coeff * d * x^(i-divisorDegree) from fMinusR
+		// Subtract coeff * redPoly * x^(i-divisorDegree) from fMinusR
 		for j := 0; j <= divisorDegree; j++ {
 			var temp fr.Element
-			temp.Mul(&coeff, &d[j])
+			temp.Mul(&coeff, &redPoly[j])
 			fMinusR[i-divisorDegree+j].Sub(&fMinusR[i-divisorDegree+j], &temp)
 		}
 	}

@@ -6,13 +6,15 @@ import (
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
+	bn254Fp "github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
+	"math/big"
 	"testing"
 )
 
-func makeFrontendVariable(in1in2 []fr.Element) []frontend.Variable {
-	res := make([]frontend.Variable, len(in1in2))
-	for i, elem := range in1in2 {
+func makeFrontendVariable(input []fr.Element) []frontend.Variable {
+	res := make([]frontend.Variable, len(input))
+	for i, elem := range input {
 		res[i] = frontend.Variable(elem) // Explicit conversion if needed
 	}
 	return res
@@ -74,6 +76,90 @@ func TestGtMul(t *testing.T) {
 	}
 
 	wit, _ := gtMulConstraints.Solve(witness)
+	witnessVec := wit.(*cs.R1CSSolution).W
+	println("Len of witness is ", len(witnessVec))
+}
+
+func TestGtExp(t *testing.T) {
+	var gtExpCircuit GTExp
+	var one fr.Element
+	one.SetOne()
+	var zero fr.Element
+	zero.SetZero()
+	var random fr.Element
+	_, _ = random.SetRandom()
+
+	var rPowers [13]fr.Element
+	rPowers[0] = one
+	for i := 1; i < 13; i++ {
+		rPowers[i].Mul(&random, &rPowers[i-1])
+	}
+
+	reduciblePoly := make([]fr.Element, 13) // degree 12 polynomial has 13 coefficients
+	reduciblePoly[0].SetInt64(82)           // constant term
+	reduciblePoly[6].SetInt64(-18)          // coefficient of x^6
+	reduciblePoly[12].SetOne()              // coefficient of x^12
+
+	divisorEval := fr.Element{}
+	for i := 0; i < len(reduciblePoly); i++ {
+		var temp fr.Element
+		temp.Mul(&reduciblePoly[i], &rPowers[i])
+		divisorEval.Add(&divisorEval, &temp)
+	}
+
+	var inTower bn254.E12
+	var b bn254Fp.Element
+	_, _ = inTower.SetRandom()
+	_, _ = b.SetRandom()
+	var frBigInt big.Int
+	b.BigInt(&frBigInt)
+	in := FromE12(&inTower)
+
+	inEval := fr.Element{}
+	for i := 0; i < len(in); i++ {
+		var temp fr.Element
+		temp.Mul(&in[i], &rPowers[i])
+		inEval.Add(&inEval, &temp)
+	}
+
+	gtExpCircuit = GTExp{
+		rPowers:     rPowers,
+		divisorEval: divisorEval,
+		inEval:      inEval,
+	}
+
+	gtExpConstraints, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &gtExpCircuit)
+
+	println("no of constraints are ", gtExpConstraints.GetNbConstraints())
+
+	e12One := make([]fr.Element, 12)
+	e12One[0].SetOne()
+	//accAccPoly := multiplyPolynomials(e12One, e12One)
+
+	//accQuot := computeQuotientPoly(accAccPoly, reduciblePoly, e12One)
+	accQuot := make([]fr.Element, 11)
+	accInQuot := make([]fr.Element, 11)
+	//accInPoly := multiplyPolynomials(e12One, in)
+	//accInQuot := computeQuotientPoly(accInPoly, reduciblePoly, in)
+
+	assignment := &GTExp{
+		//Out:       [12]frontend.Variable(makeFrontendVariable(in)),
+		//Acc:       [12]frontend.Variable(makeFrontendVariable(e12One)),
+		OutEval:   inEval,
+		AccEval:   one,
+		AccQuot:   [11]frontend.Variable(makeFrontendVariable(accQuot)),
+		AccRem:    [12]frontend.Variable(makeFrontendVariable(e12One)),
+		AccInQuot: [11]frontend.Variable(makeFrontendVariable(accInQuot)),
+		AccInRem:  [12]frontend.Variable(makeFrontendVariable(in)),
+		Bit:       one,
+	}
+
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wit, _ := gtExpConstraints.Solve(witness)
 	witnessVec := wit.(*cs.R1CSSolution).W
 	println("Len of witness is ", len(witnessVec))
 }
