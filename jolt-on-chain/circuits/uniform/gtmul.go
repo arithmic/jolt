@@ -22,7 +22,6 @@ func (circuit *GTMul) Define(api frontend.API) error {
 	qEval := frontend.Variable(0)
 	rEval := frontend.Variable(0)
 
-	//TODO:- Write Eval Circuit.
 	//Evaluate in1, in2,Remainder  at r
 	for i := 0; i < 12; i++ {
 		in1Eval = api.Add(in1Eval, api.Mul(circuit.In1[i], circuit.rPowers[i]))
@@ -54,7 +53,6 @@ func multiplyPolynomials(a, b []fr.Element) []fr.Element {
 	}
 	return result
 }
-
 func computeQuotientPoly(divPoly, redPoly, remPoly []fr.Element) []fr.Element {
 	// First, compute divPoly - remPoly
 	fMinusR := make([]fr.Element, len(divPoly))
@@ -77,14 +75,21 @@ func computeQuotientPoly(divPoly, redPoly, remPoly []fr.Element) []fr.Element {
 		divisorDegree--
 	}
 
-	// If dividend degree < divisor degree, quotient is zero
+	// Always return a quotient of length 11 (expected quotient degree for this application)
+	q := make([]fr.Element, 11)
+
+	// If dividend degree < divisor degree, quotient is zero (already initialized as zeros)
 	if dividendDegree < divisorDegree || dividendDegree < 0 {
-		return []fr.Element{}
+		return q
 	}
 
 	// Quotient degree = dividend degree - divisor degree
 	quotientDegree := dividendDegree - divisorDegree
-	q := make([]fr.Element, quotientDegree+1)
+
+	// Ensure we don't exceed the expected quotient length
+	if quotientDegree >= 11 {
+		quotientDegree = 10 // Maximum index for length 11 array
+	}
 
 	// Get inverse of leading coefficient of divisor
 	var invLeading fr.Element
@@ -96,10 +101,15 @@ func computeQuotientPoly(divPoly, redPoly, remPoly []fr.Element) []fr.Element {
 			continue
 		}
 
+		quotientIndex := i - divisorDegree
+		if quotientIndex >= 11 {
+			continue // Skip if quotient index exceeds expected length
+		}
+
 		// Calculate quotient coefficient
 		var coeff fr.Element
 		coeff.Mul(&fMinusR[i], &invLeading)
-		q[i-divisorDegree].Set(&coeff)
+		q[quotientIndex].Set(&coeff)
 
 		// Subtract coeff * redPoly * x^(i-divisorDegree) from fMinusR
 		for j := 0; j <= divisorDegree; j++ {

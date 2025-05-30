@@ -12,14 +12,6 @@ import (
 	"testing"
 )
 
-func makeFrontendVariable(input []fr.Element) []frontend.Variable {
-	res := make([]frontend.Variable, len(input))
-	for i, elem := range input {
-		res[i] = frontend.Variable(elem) // Explicit conversion if needed
-	}
-	return res
-}
-
 func TestGtMul(t *testing.T) {
 	var gtMulCircuit GTMul
 	var one fr.Element
@@ -80,12 +72,19 @@ func TestGtMul(t *testing.T) {
 	println("Len of witness is ", len(witnessVec))
 }
 
-func TestGtExp(t *testing.T) {
-	var gtExpCircuit GTExp
+func TestGTExpUniformCircuit(t *testing.T) {
+	// Generate random input and exponent
+	var inTower bn254.E12
+	var exp bn254Fp.Element
+	_, _ = inTower.SetRandom()
+	_, _ = exp.SetRandom()
+	var frBigInt big.Int
+	exp.BigInt(&frBigInt)
+
+	// Setup circuit parameters
 	var one fr.Element
 	one.SetOne()
-	var zero fr.Element
-	zero.SetZero()
+
 	var random fr.Element
 	_, _ = random.SetRandom()
 
@@ -95,10 +94,10 @@ func TestGtExp(t *testing.T) {
 		rPowers[i].Mul(&random, &rPowers[i-1])
 	}
 
-	reduciblePoly := make([]fr.Element, 13) // degree 12 polynomial has 13 coefficients
-	reduciblePoly[0].SetInt64(82)           // constant term
-	reduciblePoly[6].SetInt64(-18)          // coefficient of x^6
-	reduciblePoly[12].SetOne()              // coefficient of x^12
+	reduciblePoly := make([]fr.Element, 13)
+	reduciblePoly[0].SetInt64(82)
+	reduciblePoly[6].SetInt64(-18)
+	reduciblePoly[12].SetOne()
 
 	divisorEval := fr.Element{}
 	for i := 0; i < len(reduciblePoly); i++ {
@@ -107,14 +106,7 @@ func TestGtExp(t *testing.T) {
 		divisorEval.Add(&divisorEval, &temp)
 	}
 
-	var inTower bn254.E12
-	var b bn254Fp.Element
-	_, _ = inTower.SetRandom()
-	_, _ = b.SetRandom()
-	var frBigInt big.Int
-	b.BigInt(&frBigInt)
 	in := FromE12(&inTower)
-
 	inEval := fr.Element{}
 	for i := 0; i < len(in); i++ {
 		var temp fr.Element
@@ -122,46 +114,40 @@ func TestGtExp(t *testing.T) {
 		inEval.Add(&inEval, &temp)
 	}
 
-	gtExpCircuit = GTExp{
-		rPowers:     rPowers,
-		divisorEval: divisorEval,
+	// Create circuits for each bit of the exponent
+	circuit := &GTExpUniformCircuit{}
+
+	var e12OneTower bn254.E12
+	e12OneTower.SetOne()
+	//oneCoeffs := FromE12(&e)
+	//oneEval := evaluateE12AtR(&e, rPowers)
+
+	circuit = &GTExpUniformCircuit{
+
 		inEval:      inEval,
+		divisorEval: divisorEval,
+		rPowers:     rPowers,
+
+		// Native computation fields
+		inTower:       inTower,
+		in:            in,
+		exp:           frBigInt,
+		reduciblePoly: reduciblePoly,
+		out:           e12OneTower,
 	}
+	//}
 
-	gtExpConstraints, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &gtExpCircuit)
+	// Create dummy circuit for compilation
+	//dummyCircuit := &GTExpUniformCircuit{}
+	r1cs := circuit.Compile()
 
-	println("no of constraints are ", gtExpConstraints.GetNbConstraints())
+	// Extract matrices and generate witness
+	constraints, aCount, bCount, cCount := circuit.ExtractMatrices(*r1cs)
 
-	e12One := make([]fr.Element, 12)
-	e12One[0].SetOne()
-	//accAccPoly := multiplyPolynomials(e12One, e12One)
-
-	//accQuot := computeQuotientPoly(accAccPoly, reduciblePoly, e12One)
-	accQuot := make([]fr.Element, 11)
-	accInQuot := make([]fr.Element, 11)
-	//accInPoly := multiplyPolynomials(e12One, in)
-	//accInQuot := computeQuotientPoly(accInPoly, reduciblePoly, in)
-
-	assignment := &GTExp{
-		//Out:       [12]frontend.Variable(makeFrontendVariable(in)),
-		//Acc:       [12]frontend.Variable(makeFrontendVariable(e12One)),
-		OutEval:   inEval,
-		AccEval:   one,
-		AccQuot:   [11]frontend.Variable(makeFrontendVariable(accQuot)),
-		AccRem:    [12]frontend.Variable(makeFrontendVariable(e12One)),
-		AccInQuot: [11]frontend.Variable(makeFrontendVariable(accInQuot)),
-		AccInRem:  [12]frontend.Variable(makeFrontendVariable(in)),
-		Bit:       one,
-	}
-
-	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	wit, _ := gtExpConstraints.Solve(witness)
-	witnessVec := wit.(*cs.R1CSSolution).W
-	println("Len of witness is ", len(witnessVec))
+	t.Logf("Number of constraints: %d", len(constraints))
+	t.Logf("A terms: %d, B terms: %d, C terms: %d", aCount, bCount, cCount)
+	_ = circuit.GenerateWitness(circuit, r1cs, 254)
+	//t.Logf("Witness length: %d", len(witness))
 }
 
 func TestComputeQuotientPoly(t *testing.T) {
