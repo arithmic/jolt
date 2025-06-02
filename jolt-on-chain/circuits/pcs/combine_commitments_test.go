@@ -1,7 +1,9 @@
 package pcs
 
 import (
-	"github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
+	"fmt"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/uniform"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	bn254Fp "github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	"math/big"
@@ -16,29 +18,26 @@ func TestGtExpUniformCircuit(t *testing.T) {
 	var frBigInt big.Int
 	b.BigInt(&frBigInt)
 
-	var dummyCircuit *gtExpUniformCircuit
+	circuit := gtExpUniformCircuit{
+		g:   a,
+		exp: b,
 
-	circuits := make([]*gtExpUniformCircuit, 254)
-
-	var ext field_tower.Ext12
-	var e bn254.E12
-
-	for i := 0; i < 254; i++ {
-		bit := frBigInt.Bit(253 - i)
-		circuits[i] = &gtExpUniformCircuit{
-			In:  field_tower.FromE12(&a),
-			Acc: *ext.One(),
-			Bit: bit,
-			Out: *ext.One(),
-
-			in:  a,
-			acc: *e.SetOne(),
-			bit: bit,
-			out: *e.SetOne(),
-		}
+		dummyCircuit: &gtExpStepCircuit{},
 	}
-	dummyCircuit = &gtExpUniformCircuit{}
-	r1cs := dummyCircuit.Compile()
-	_, _, _, _ = dummyCircuit.ExtractMatrices(*r1cs)
-	_ = dummyCircuit.GenerateWitness(circuits, r1cs, 254)
+
+	var _ uniform.UniformCircuit = &gtExpUniformCircuit{}
+
+	circuit.CreateStepCircuits()
+
+	// r1cs := circuit.Compile()
+
+	_ = circuit.GenerateWitness()
+
+	actualResult := field_tower.FromE12(a.Exp(a, &frBigInt))
+
+	computedResult := circuit.gtExpSteps[253].Out
+
+	fmt.Println("The auctal result is ", actualResult)
+
+	fmt.Println("The computed result is ", computedResult)
 }
