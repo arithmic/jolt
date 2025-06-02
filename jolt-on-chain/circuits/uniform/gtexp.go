@@ -21,14 +21,16 @@ func makeFrontendVariable(input []fr.Element) []frontend.Variable {
 	return res
 }
 
-type GTExpUniformCircuit struct {
-	OutEval     frontend.Variable `gnark:",public"`
+type GTExp struct {
 	AccEval     frontend.Variable
 	AccQuot     [11]frontend.Variable
 	AccRem      [12]frontend.Variable
 	AccInQuot   [11]frontend.Variable
 	AccInRem    [12]frontend.Variable
 	Bit         frontend.Variable
+	AccBit      frontend.Variable
+	OutBit      frontend.Variable
+	OutEval     frontend.Variable
 	inEval      fr.Element
 	divisorEval fr.Element
 	rPowers     [13]fr.Element
@@ -40,10 +42,12 @@ type GTExpUniformCircuit struct {
 	exp           big.Int
 	bit           uint
 	out           bn254.E12
+	bitOut        big.Int
+	bitAcc        big.Int
 	reduciblePoly []fr.Element
 }
 
-func (circuit *GTExpUniformCircuit) Define(api frontend.API) error {
+func (circuit *GTExp) Define(api frontend.API) error {
 	accQuotEval := frontend.Variable(0)
 	accRemEval := frontend.Variable(0)
 	accInRemEval := frontend.Variable(0)
@@ -72,24 +76,31 @@ func (circuit *GTExpUniformCircuit) Define(api frontend.API) error {
 	api.AssertIsEqual(accRemIn, api.Add(accInQuotDiv, accInRemEval))
 
 	api.AssertIsBoolean(circuit.Bit)
-	expectedOut := api.Add(api.Mul(api.Sub(accInRemEval, accRemEval), circuit.Bit), accRemEval)
-	api.AssertIsEqual(circuit.OutEval, expectedOut)
+	actualOut := api.Add(api.Mul(api.Sub(accInRemEval, accRemEval), circuit.Bit), accRemEval)
+	api.AssertIsEqual(circuit.OutEval, actualOut)
 
+	bitDouble := api.Add(circuit.AccBit, circuit.AccBit)
+	api.AssertIsEqual(circuit.OutBit, api.Add(bitDouble, circuit.Bit))
 	return nil
 }
 
-func (circuit *GTExpUniformCircuit) Hint() {
+func (circuit *GTExp) Hint() {
 	var square bn254.E12
-	square = *square.Square(&circuit.accTower)
+	square.Square(&circuit.accTower)
+
+	var bitAccDouble big.Int
+	bitAccDouble.Add(&circuit.bitAcc, &circuit.bitAcc)
+	circuit.bitOut.Add(&bitAccDouble, big.NewInt(int64(circuit.bit)))
 
 	if circuit.bit == 1 {
-		circuit.out = *(&circuit.out).Mul(&square, &circuit.inTower)
+		circuit.out.Mul(&square, &circuit.inTower)
 	} else {
 		circuit.out = square
 	}
+
 }
 
-func (circuit *GTExpUniformCircuit) Compile() *constraint.ConstraintSystem {
+func (circuit *GTExp) Compile() *constraint.ConstraintSystem {
 	circuitR1CS, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit)
 	if err != nil {
 		fmt.Println("err inTower compilation is ", err)
@@ -97,42 +108,46 @@ func (circuit *GTExpUniformCircuit) Compile() *constraint.ConstraintSystem {
 	return &circuitR1CS
 }
 
-func (circuit *GTExpUniformCircuit) GenerateWitness(_ *GTExpUniformCircuit, r1cs *constraint.ConstraintSystem, numCircuits int) fr.Vector {
+func (circuit *GTExp) GenerateWitness(_ *GTExp, r1cs *constraint.ConstraintSystem, numCircuits int) fr.Vector {
 	var witness fr.Vector
 	for i := 0; i < numCircuits; i++ {
-		circuit.accTower = circuit.out
+		circuit.accTower.Set(&circuit.out)
 		bit := circuit.exp.Bit(253 - i)
+
 		circuit.bit = bit
+		circuit.bitAcc.Set(&circuit.bitOut)
+
 		circuit.Hint()
+
 		acc := FromE12(&circuit.accTower)
 		out := FromE12(&circuit.out)
 		accEval := evaluateE12AtR(acc, circuit.rPowers)
+
 		outEval := evaluateE12AtR(out, circuit.rPowers)
 
 		var accSquareTower bn254.E12
 		accSquareTower.Square(&circuit.accTower)
-		accSquare := FromE12(&accSquareTower)
+		accRem := FromE12(&accSquareTower)
 
 		// Compute accTower² polynomial
 		accSquarePoly := multiplyPolynomials(acc, acc)
-
-		accInPoly := multiplyPolynomials(accSquare, circuit.in)
+		accInPoly := multiplyPolynomials(accRem, circuit.in)
 		var accInRemTower bn254.E12
-		accInRemTower.Mul(&circuit.accTower, &circuit.inTower)
+		accInRemTower.Mul(&accSquareTower, &circuit.inTower)
 		accInRem := FromE12(&accInRemTower)
 
-		accQuot := computeQuotientPoly(accSquarePoly, circuit.reduciblePoly, accSquare)
+		accQuot := computeQuotientPoly(accSquarePoly, circuit.reduciblePoly, accRem)
 		accInQuot := computeQuotientPoly(accInPoly, circuit.reduciblePoly, accInRem)
 
-		circuit = &GTExpUniformCircuit{
-			OutEval:   outEval,
-			AccEval:   accEval,
-			AccQuot:   [11]frontend.Variable(makeFrontendVariable(accQuot)),
-			AccRem:    [12]frontend.Variable(makeFrontendVariable(accSquare)),
-			AccInQuot: [11]frontend.Variable(makeFrontendVariable(accInQuot)),
-			AccInRem:  [12]frontend.Variable(makeFrontendVariable(accInRem)),
-			Bit:       bit,
-		}
+		circuit.OutEval = outEval
+		circuit.AccEval = accEval
+		circuit.AccQuot = [11]frontend.Variable(makeFrontendVariable(accQuot))
+		circuit.AccRem = [12]frontend.Variable(makeFrontendVariable(accRem))
+		circuit.AccInQuot = [11]frontend.Variable(makeFrontendVariable(accInQuot))
+		circuit.AccInRem = [12]frontend.Variable(makeFrontendVariable(accInRem))
+		circuit.AccBit = circuit.bitAcc
+		circuit.OutBit = circuit.bitOut
+		circuit.Bit = bit
 
 		w, err := frontend.NewWitness(circuit, ecc.GRUMPKIN.ScalarField())
 		if err != nil {
@@ -141,15 +156,16 @@ func (circuit *GTExpUniformCircuit) GenerateWitness(_ *GTExpUniformCircuit, r1cs
 		wSolved, _ := (*r1cs).Solve(w)
 
 		witnessStep := wSolved.(*cs.R1CSSolution).W
+
 		for _, elem := range witnessStep {
-			witness = append(witness, fr.Element(elem))
+			witness = append(witness, elem)
 		}
 	}
 
 	return witness
 }
 
-func (circuit *GTExpUniformCircuit) ExtractMatrices(circuitR1CS constraint.ConstraintSystem) ([]Constraint, int, int, int) {
+func (circuit *GTExp) ExtractMatrices(circuitR1CS constraint.ConstraintSystem) ([]Constraint, int, int, int) {
 	var outputConstraints []Constraint
 	var aCount, bCount, cCount int
 

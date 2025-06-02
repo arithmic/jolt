@@ -53,6 +53,8 @@ func multiplyPolynomials(a, b []fr.Element) []fr.Element {
 	}
 	return result
 }
+
+// TODO:- Verify
 func computeQuotientPoly(divPoly, redPoly, remPoly []fr.Element) []fr.Element {
 	// First, compute divPoly - remPoly
 	fMinusR := make([]fr.Element, len(divPoly))

@@ -72,14 +72,16 @@ func TestGtMul(t *testing.T) {
 	println("Len of witness is ", len(witnessVec))
 }
 
-func TestGTExpUniformCircuit(t *testing.T) {
+func TestGTExp(t *testing.T) {
 	// Generate random input and exponent
 	var inTower bn254.E12
 	var exp bn254Fp.Element
+	var outTower bn254.E12
 	_, _ = inTower.SetRandom()
 	_, _ = exp.SetRandom()
 	var frBigInt big.Int
 	exp.BigInt(&frBigInt)
+	outTower.Exp(inTower, &frBigInt)
 
 	// Setup circuit parameters
 	var one fr.Element
@@ -92,6 +94,14 @@ func TestGTExpUniformCircuit(t *testing.T) {
 	rPowers[0] = one
 	for i := 1; i < 13; i++ {
 		rPowers[i].Mul(&random, &rPowers[i-1])
+	}
+
+	outEval := fr.Element{}
+	out := FromE12(&outTower)
+	for i := 0; i < len(out); i++ {
+		var temp fr.Element
+		temp.Mul(&out[i], &rPowers[i])
+		outEval.Add(&outEval, &temp)
 	}
 
 	reduciblePoly := make([]fr.Element, 13)
@@ -115,15 +125,12 @@ func TestGTExpUniformCircuit(t *testing.T) {
 	}
 
 	// Create circuits for each bit of the exponent
-	circuit := &GTExpUniformCircuit{}
+	circuit := &GTExp{}
 
 	var e12OneTower bn254.E12
 	e12OneTower.SetOne()
-	//oneCoeffs := FromE12(&e)
-	//oneEval := evaluateE12AtR(&e, rPowers)
 
-	circuit = &GTExpUniformCircuit{
-
+	circuit = &GTExp{
 		inEval:      inEval,
 		divisorEval: divisorEval,
 		rPowers:     rPowers,
@@ -134,20 +141,17 @@ func TestGTExpUniformCircuit(t *testing.T) {
 		exp:           frBigInt,
 		reduciblePoly: reduciblePoly,
 		out:           e12OneTower,
+		bitOut:        big.Int{},
 	}
-	//}
-
-	// Create dummy circuit for compilation
-	//dummyCircuit := &GTExpUniformCircuit{}
-	r1cs := circuit.Compile()
+	gtExpR1cs := circuit.Compile()
 
 	// Extract matrices and generate witness
-	constraints, aCount, bCount, cCount := circuit.ExtractMatrices(*r1cs)
+	constraints, aCount, bCount, cCount := circuit.ExtractMatrices(*gtExpR1cs)
 
 	t.Logf("Number of constraints: %d", len(constraints))
 	t.Logf("A terms: %d, B terms: %d, C terms: %d", aCount, bCount, cCount)
-	_ = circuit.GenerateWitness(circuit, r1cs, 254)
-	//t.Logf("Witness length: %d", len(witness))
+	witness := circuit.GenerateWitness(circuit, gtExpR1cs, 254)
+	t.Logf("Witness len is: %d", len(witness))
 }
 
 func TestComputeQuotientPoly(t *testing.T) {
