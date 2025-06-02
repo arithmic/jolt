@@ -4,7 +4,7 @@ import (
 	"math/big"
 
 	"github.com/arithmic/gnark/frontend"
-	fp2 "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
+	fp2 "github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 )
 
