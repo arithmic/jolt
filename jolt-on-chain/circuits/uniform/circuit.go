@@ -6,28 +6,26 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
-type UniformCircuitStep interface {
+type StepCircuit interface {
 	frontend.Circuit
 
 	Hint()
+	GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector
 }
 
 type UniformCircuit interface {
-	// TODO: Maybe not needed. Remove.
-	Compile() *constraint.ConstraintSystem
+	CreateStepCircuit() constraint.ConstraintSystem
 
-	CreateStepCircuits()
+	GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector
 
-	GenerateWitness() fr.Vector
-
-	GetConstraints() UniformR1CS
+	//GetConstraints() UniformR1CS
 
 	// ExtractMatrices() ([]Constraint, int, int, int)
 }
 
 type PiecewiseUniformCircuit interface {
-	// TODO: Maybe not needed. Remove.
-	Compile() *constraint.ConstraintSystem
+	// Compile TODO: Maybe not needed. Remove.
+	Compile() *[]constraint.ConstraintSystem
 
 	CreateStepCircuits()
 

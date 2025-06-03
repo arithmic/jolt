@@ -1,6 +1,7 @@
 package uniform
 
 import (
+	"fmt"
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
@@ -56,10 +57,10 @@ func TestGtMul(t *testing.T) {
 
 	quotient := computeQuotientPoly(in1in2Poly, reduciblePoly, in1in2)
 	assignment := &GTMul{
-		In1:       [12]frontend.Variable(makeFrontendVariable(in1)),
-		In2:       [12]frontend.Variable(makeFrontendVariable(in2)),
-		Quotient:  [11]frontend.Variable(makeFrontendVariable(quotient)),
-		Remainder: [12]frontend.Variable(makeFrontendVariable(in1in2)),
+		Acc:  [12]frontend.Variable(makeFrontendVariable(in1)),
+		In:   [12]frontend.Variable(makeFrontendVariable(in2)),
+		Quot: [11]frontend.Variable(makeFrontendVariable(quotient)),
+		Rem:  [12]frontend.Variable(makeFrontendVariable(in1in2)),
 	}
 
 	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
@@ -73,20 +74,17 @@ func TestGtMul(t *testing.T) {
 }
 
 func TestGTExp(t *testing.T) {
-	// Generate random input and exponent
 	var inTower bn254.E12
-	var exp bn254Fp.Element
-	var outTower bn254.E12
 	_, _ = inTower.SetRandom()
-	_, _ = exp.SetRandom()
-	var frBigInt big.Int
-	exp.BigInt(&frBigInt)
-	outTower.Exp(inTower, &frBigInt)
 
-	// Setup circuit parameters
 	var one fr.Element
 	one.SetOne()
 
+	var exp bn254Fp.Element
+	_, _ = exp.SetRandom()
+	var frBigInt big.Int
+
+	exp.BigInt(&frBigInt)
 	var random fr.Element
 	_, _ = random.SetRandom()
 
@@ -96,62 +94,15 @@ func TestGTExp(t *testing.T) {
 		rPowers[i].Mul(&random, &rPowers[i-1])
 	}
 
-	outEval := fr.Element{}
-	out := FromE12(&outTower)
-	for i := 0; i < len(out); i++ {
-		var temp fr.Element
-		temp.Mul(&out[i], &rPowers[i])
-		outEval.Add(&outEval, &temp)
+	gtExpCircuit := GTExp{
+		base:    inTower,
+		rPowers: rPowers,
+		exp:     frBigInt,
 	}
 
-	reduciblePoly := make([]fr.Element, 13)
-	reduciblePoly[0].SetInt64(82)
-	reduciblePoly[6].SetInt64(-18)
-	reduciblePoly[12].SetOne()
-
-	divisorEval := fr.Element{}
-	for i := 0; i < len(reduciblePoly); i++ {
-		var temp fr.Element
-		temp.Mul(&reduciblePoly[i], &rPowers[i])
-		divisorEval.Add(&divisorEval, &temp)
-	}
-
-	in := FromE12(&inTower)
-	inEval := fr.Element{}
-	for i := 0; i < len(in); i++ {
-		var temp fr.Element
-		temp.Mul(&in[i], &rPowers[i])
-		inEval.Add(&inEval, &temp)
-	}
-
-	// Create circuits for each bit of the exponent
-	circuit := &GTExp{}
-
-	var e12OneTower bn254.E12
-	e12OneTower.SetOne()
-
-	circuit = &GTExp{
-		inEval:      inEval,
-		divisorEval: divisorEval,
-		rPowers:     rPowers,
-
-		// Native computation fields
-		inTower:       inTower,
-		in:            in,
-		exp:           frBigInt,
-		reduciblePoly: reduciblePoly,
-		out:           e12OneTower,
-		bitOut:        big.Int{},
-	}
-	gtExpR1cs := circuit.Compile()
-
-	// Extract matrices and generate witness
-	constraints, aCount, bCount, cCount := circuit.ExtractMatrices(*gtExpR1cs)
-
-	t.Logf("Number of constraints: %d", len(constraints))
-	t.Logf("A terms: %d, B terms: %d, C terms: %d", aCount, bCount, cCount)
-	witness := circuit.GenerateWitness(circuit, gtExpR1cs, 254)
-	t.Logf("Witness len is: %d", len(witness))
+	gtExpR1Cs := gtExpCircuit.CreateStepCircuit()
+	fmt.Println("No of Constraints ", gtExpR1Cs.GetNbConstraints())
+	gtExpCircuit.GenerateWitness(gtExpR1Cs)
 }
 
 func TestComputeQuotientPoly(t *testing.T) {

@@ -8,34 +8,34 @@ import (
 )
 
 type GTMul struct {
-	In1         [12]frontend.Variable `gnark:",public"`
-	In2         [12]frontend.Variable `gnark:",public"`
-	Quotient    [11]frontend.Variable `gnark:",public"`
-	Remainder   [12]frontend.Variable `gnark:",public"`
+	Acc         [12]frontend.Variable `gnark:",public"`
+	In          [12]frontend.Variable `gnark:",public"`
+	Quot        [11]frontend.Variable `gnark:",public"`
+	Rem         [12]frontend.Variable `gnark:",public"`
 	DivisorEval fr.Element
 	rPowers     [13]fr.Element
 }
 
 func (circuit *GTMul) Define(api frontend.API) error {
-	in1Eval := frontend.Variable(0)
-	in2Eval := frontend.Variable(0)
+	accEval := frontend.Variable(0)
+	inEval := frontend.Variable(0)
 	qEval := frontend.Variable(0)
 	rEval := frontend.Variable(0)
 
-	//Evaluate in1, in2,Remainder  at r
+	//Evaluate acc, in2, Rem at r
 	for i := 0; i < 12; i++ {
-		in1Eval = api.Add(in1Eval, api.Mul(circuit.In1[i], circuit.rPowers[i]))
-		in2Eval = api.Add(in2Eval, api.Mul(circuit.In2[i], circuit.rPowers[i]))
-		rEval = api.Add(rEval, api.Mul(circuit.Remainder[i], circuit.rPowers[i]))
+		accEval = api.Add(accEval, api.Mul(circuit.Acc[i], circuit.rPowers[i]))
+		inEval = api.Add(inEval, api.Mul(circuit.In[i], circuit.rPowers[i]))
+		rEval = api.Add(rEval, api.Mul(circuit.Rem[i], circuit.rPowers[i]))
 	}
 
-	//Evaluate Quotient at r
+	//Evaluate Quot at r
 	for i := 0; i < 11; i++ {
-		qEval = api.Add(qEval, api.Mul(circuit.Quotient[i], circuit.rPowers[i]))
+		qEval = api.Add(qEval, api.Mul(circuit.Quot[i], circuit.rPowers[i]))
 	}
 
 	rq := api.Mul(circuit.DivisorEval, qEval)
-	in1in2 := api.Mul(in1Eval, in2Eval)
+	in1in2 := api.Mul(accEval, inEval)
 	api.AssertIsEqual(in1in2, api.Add(rEval, rq))
 	return nil
 }
@@ -85,7 +85,7 @@ func computeQuotientPoly(divPoly, redPoly, remPoly []fr.Element) []fr.Element {
 		return q
 	}
 
-	// Quotient degree = dividend degree - divisor degree
+	// Quot degree = dividend degree - divisor degree
 	quotientDegree := dividendDegree - divisorDegree
 
 	// Ensure we don't exceed the expected quotient length
