@@ -2,6 +2,8 @@ package pcs
 
 import (
 	"fmt"
+	"strconv"
+
 	"github.com/arithmic/gnark/constraint"
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
@@ -11,7 +13,6 @@ import (
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
-	"strconv"
 )
 
 type gtExpUniformCircuit struct {
@@ -80,6 +81,7 @@ func (circuit *gtExpUniformCircuit) GenerateWitness(circuits []*gtExpUniformCirc
 	}
 	return witness
 }
+
 func (circuit *gtExpUniformCircuit) ExtractMatrices(circuitR1CS constraint.ConstraintSystem) ([]uniform.Constraint, int, int, int) {
 	var outputConstraints []uniform.Constraint
 	var aCount, bCount, cCount int

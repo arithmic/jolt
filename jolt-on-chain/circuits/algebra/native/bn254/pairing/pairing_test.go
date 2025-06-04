@@ -2,7 +2,6 @@ package pairing
 
 import (
 	"crypto/rand"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"testing"
@@ -416,7 +415,7 @@ func TestCircuitPairing(t *testing.T) {
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
 }
 
-type MillerUniformCircuit struct {
+type MillerStepCircuit struct {
 	FIn       field_tower.Fp12 `gnark:",public"`
 	P         groups.G1Affine  `gnark:",public"`
 	Ell_Coeff [2]field_tower.Fp6
@@ -424,7 +423,7 @@ type MillerUniformCircuit struct {
 	Bit       frontend.Variable
 }
 
-func (circuit *MillerUniformCircuit) Define(api frontend.API) error {
+func (circuit *MillerStepCircuit) Define(api frontend.API) error {
 	pairing_api := New(api)
 
 	f1, f2, f3 := pairing_api.MillerLoopStep(&circuit.FIn, circuit.Ell_Coeff[:], &circuit.P, circuit.Bit)
@@ -438,7 +437,7 @@ func (circuit *MillerUniformCircuit) Define(api frontend.API) error {
 
 func TestCircuitMillerStep(t *testing.T) {
 	// Define the circuit
-	var circuit MillerUniformCircuit
+	var circuit MillerStepCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
 	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
@@ -477,7 +476,7 @@ func TestCircuitMillerStep(t *testing.T) {
 	n := 64
 	var Ell_coeff_new [2]field_tower.Fp6
 
-	for i := 0; i < 2; i++ {
+	for i := 0; i < n; i++ {
 		Ell_coeff_new[i] = field_tower.FromE6(&Ell_coeff[i])
 	}
 	f1, f2, f3 := MillerLoopStep_fn(&FIn, Ell_coeff[0:2], &P, bits[n-1])
@@ -485,7 +484,7 @@ func TestCircuitMillerStep(t *testing.T) {
 	FOut[1] = field_tower.FromE12(&f2)
 	FOut[2] = field_tower.FromE12(&f3)
 
-	assignment := &MillerUniformCircuit{
+	assignment := &MillerStepCircuit{
 		FIn:       field_tower.FromE12(c.SetOne()),
 		P:         groups.AffineFromG1Affine(&P),
 		Ell_Coeff: Ell_coeff_new,
@@ -541,7 +540,7 @@ func TestCircuitMillerStep(t *testing.T) {
 		FOut[1] = field_tower.FromE12(&f2)
 		FOut[2] = field_tower.FromE12(&f3)
 
-		assignment := &MillerUniformCircuit{
+		assignment := &MillerStepCircuit{
 			FIn:       FIn_val,
 			P:         groups.AffineFromG1Affine(&P),
 			Ell_Coeff: Ell_coeff_new,
@@ -582,7 +581,7 @@ func TestCircuitMillerStep(t *testing.T) {
 	res_1 := Ell_fn(&f3, &Ell_coeff[2*n], &P)
 	res := Ell_fn(res_1, &Ell_coeff[2*n+1], &P)
 
-	actual_result := MillerLoopNew_fn(&Q, &P)
+	actual_result := MillerLoop_fn(&Q, &P)
 	val := res.Equal(actual_result)
 	if val == false {
 		fmt.Println("The result is not equal")
@@ -654,7 +653,7 @@ func TestCircuitEllCoeffs(t *testing.T) {
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
 }
 
-type EllCoeffsUniformCircuit struct {
+type EllCoeffsStepCircuit struct {
 	Rin        groups.G2Projective
 	Q          groups.G2Affine
 	NegQ       groups.G2Affine
@@ -663,7 +662,7 @@ type EllCoeffsUniformCircuit struct {
 	Ell1, Ell2 field_tower.Fp6
 }
 
-func (circuit *EllCoeffsUniformCircuit) Define(api frontend.API) error {
+func (circuit *EllCoeffsStepCircuit) Define(api frontend.API) error {
 	pairing_api := New(api)
 
 	twoInv := api.Inverse(frontend.Variable(2))
@@ -683,7 +682,7 @@ func (circuit *EllCoeffsUniformCircuit) Define(api frontend.API) error {
 func TestCircuitEllCoeffStep(t *testing.T) {
 	// Define the circuit
 
-	var circuit EllCoeffsUniformCircuit
+	var circuit EllCoeffsStepCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
 	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
@@ -719,12 +718,12 @@ func TestCircuitEllCoeffStep(t *testing.T) {
 
 	Rmid, Rout, ell1, ell2 := EllCoeffStep_fn(&Rin, &Q, &neg_Q, bits[n-1])
 
-	assignment := &EllCoeffsUniformCircuit{
+	assignment := &EllCoeffsStepCircuit{
 		Rin:  groups.FromBNG2Affine(&Q),
 		Q:    groups.G2AffineFromBNG2Affine(&Q),
 		NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
-		Rmid: G2ProjectiveFromBNG2Proj(&Rmid),
-		Rout: G2ProjectiveFromBNG2Proj(&Rout),
+		Rmid: G2ProjectiveFromBNG2Projective(&Rmid),
+		Rout: G2ProjectiveFromBNG2Projective(&Rout),
 		Ell1: field_tower.FromE6(ell1),
 		Ell2: field_tower.FromE6(ell2),
 		Bit:  bits[n-1],
@@ -768,12 +767,12 @@ func TestCircuitEllCoeffStep(t *testing.T) {
 		// Rmid, Rout
 		Rmid, Rout, ell1, ell2 = EllCoeffStep_fn(&Rout, &Q, &neg_Q, bits[n-1-idx])
 
-		assignment := &EllCoeffsUniformCircuit{
+		assignment := &EllCoeffsStepCircuit{
 			Rin:  RIn_val,
 			Q:    groups.G2AffineFromBNG2Affine(&Q),
 			NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
-			Rmid: G2ProjectiveFromBNG2Proj(&Rmid),
-			Rout: G2ProjectiveFromBNG2Proj(&Rout),
+			Rmid: G2ProjectiveFromBNG2Projective(&Rmid),
+			Rout: G2ProjectiveFromBNG2Projective(&Rout),
 			Ell1: field_tower.FromE6(ell1),
 			Ell2: field_tower.FromE6(ell2),
 			Bit:  bits[n-1-idx],
@@ -803,7 +802,7 @@ func TestCircuitEllCoeffStep(t *testing.T) {
 	neg_Q2.Y.A1.Neg(&Q2.Y.A1)
 	neg_Q2.Y.A0.Neg(&Q2.Y.A0)
 
-	var RIn_val_2n G2Proj
+	var RIn_val_2n G2Projective
 
 	RIn_val_2n.X.A0.SetString(z[22].String())
 	RIn_val_2n.X.A1.SetString(z[23].String())
@@ -832,95 +831,10 @@ func TestCircuitEllCoeffStep(t *testing.T) {
 	}
 }
 
-type Constraint struct {
-	A map[string]string
-	B map[string]string
-	C map[string]string
-}
-
-func PrettyPrintConstraints(constraints []Constraint) {
-	bytes, err := json.MarshalIndent(constraints, "", "  ")
-	if err != nil {
-		fmt.Println("Error while pretty printing:", err)
-		return
-	}
-	fmt.Println(string(bytes))
-}
-
-func ExtractConstraints(r1cs constraint.ConstraintSystem) ([]Constraint, int, int, int) {
-	var outputConstraints []Constraint
-	var aCount, bCount, cCount int
-
-	// Assert to R1CS to get access to R1CS-specific methods
-	nR1CS, ok := r1cs.(constraint.R1CS)
-	if !ok {
-		return outputConstraints, 0, 0, 0 // or handle error
-	}
-	constraints := nR1CS.GetR1Cs()
-	for _, r1c := range constraints {
-		singular := Constraint{
-			A: make(map[string]string),
-			B: make(map[string]string),
-			C: make(map[string]string),
-		}
-
-		for _, term := range r1c.L {
-			val := nR1CS.CoeffToString(int(term.CID))
-			col := strconv.FormatUint(uint64(term.VID), 10)
-			singular.A[col] = val
-			aCount++
-		}
-		for _, term := range r1c.R {
-			val := nR1CS.CoeffToString(int(term.CID))
-			col := strconv.FormatUint(uint64(term.VID), 10)
-			singular.B[col] = val
-			bCount++
-		}
-		for _, term := range r1c.O {
-			val := nR1CS.CoeffToString(int(term.CID))
-			col := strconv.FormatUint(uint64(term.VID), 10)
-			singular.C[col] = val
-			cCount++
-		}
-
-		outputConstraints = append(outputConstraints, singular)
-	}
-
-	return outputConstraints, aCount, bCount, cCount
-}
-
-type MillerUniformIntegratedCircuit struct {
-	FIn     field_tower.Fp12 `gnark:",public"`
-	P       groups.G1Affine  `gnark:",public"`
-	Rin     groups.G2Projective
-	Q, NegQ groups.G2Affine
-	Rout    groups.G2Projective
-	Bit     frontend.Variable
-
-	// for output assertions
-	FOut [3]field_tower.Fp12
-}
-
-func (circuit *MillerUniformIntegratedCircuit) Define(api frontend.API) error {
-	pairing_api := New(api)
-	twoInv := api.Inverse(frontend.Variable(2))
-
-	_, f1, f2, f3 := pairing_api.MillerLoopStepIntegrated(
-		&circuit.Rin, &circuit.Q, &circuit.NegQ,
-		&circuit.P, &circuit.FIn, circuit.Bit, twoInv,
-	)
-	e12 := field_tower.NewExt12(api)
-	e12.AssertIsEqual(&f1, &circuit.FOut[0])
-	e12.AssertIsEqual(&f2, &circuit.FOut[1])
-	e12.AssertIsEqual(&f3, &circuit.FOut[2])
-
-	return nil
-}
-
 func TestCircuitMillerUniformIntegrated(t *testing.T) {
 	// Define the circuit
 
-	var circuit MillerUniformIntegratedCircuit
+	var circuit MillerUniformCircuit
 	// Compile the circuit into an R1CS
 	start := time.Now()
 	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
@@ -968,13 +882,13 @@ func TestCircuitMillerUniformIntegrated(t *testing.T) {
 	FOut[1] = field_tower.FromE12(&f2)
 	FOut[2] = field_tower.FromE12(&f3)
 
-	assignment := &MillerUniformIntegratedCircuit{
+	assignment := &MillerUniformCircuit{
 		FIn:  field_tower.FromE12(&FIn),
 		P:    groups.AffineFromG1Affine(&P),
 		Rin:  groups.FromBNG2Affine(&Q),
 		Q:    groups.G2AffineFromBNG2Affine(&Q),
 		NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
-		Rout: G2ProjectiveFromBNG2Proj(&Rout),
+		Rout: G2ProjectiveFromBNG2Projective(&Rout),
 		FOut: FOut,
 		Bit:  bits[n-1],
 	}
@@ -1033,13 +947,13 @@ func TestCircuitMillerUniformIntegrated(t *testing.T) {
 		FOut[1] = field_tower.FromE12(&f2)
 		FOut[2] = field_tower.FromE12(&f3)
 
-		assignment := &MillerUniformIntegratedCircuit{
+		assignment := &MillerUniformCircuit{
 			FIn:  FIn_val,
 			P:    groups.AffineFromG1Affine(&P),
 			Rin:  RIn_val,
 			Q:    groups.G2AffineFromBNG2Affine(&Q),
 			NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
-			Rout: G2ProjectiveFromBNG2Proj(&Rout),
+			Rout: G2ProjectiveFromBNG2Projective(&Rout),
 			FOut: FOut,
 			Bit:  bits[n-1-idx],
 		}
@@ -1081,7 +995,7 @@ func TestCircuitMillerUniformIntegrated(t *testing.T) {
 	neg_Q2.Y.A1.Neg(&Q2.Y.A1)
 	neg_Q2.Y.A0.Neg(&Q2.Y.A0)
 
-	var RIn_val_2n G2Proj
+	var RIn_val_2n G2Projective
 
 	k := 29
 	RIn_val_2n.X.A0.SetString(z[k].String())
@@ -1097,7 +1011,7 @@ func TestCircuitMillerUniformIntegrated(t *testing.T) {
 	res := Ell_fn(&f3, computed_ell_coeff, &P)
 	miller_final_res := Ell_fn(res, ell_coeffs_last, &P)
 
-	actual_result := MillerLoopNew_fn(&Q, &P)
+	actual_result := MillerLoop_fn(&Q, &P)
 	val := miller_final_res.Equal(actual_result)
 	if val == false {
 		fmt.Println("The result is not equal")
@@ -1107,4 +1021,124 @@ func TestCircuitMillerUniformIntegrated(t *testing.T) {
 
 	duration = time.Since(start)
 	fmt.Printf("Witness generation time 2 : %s\n", duration)
+}
+
+// //////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////
+func TestCircuitMillerUniformWithInterface(t *testing.T) {
+	// Define the circuit
+	n := 64
+
+	var dummyCircuit *MillerUniformCircuit
+
+	circuits := make([]*MillerUniformCircuit, n)
+
+	_, _, g1GenAff, g2GenAff := bn254.Generators()
+
+	var P bn254.G1Affine
+	var Q bn254.G2Affine
+
+	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
+	P.ScalarMultiplication(&g1GenAff, scalar)
+	Q.ScalarMultiplication(&g2GenAff, scalar)
+
+	bits := []int{
+		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
+		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
+		-1, 0, 0, 0, 1, 0, 1,
+	}
+
+	Rin := ToProjective_fn(&Q)
+	var neg_Q bn254.G2Affine
+	neg_Q.X = Q.X
+	neg_Q.Y.A1.Neg(&Q.Y.A1)
+	neg_Q.Y.A0.Neg(&Q.Y.A0)
+
+	var FIn bn254.E12
+	FIn.SetOne()
+
+	Rout, f1, f2, f3 := MillerLoopStepIntegrated_fn(&Rin, &Q, &neg_Q, &P, &FIn, bits[n-1])
+
+	var FOut [3]field_tower.Fp12
+
+	FOut[0] = field_tower.FromE12(&f1)
+	FOut[1] = field_tower.FromE12(&f2)
+	FOut[2] = field_tower.FromE12(&f3)
+
+	for i := 0; i < n; i++ {
+		circuits[i] = &MillerUniformCircuit{
+			FIn:  field_tower.FromE12(&FIn),
+			P:    groups.AffineFromG1Affine(&P),
+			Rin:  groups.FromBNG2Affine(&Q),
+			Q:    groups.G2AffineFromBNG2Affine(&Q),
+			NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
+			Rout: G2ProjectiveFromBNG2Projective(&Rout),
+			FOut: FOut,
+			Bit:  bits[n-1-i],
+
+			fIn:  FIn,
+			p:    P,
+			rin:  Rin,
+			q:    Q,
+			negQ: neg_Q,
+			rout: G2Projective{X: Rout.X, Y: Rout.Y, Z: Rout.Z},
+			bit:  bits[n-1-i],
+			fOut: [3]bn254.E12{f1, f2, f3},
+		}
+	}
+
+	dummyCircuit = &MillerUniformCircuit{}
+	r1cs := dummyCircuit.Compile()
+	_, _, _, _ = dummyCircuit.ExtractMatrices(*r1cs)
+	_ = dummyCircuit.GenerateWitness(circuits, r1cs, 64)
+}
+
+type Constraint struct {
+	A map[string]string
+	B map[string]string
+	C map[string]string
+}
+
+func ExtractConstraints(r1cs constraint.ConstraintSystem) ([]Constraint, int, int, int) {
+	var outputConstraints []Constraint
+	var aCount, bCount, cCount int
+
+	// Assert to R1CS to get access to R1CS-specific methods
+	nR1CS, ok := r1cs.(constraint.R1CS)
+	if !ok {
+		return outputConstraints, 0, 0, 0 // or handle error
+	}
+	constraints := nR1CS.GetR1Cs()
+	for _, r1c := range constraints {
+		singular := Constraint{
+			A: make(map[string]string),
+			B: make(map[string]string),
+			C: make(map[string]string),
+		}
+
+		for _, term := range r1c.L {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.A[col] = val
+			aCount++
+		}
+		for _, term := range r1c.R {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.B[col] = val
+			bCount++
+		}
+		for _, term := range r1c.O {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.C[col] = val
+			cCount++
+		}
+
+		outputConstraints = append(outputConstraints, singular)
+	}
+
+	return outputConstraints, aCount, bCount, cCount
 }

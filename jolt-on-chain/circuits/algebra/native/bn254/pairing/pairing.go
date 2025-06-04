@@ -2,10 +2,15 @@ package pairing
 
 import (
 	"math/big"
+	"strconv"
 
+	"github.com/arithmic/gnark/constraint"
 	"github.com/arithmic/gnark/frontend"
+
 	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
 	groups "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/groups"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/uniform"
+	"github.com/consensys/gnark-crypto/ecc/bn254"
 )
 
 func ExpByNegX(e12 *field_tower.Ext12, x *field_tower.Fp12) *field_tower.Fp12 {
@@ -658,8 +663,6 @@ func (e PairingAPI) MillerLoopStep(
 	// Step 2: f2 = Ell(f1, ell1)
 	f2 = *Ell(&e.e2, &e.e6, &f1, &ell[0], p)
 
-	// e.api.IsZero(bit)
-
 	f3_val := *Ell(&e.e2, &e.e6, &f2, &ell[1], p)
 
 	val := e.api.IsZero(bit)
@@ -749,4 +752,133 @@ func (e PairingAPI) MillerLoopStepIntegrated(
 	f3 = *e.e12.Select(isZero, &f2, &f3_val)
 
 	return
+}
+
+func (e PairingAPI) FinalMillerLoopStepIntegrated(
+	Rin *groups.G2Projective, // R[2n]
+	Q *groups.G2Affine, // Q
+	p *groups.G1Affine, // affine P
+	fIn *field_tower.Fp12, // f[3n]
+) (Rout groups.G2Projective, f2 field_tower.Fp12) {
+	// Step 1: Frobenius twists
+	Q1 := MulByChar(&e.e2, Q)
+	Q2 := MulByChar(&e.e2, Q1)
+
+	// Step 2: Compute -Q2
+	var Q2Neg groups.G2Affine
+	Q2Neg.X = Q2.X
+	Q2Neg.Y.A0 = e.api.Neg(Q2.Y.A0)
+	Q2Neg.Y.A1 = e.api.Neg(Q2.Y.A1)
+
+	// Step 3: Line addition with Q1
+	R1Ptr, ell1 := LineAddition(&e.api, &e.e2, Rin, Q1)
+	R1 := *R1Ptr
+
+	// Step 4: Line addition with -Q2
+	R2Ptr, ell2 := LineAddition(&e.api, &e.e2, &R1, &Q2Neg)
+	Rout = *R2Ptr
+
+	// Step 5: Ell evaluations
+	f1 := *Ell(&e.e2, &e.e6, fIn, ell1, p) // f1 = Ell(fIn, ell1)
+	f2 = *Ell(&e.e2, &e.e6, &f1, ell2, p)  // f2 = Ell(f1, ell2)
+
+	return
+}
+
+type MillerUniformCircuit struct {
+	FIn     field_tower.Fp12 `gnark:",public"`
+	P       groups.G1Affine  `gnark:",public"`
+	Rin     groups.G2Projective
+	Q, NegQ groups.G2Affine
+	Rout    groups.G2Projective
+	Bit     frontend.Variable
+
+	// for output assertions
+	FOut [3]field_tower.Fp12
+
+	fIn     bn254.E12      
+	p       bn254.G1Affine 
+	rin     G2Projective
+	q, negQ bn254.G2Affine
+	rout    G2Projective
+	bit     int
+
+	// for output assertions
+	fOut [3]bn254.E12
+}
+
+func (circuit *MillerUniformCircuit) Define(api frontend.API) error {
+	pairing_api := New(api)
+	twoInv := api.Inverse(frontend.Variable(2))
+
+	_, f1, f2, f3 := pairing_api.MillerLoopStepIntegrated(
+		&circuit.Rin, &circuit.Q, &circuit.NegQ,
+		&circuit.P, &circuit.FIn, circuit.Bit, twoInv,
+	)
+	e12 := field_tower.NewExt12(api)
+	e12.AssertIsEqual(&f1, &circuit.FOut[0])
+	e12.AssertIsEqual(&f2, &circuit.FOut[1])
+	e12.AssertIsEqual(&f3, &circuit.FOut[2])
+
+	return nil
+}
+
+type MillerEllFinalStepCircuit struct {
+	FIn field_tower.Fp12 `gnark:",public"`
+
+	Q groups.G2Affine `gnark:",public"`
+	P groups.G1Affine `gnark:",public"`
+
+	Rin  groups.G2Projective
+	Rout groups.G2Projective
+	FOut field_tower.Fp12 `gnark:",public"`
+
+	fIn  bn254.E12      
+	fOut bn254.E12      
+	p    bn254.G1Affine 
+	q    bn254.G2Affine
+	rin  G2Projective
+	rout G2Projective
+}
+
+func (circuit *MillerUniformCircuit) ExtractMatrices(circuitR1CS constraint.ConstraintSystem) ([]uniform.Constraint, int, int, int) {
+	var outputConstraints []uniform.Constraint
+	var aCount, bCount, cCount int
+
+	// Assert to R1CS to get access to R1CS-specific methods
+	nR1CS, ok := circuitR1CS.(constraint.R1CS)
+	if !ok {
+		return outputConstraints, 0, 0, 0 // or handle error
+	}
+	constraints := nR1CS.GetR1Cs()
+	for _, r1c := range constraints {
+		singular := uniform.Constraint{
+			A: make(map[string]string),
+			B: make(map[string]string),
+			C: make(map[string]string),
+		}
+
+		for _, term := range r1c.L {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.A[col] = val
+			aCount++
+		}
+		for _, term := range r1c.R {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.B[col] = val
+			bCount++
+		}
+		for _, term := range r1c.O {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.C[col] = val
+			cCount++
+		}
+
+		outputConstraints = append(outputConstraints, singular)
+	}
+
+	return outputConstraints, aCount, bCount, cCount
 }

@@ -25,13 +25,13 @@ func Ell_fn(x *bn254.E12, b *bn254.E6, P *bn254.G1Affine) *bn254.E12 {
 	return &updated_f
 }
 
-type G2Proj struct {
+type G2Projective struct {
 	X, Y, Z bn254.E2
 }
 
-func LineDouble_fn(R *G2Proj) (*G2Proj, *bn254.E6) {
+func LineDouble_fn(R *G2Projective) (*G2Projective, *bn254.E6) {
 	// Output variables
-	var R_Double G2Proj
+	var R_Double G2Projective
 	var ell_coeff bn254.E6
 
 	// a = (R.X * R.Y) / 2
@@ -124,9 +124,9 @@ func LineDouble_fn(R *G2Proj) (*G2Proj, *bn254.E6) {
 	return &R_Double, &ell_coeff
 }
 
-func LineAddition_fn(R *G2Proj, Q *bn254.G2Affine) (*G2Proj, *bn254.E6) {
+func LineAddition_fn(R *G2Projective, Q *bn254.G2Affine) (*G2Projective, *bn254.E6) {
 	// Output variables
-	var R_New G2Proj
+	var R_New G2Projective
 	var ell_coeff bn254.E6
 
 	// theta = R.Y - Q.Y * R.Z
@@ -181,10 +181,10 @@ func LineAddition_fn(R *G2Proj, Q *bn254.G2Affine) (*G2Proj, *bn254.E6) {
 }
 
 func EllCoeffStep_fn(
-	Rin *G2Proj, // R[2*i]
+	Rin *G2Projective, // R[2*i]
 	Q, negQ *bn254.G2Affine, // Q and -Q
 	bit int, // {-1, 0, 1}
-) (Rmid, Rout G2Proj, ell1, ell2 *bn254.E6) {
+) (Rmid, Rout G2Projective, ell1, ell2 *bn254.E6) {
 
 	// Step 1: LineDouble
 	RmidPtr, ell1Ptr := LineDouble_fn(Rin)
@@ -208,8 +208,8 @@ func EllCoeffStep_fn(
 	return
 }
 
-func ToProjective_fn(A *bn254.G2Affine) G2Proj {
-	var out G2Proj
+func ToProjective_fn(A *bn254.G2Affine) G2Projective {
+	var out G2Projective
 
 	// Check if A.X and A.Y are zero
 	isZeroX := A.X.IsZero()
@@ -230,7 +230,7 @@ func ToProjective_fn(A *bn254.G2Affine) G2Proj {
 	return out
 }
 
-func G2ProjectiveFromBNG2Proj(y *G2Proj) groups.G2Projective {
+func G2ProjectiveFromBNG2Projective(y *G2Projective) groups.G2Projective {
 	return groups.G2Projective{
 		X: field_tower.FromE2(&y.X),
 		Y: field_tower.FromE2(&y.Y),
@@ -270,12 +270,12 @@ func MulByChar_fn(Q *bn254.G2Affine) *bn254.G2Affine {
 	}
 }
 
-func EllCoeffs_fn(Q *bn254.G2Affine) ([]bn254.E6, []G2Proj) {
+func EllCoeffs_fn(Q *bn254.G2Affine) ([]bn254.E6, []G2Projective) {
 	const n = 64
 
 	// Initialize arrays
 	ell_coeff := make([]bn254.E6, 2*n+2)
-	R := make([]G2Proj, 2*n+2)
+	R := make([]G2Projective, 2*n+2)
 
 	// Inverse of 2
 	twoInv := new(fp.Element).SetUint64(2)
@@ -361,49 +361,13 @@ func MillerLoopStep_fn(
 	return
 }
 
-func MillerLoopNew_fn(
-	Q *bn254.G2Affine,
-	P *bn254.G1Affine,
-) *bn254.E12 {
-	// Define constants
-	n := 64
-	bits := []int{
-		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
-		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
-		-1, 0, 0, 0, 1, 0, 1,
-	}
-
-	// Compute ell_coeff using precomputation
-	ellCoeff, _ := EllCoeffs_fn(Q)
-
-	// Initialize Miller loop accumulator
-	f := make([]bn254.E12, 4)
-	f[0].SetOne() // f[0] = 1 in Fp12
-
-	// Miller loop
-	for i := 0; i < n; i++ {
-		bit := bits[n-1-i]
-		f1, f2, f3 := MillerLoopStep_fn(&f[0], ellCoeff[2*i:2*i+2], P, bit)
-		f[0] = f3
-		f[1] = f1
-		f[2] = f2
-	}
-
-	// Final 2 steps (hardcoded)
-	f[1] = *Ell_fn(&f[0], &ellCoeff[2*n], P)
-	f[2] = *Ell_fn(&f[1], &ellCoeff[2*n+1], P)
-
-	return &f[2]
-}
-
-
 func MillerLoopStepIntegrated_fn(
-	Rin *G2Proj,                 // R[2*i]
-	Q, negQ *bn254.G2Affine,     // Q and -Q
-	p *bn254.G1Affine,           // affine P
-	fIn *bn254.E12,              // f[3*i]
-	bit int,                     // {-1, 0, 1}
-) (Rout G2Proj, f1, f2, f3 bn254.E12) {
+	Rin *G2Projective, // R[2*i]
+	Q, negQ *bn254.G2Affine, // Q and -Q
+	p *bn254.G1Affine, // affine P
+	fIn *bn254.E12, // f[3*i]
+	bit int, // {-1, 0, 1}
+) (Rout G2Projective, f1, f2, f3 bn254.E12) {
 
 	// Step 1: LineDouble
 	RmidPtr, ell1 := LineDouble_fn(Rin)
@@ -436,6 +400,36 @@ func MillerLoopStepIntegrated_fn(
 	} else {
 		f3 = f2
 	}
+
+	return
+}
+
+func FinalMillerLoopStepIntegrated_fn(
+	Rin *G2Projective,
+	Q *bn254.G2Affine,
+	P *bn254.G1Affine,
+	fIn *bn254.E12,
+) (Rout G2Projective, f2 bn254.E12) {
+
+	// Step 1: Compute Frobenius twists
+	Q1 := MulByChar_fn(Q)
+	Q2 := MulByChar_fn(Q1)
+
+	var negQ2 bn254.G2Affine
+	negQ2.X = Q2.X
+	negQ2.Y.A1.Neg(&Q2.Y.A1)
+	negQ2.Y.A0.Neg(&Q2.Y.A0)
+
+	// Step 2: Line addition with Q1
+	Rmid, ell1 := LineAddition_fn(Rin, Q1)
+
+	// Step 3: Line addition with -Q2
+	RoutPtr, ell2 := LineAddition_fn(Rmid, &negQ2)
+	Rout = *RoutPtr
+
+	// Step 4: Apply Ell twice
+	f1 := *Ell_fn(fIn, ell1, P)
+	f2 = *Ell_fn(&f1, ell2, P)
 
 	return
 }
