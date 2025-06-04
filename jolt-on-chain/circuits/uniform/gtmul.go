@@ -6,6 +6,7 @@ import (
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
 	"github.com/consensys/gnark-crypto/ecc"
+
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
@@ -79,6 +80,7 @@ type GTMultiMul struct {
 	out     []fr.Element
 	rPowers [13]fr.Element
 }
+
 
 func multiplyPolynomials(a, b []fr.Element) []fr.Element {
 	degree := len(a) + len(b) - 1
@@ -284,3 +286,4 @@ func ToTower(a []fr.Element) bn254.E12 {
 		C1: bn254.E6{B0: bn254.E2{A0: a100, A1: a101}, B1: bn254.E2{A0: a110, A1: a111}, B2: bn254.E2{A0: a120, A1: a121}}}
 	return tower
 }
+

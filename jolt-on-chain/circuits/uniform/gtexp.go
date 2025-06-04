@@ -21,6 +21,7 @@ func makeFrontendVariable(input []fr.Element) []frontend.Variable {
 	return res
 }
 
+
 // frontendVariableToFrElement converts a single frontend.Variable to fr.Element
 func frontendVariableToFrElement(v frontend.Variable) (fr.Element, error) {
 	var result fr.Element
@@ -68,6 +69,7 @@ func convertFrontendArrayToFrArray(vars []frontend.Variable) ([]fr.Element, erro
 	}
 	return result, nil
 }
+
 
 type GTExpStep struct {
 	AccEval     frontend.Variable
@@ -144,7 +146,6 @@ func (circuit *GTExpStep) Hint() {
 	} else {
 		outTower = square
 	}
-	//AccQuot, _ := convertFrontendArrayToFrArray(circuit.AccQuot[:])
 	acc := FromE12(&circuit.accTower)
 	out := FromE12(&outTower)
 	accEval := evaluateE12AtR(acc, circuit.rPowers)
@@ -152,7 +153,6 @@ func (circuit *GTExpStep) Hint() {
 	outEval := evaluateE12AtR(out, circuit.rPowers)
 
 	//var accSquareTower bn254.E12
-	//accSquareTower.Square(&circuit.accTower)
 	accRem := FromE12(&square)
 
 	// Compute accTower² polynomial
@@ -178,6 +178,7 @@ func (circuit *GTExpStep) Hint() {
 
 	circuit.accTower.Set(&outTower)
 	circuit.bitAcc.Set(&bitOut)
+
 }
 
 func (circuit *GTExpStep) GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector {
@@ -248,7 +249,7 @@ func (gtExp *GTExp) GenerateWitness(constraints constraint.ConstraintSystem) fr.
 		gtExp.gtExpStep.bit = bit
 
 		gtExp.gtExpStep.Hint()
-
+    
 		gtExp.gtExpStep.Bit = bit
 		witnessStep := gtExp.gtExpStep.GenerateWitness(constraints)
 

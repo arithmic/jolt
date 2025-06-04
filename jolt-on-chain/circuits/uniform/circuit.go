@@ -19,12 +19,14 @@ type UniformCircuit interface {
 	GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector
 
 	//GetConstraints() UniformR1CS
+
 }
 
 type PiecewiseUniformCircuit interface {
-	CreateStepCircuits()
 
-	GenerateWitness() fr.Vector
+	CreateStepCircuits() []constraint.ConstraintSystem
+
+	GenerateWitness(constraints []constraint.ConstraintSystem) fr.Vector
 
 	GetConstraints() PiecewiseUniformR1CS
 
