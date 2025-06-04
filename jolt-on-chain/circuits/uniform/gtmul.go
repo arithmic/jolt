@@ -1,19 +1,25 @@
 package uniform
 
 import (
+	"fmt"
+	"github.com/arithmic/gnark/constraint"
+	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
+	"github.com/consensys/gnark-crypto/ecc"
+
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
 type GTMul struct {
-	Acc         [12]frontend.Variable `gnark:",public"`
-	In          [12]frontend.Variable `gnark:",public"`
-	Quot        [11]frontend.Variable `gnark:",public"`
-	Rem         [12]frontend.Variable `gnark:",public"`
-	DivisorEval fr.Element
-	rPowers     [13]fr.Element
+	Acc           [12]frontend.Variable
+	In            [12]frontend.Variable
+	Quot          [11]frontend.Variable
+	Rem           [12]frontend.Variable
+	DivisorEval   fr.Element
+	reduciblePoly []fr.Element
+	rPowers       [13]fr.Element
 }
 
 func (circuit *GTMul) Define(api frontend.API) error {
@@ -39,6 +45,42 @@ func (circuit *GTMul) Define(api frontend.API) error {
 	api.AssertIsEqual(in1in2, api.Add(rEval, rq))
 	return nil
 }
+
+func (circuit *GTMul) GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector {
+	w, err := frontend.NewWitness(circuit, ecc.GRUMPKIN.ScalarField())
+
+	if err != nil {
+		fmt.Println("Failed to create witness object", err)
+	}
+	wit, err := constraints.Solve(w)
+	if err != nil {
+		fmt.Println("Witness generation failed ", err)
+	}
+	wSolved := wit.(*cs.R1CSSolution).W
+
+	return wSolved
+}
+func (circuit *GTMul) Hint() {
+	in1, _ := convertFrontendArrayToFrArray(circuit.Acc[:])
+	in2, _ := convertFrontendArrayToFrArray(circuit.In[:])
+	in1Tower := ToTower(in1)
+	in2Tower := ToTower(in2)
+	var in1in2Tower bn254.E12
+	in1in2Tower.Mul(&in1Tower, &in2Tower)
+	in1in2 := FromE12(&in1in2Tower)
+
+	in1in2Poly := multiplyPolynomials(in1, in2)
+	quotient := computeQuotientPoly(in1in2Poly, circuit.reduciblePoly, in1in2)
+	circuit.Quot = [11]frontend.Variable(makeFrontendVariable(quotient))
+	circuit.Rem = [12]frontend.Variable(makeFrontendVariable(in1in2))
+}
+
+type GTMultiMul struct {
+	in      [][]fr.Element
+	out     []fr.Element
+	rPowers [13]fr.Element
+}
+
 
 func multiplyPolynomials(a, b []fr.Element) []fr.Element {
 	degree := len(a) + len(b) - 1
@@ -174,3 +216,74 @@ func FromE12(a *bn254.E12) []fr.Element {
 	}
 	return res
 }
+
+// ToTower TODO:- Test it
+func ToTower(a []fr.Element) bn254.E12 {
+	// gnark-crypto uses a quadratic over cubic over quadratic 12th extension of Fp.
+	// The two towers are isomorphic and the coefficients are permuted as follows:
+	//
+	//	   tower  =  a000 a001 a010 a011 a020 a021 a100 a101 a110 a111 a120 a121
+	// 	   direct = a0   a1   a2   a3   a4   a5   a6   a7   a8   a9   a10  a11
+	//
+	//     a000 = A0  +  9 * A6
+	//     a001 = A6
+	//     a010 = A2  +  9 * A8
+	//     a011 = A8
+	//     a020 = A4  +  9 * A10
+	//     a021 = A10
+	//     a100 = A1  +  9 * A7
+	//     a101 = A7
+	//     a110 = A3  +  9 * A9
+	//     a111 = A9
+	//     a120 = A5  +  9 * A11
+	//     a121 = A11
+
+	if len(a) < 12 {
+		panic("slice must have at least 12 elements")
+	}
+
+	nine := fp.Element{9}
+
+	a6MulNine := fp.Element(a[6])
+	a6MulNine.Mul(&a6MulNine, &nine)
+
+	a000 := fp.Element(a[0])
+	a000.Add(&a000, &a6MulNine)
+
+	a001 := fp.Element(a[6])
+	a8MulNine := fp.Element(a[6])
+	a8MulNine.Mul(&a8MulNine, &nine)
+	a010 := fp.Element(a[2])
+	a010.Add(&a010, &a8MulNine)
+
+	a011 := fp.Element(a[8])
+	a10MulNine := fp.Element(a[10])
+	a10MulNine.Mul(&a10MulNine, &nine)
+	a020 := fp.Element(a[4])
+	a020.Add(&a020, &a10MulNine)
+
+	a021 := fp.Element(a[10])
+	a7MulNine := fp.Element(a[7])
+	a7MulNine.Mul(&a7MulNine, &nine)
+	a100 := fp.Element(a[1])
+	a100.Add(&a100, &a7MulNine)
+
+	a101 := fp.Element(a[7])
+	a9MulNine := fp.Element(a[9])
+	a9MulNine.Mul(&a9MulNine, &nine)
+	a110 := fp.Element(a[3])
+	a110.Add(&a110, &a9MulNine)
+
+	a111 := fp.Element(a[9])
+	a11MulNine := fp.Element(a[11])
+	a11MulNine.Mul(&a11MulNine, &nine)
+	a120 := fp.Element(a[5])
+	a120.Add(&a120, &a11MulNine)
+
+	a121 := fp.Element(a[11])
+
+	tower := bn254.E12{C0: bn254.E6{B0: bn254.E2{A0: a000, A1: a001}, B1: bn254.E2{A0: a010, A1: a011}, B2: bn254.E2{A0: a020, A1: a021}},
+		C1: bn254.E6{B0: bn254.E2{A0: a100, A1: a101}, B1: bn254.E2{A0: a110, A1: a111}, B2: bn254.E2{A0: a120, A1: a121}}}
+	return tower
+}
+

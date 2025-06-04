@@ -20,16 +20,13 @@ type UniformCircuit interface {
 
 	//GetConstraints() UniformR1CS
 
-	// ExtractMatrices() ([]Constraint, int, int, int)
 }
 
 type PiecewiseUniformCircuit interface {
-	// Compile TODO: Maybe not needed. Remove.
-	Compile() *[]constraint.ConstraintSystem
 
-	CreateStepCircuits()
+	CreateStepCircuits() []constraint.ConstraintSystem
 
-	GenerateWitness() fr.Vector
+	GenerateWitness(constraints []constraint.ConstraintSystem) fr.Vector
 
 	GetConstraints() PiecewiseUniformR1CS
 
