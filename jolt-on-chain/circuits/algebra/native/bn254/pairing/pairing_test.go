@@ -8,13 +8,11 @@ import (
 	"time"
 
 	"github.com/arithmic/gnark/constraint"
-	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
 	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
 	groups "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/groups"
 	bn254_fr "github.com/consensys/gnark-crypto/ecc/bn254/fr"
-	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
@@ -415,619 +413,8 @@ func TestCircuitPairing(t *testing.T) {
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
 }
 
-type MillerStepCircuit struct {
-	FIn       field_tower.Fp12 `gnark:",public"`
-	P         groups.G1Affine  `gnark:",public"`
-	Ell_Coeff [2]field_tower.Fp6
-	FOut      [3]field_tower.Fp12
-	Bit       frontend.Variable
-}
-
-func (circuit *MillerStepCircuit) Define(api frontend.API) error {
-	pairing_api := New(api)
-
-	f1, f2, f3 := pairing_api.MillerLoopStep(&circuit.FIn, circuit.Ell_Coeff[:], &circuit.P, circuit.Bit)
-	e12 := field_tower.NewExt12(api)
-	e12.AssertIsEqual(&f1, &circuit.FOut[0])
-	e12.AssertIsEqual(&f2, &circuit.FOut[1])
-	e12.AssertIsEqual(&f3, &circuit.FOut[2])
-
-	return nil
-}
-
-func TestCircuitMillerStep(t *testing.T) {
-	// Define the circuit
-	var circuit MillerStepCircuit
-	// Compile the circuit into an R1CS
-	start := time.Now()
-	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
-	if err != nil {
-		t.Fatalf("Error compiling circuit: %s", err)
-	}
-	duration := time.Since(start)
-	fmt.Printf("Circuit compiled in: %s\n", duration)
-
-	fmt.Println("number of constraints of MillerUniformCircuit", r1cs.GetNbConstraints())
-	_, aCount, bCount, cCount := ExtractConstraints(r1cs)
-	println("aCount:", aCount, "bCount:", bCount, "cCount:", cCount)
-
-	_, _, g1GenAff, g2GenAff := bn254.Generators()
-
-	var P bn254.G1Affine
-	var Q bn254.G2Affine
-
-	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
-	P.ScalarMultiplication(&g1GenAff, scalar)
-	Q.ScalarMultiplication(&g2GenAff, scalar)
-
-	bits := []int{
-		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
-		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
-		-1, 0, 0, 0, 1, 0, 1,
-	}
-	var c bn254.E12
-
-	var FOut [3]field_tower.Fp12
-
-	Ell_coeff, _ := EllCoeffs_fn(&Q)
-	var FIn bn254.E12
-	FIn.SetOne()
-
-	n := 64
-	var Ell_coeff_new [2]field_tower.Fp6
-
-	for i := 0; i < n; i++ {
-		Ell_coeff_new[i] = field_tower.FromE6(&Ell_coeff[i])
-	}
-	f1, f2, f3 := MillerLoopStep_fn(&FIn, Ell_coeff[0:2], &P, bits[n-1])
-	FOut[0] = field_tower.FromE12(&f1)
-	FOut[1] = field_tower.FromE12(&f2)
-	FOut[2] = field_tower.FromE12(&f3)
-
-	assignment := &MillerStepCircuit{
-		FIn:       field_tower.FromE12(c.SetOne()),
-		P:         groups.AffineFromG1Affine(&P),
-		Ell_Coeff: Ell_coeff_new,
-		FOut:      FOut,
-		Bit:       bits[n-1],
-	}
-
-	start_witness := time.Now()
-	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
-	if err != nil {
-		t.Fatal(err)
-	}
-	wit, err_1 := r1cs.Solve(witness)
-	if err_1 != nil {
-		fmt.Println("Error solving the r1cs", err_1)
-		return
-	}
-
-	z := wit.(*cs.R1CSSolution).W
-
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
-
-	var extendZ grumpkin_fr.Vector
-	zLen := len(z)
-
-	for idx := 0; idx < zLen; idx++ {
-		extendZ = append(extendZ, z[idx])
-	}
-
-	var FIn_val field_tower.Fp12
-	for idx := 1; idx < n; idx++ {
-
-		FIn_val.A0.A0.A0 = z[51]
-		FIn_val.A0.A0.A1 = z[52]
-		FIn_val.A0.A1.A0 = z[53]
-		FIn_val.A0.A1.A1 = z[54]
-		FIn_val.A0.A2.A0 = z[55]
-		FIn_val.A0.A2.A1 = z[56]
-		FIn_val.A1.A0.A0 = z[57]
-		FIn_val.A1.A0.A1 = z[58]
-		FIn_val.A1.A1.A0 = z[59]
-		FIn_val.A1.A1.A1 = z[60]
-		FIn_val.A1.A2.A0 = z[61]
-		FIn_val.A1.A2.A1 = z[62]
-
-		for i := 0; i < 2; i++ {
-			Ell_coeff_new[i] = field_tower.FromE6(&Ell_coeff[idx*2+i])
-		}
-
-		f1, f2, f3 = MillerLoopStep_fn(&f3, Ell_coeff[idx*2:idx*2+2], &P, bits[n-1-idx])
-		FOut[0] = field_tower.FromE12(&f1)
-		FOut[1] = field_tower.FromE12(&f2)
-		FOut[2] = field_tower.FromE12(&f3)
-
-		assignment := &MillerStepCircuit{
-			FIn:       FIn_val,
-			P:         groups.AffineFromG1Affine(&P),
-			Ell_Coeff: Ell_coeff_new,
-			FOut:      FOut,
-			Bit:       bits[n-1-idx],
-		}
-
-		witness, _ := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
-		if err != nil {
-			t.Fatal(err)
-		}
-		wit, err_1 := r1cs.Solve(witness)
-		if err_1 != nil {
-			fmt.Println("Error solving the r1cs", err_1)
-			return
-		}
-
-		z = wit.(*cs.R1CSSolution).W
-		for idx := 0; idx < len(z); idx++ {
-			extendZ = append(extendZ, z[idx])
-		}
-
-	}
-	// Compute f3 from witness
-	f3.C0.B0.A0.SetString(z[51].String())
-	f3.C0.B0.A1.SetString(z[52].String())
-	f3.C0.B1.A0.SetString(z[53].String())
-	f3.C0.B1.A1.SetString(z[54].String())
-	f3.C0.B2.A0.SetString(z[55].String())
-	f3.C0.B2.A1.SetString(z[56].String())
-	f3.C1.B0.A0.SetString(z[57].String())
-	f3.C1.B0.A1.SetString(z[58].String())
-	f3.C1.B1.A0.SetString(z[59].String())
-	f3.C1.B1.A1.SetString(z[60].String())
-	f3.C1.B2.A0.SetString(z[61].String())
-	f3.C1.B2.A1.SetString(z[62].String())
-
-	res_1 := Ell_fn(&f3, &Ell_coeff[2*n], &P)
-	res := Ell_fn(res_1, &Ell_coeff[2*n+1], &P)
-
-	actual_result := MillerLoop_fn(&Q, &P)
-	val := res.Equal(actual_result)
-	if val == false {
-		fmt.Println("The result is not equal")
-	} else {
-		fmt.Println("The result is equal")
-	}
-
-	duration = time.Since(start)
-	fmt.Printf("Witness generation time 2 : %s\n", duration)
-}
-
-type EllCoeffsCircuit struct {
-	Q         groups.G2Affine
-	Ell_coeff [130]field_tower.Fp6
-}
-
-func (circuit *EllCoeffsCircuit) Define(api frontend.API) error {
-	pairing_api := New(api)
-	Ell_coeffsss, _ := pairing_api.EllCoeffs(&circuit.Q)
-	e6 := field_tower.NewExt6(api)
-	for i := 0; i < 130; i++ {
-		e6.AssertIsEqual(&Ell_coeffsss[i], &circuit.Ell_coeff[i])
-	}
-	return nil
-}
-
-func TestCircuitEllCoeffs(t *testing.T) {
-	var circuit EllCoeffsCircuit
-	// Compile the circuit into an R1CS
-	start := time.Now()
-	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
-	if err != nil {
-		t.Fatalf("Error compiling circuit: %s", err)
-	}
-	duration := time.Since(start)
-	fmt.Printf("Circuit compiled in: %s\n", duration)
-
-	fmt.Println("number of constraints of EllCoeffsCircuit", r1cs.GetNbConstraints())
-	_, aCount, bCount, cCount := ExtractConstraints(r1cs)
-	println("aCount:", aCount, "bCount:", bCount, "cCount:", cCount)
-
-	_, a := groups.RandomG1G2Affines()
-
-	Ell_coeff, _ := EllCoeffs_fn(&a)
-
-	var Ell_coeff_new [130]field_tower.Fp6
-
-	for i := 0; i < 130; i++ {
-		Ell_coeff_new[i] = field_tower.FromE6(&Ell_coeff[i])
-	}
-
-	assignment := &EllCoeffsCircuit{
-		Q:         groups.G2AffineFromBNG2Affine(&a),
-		Ell_coeff: Ell_coeff_new,
-	}
-
-	// Generate witness
-	start_witness := time.Now()
-	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err_1 := r1cs.Solve(witness)
-	if err_1 != nil {
-		fmt.Println("Error solving the r1cs", err_1)
-		return
-	}
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
-}
-
-type EllCoeffsStepCircuit struct {
-	Rin        groups.G2Projective
-	Q          groups.G2Affine
-	NegQ       groups.G2Affine
-	Bit        frontend.Variable
-	Rmid, Rout groups.G2Projective
-	Ell1, Ell2 field_tower.Fp6
-}
-
-func (circuit *EllCoeffsStepCircuit) Define(api frontend.API) error {
-	pairing_api := New(api)
-
-	twoInv := api.Inverse(frontend.Variable(2))
-
-	rmid, rout, ell1, ell2 := pairing_api.EllCoeffStep(&circuit.Rin, &circuit.Q, &circuit.NegQ, circuit.Bit, twoInv)
-	e6 := field_tower.NewExt6(api)
-	g2 := groups.New(api)
-
-	g2.AssertIsEqual(&rmid, &circuit.Rmid)
-	g2.AssertIsEqual(&rout, &circuit.Rout)
-	e6.AssertIsEqual(&ell1, &circuit.Ell1)
-	e6.AssertIsEqual(&ell2, &circuit.Ell2)
-
-	return nil
-}
-
-func TestCircuitEllCoeffStep(t *testing.T) {
-	// Define the circuit
-
-	var circuit EllCoeffsStepCircuit
-	// Compile the circuit into an R1CS
-	start := time.Now()
-	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
-	if err != nil {
-		t.Fatalf("Error compiling circuit: %s", err)
-	}
-	duration := time.Since(start)
-	fmt.Printf("Circuit compiled in: %s\n", duration)
-
-	fmt.Println("number of constraints of EllCoeffsUniformCircuit", r1cs.GetNbConstraints())
-	_, aCount, bCount, cCount := ExtractConstraints(r1cs)
-	println("aCount:", aCount, "bCount:", bCount, "cCount:", cCount)
-
-	_, _, _, g2GenAff := bn254.Generators()
-
-	var Q bn254.G2Affine
-
-	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
-	Q.ScalarMultiplication(&g2GenAff, scalar)
-
-	bits := []int{
-		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
-		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
-		-1, 0, 0, 0, 1, 0, 1,
-	}
-
-	Rin := ToProjective_fn(&Q)
-	var neg_Q bn254.G2Affine
-	neg_Q.X = Q.X
-	neg_Q.Y.A1.Neg(&Q.Y.A1)
-	neg_Q.Y.A0.Neg(&Q.Y.A0)
-	n := 64
-
-	Rmid, Rout, ell1, ell2 := EllCoeffStep_fn(&Rin, &Q, &neg_Q, bits[n-1])
-
-	assignment := &EllCoeffsStepCircuit{
-		Rin:  groups.FromBNG2Affine(&Q),
-		Q:    groups.G2AffineFromBNG2Affine(&Q),
-		NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
-		Rmid: G2ProjectiveFromBNG2Projective(&Rmid),
-		Rout: G2ProjectiveFromBNG2Projective(&Rout),
-		Ell1: field_tower.FromE6(ell1),
-		Ell2: field_tower.FromE6(ell2),
-		Bit:  bits[n-1],
-	}
-
-	start_witness := time.Now()
-	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
-	if err != nil {
-		t.Fatal(err)
-	}
-	wit, err_1 := r1cs.Solve(witness)
-	if err_1 != nil {
-		fmt.Println("Error solving the r1cs", err_1)
-		return
-	}
-
-	z := wit.(*cs.R1CSSolution).W
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
-
-	var extendZ grumpkin_fr.Vector
-	zLen := len(z)
-	fmt.Println("zlen is ", len(z))
-
-	for idx := 0; idx < zLen; idx++ {
-		extendZ = append(extendZ, z[idx])
-	}
-
-	var RIn_val groups.G2Projective
-	for idx := 1; idx < n; idx++ {
-
-		// R[2 * i] for next step
-		RIn_val.X.A0 = z[22]
-		RIn_val.X.A1 = z[23]
-		RIn_val.Y.A0 = z[24]
-		RIn_val.Y.A1 = z[25]
-		RIn_val.Z.A0 = z[26]
-		RIn_val.Z.A1 = z[27]
-
-		// Q, NegQ for next step same as in step 1
-		// Rmid, Rout
-		Rmid, Rout, ell1, ell2 = EllCoeffStep_fn(&Rout, &Q, &neg_Q, bits[n-1-idx])
-
-		assignment := &EllCoeffsStepCircuit{
-			Rin:  RIn_val,
-			Q:    groups.G2AffineFromBNG2Affine(&Q),
-			NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
-			Rmid: G2ProjectiveFromBNG2Projective(&Rmid),
-			Rout: G2ProjectiveFromBNG2Projective(&Rout),
-			Ell1: field_tower.FromE6(ell1),
-			Ell2: field_tower.FromE6(ell2),
-			Bit:  bits[n-1-idx],
-		}
-
-		witness, _ := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
-		if err != nil {
-			t.Fatal(err)
-		}
-		wit, err_1 := r1cs.Solve(witness)
-		if err_1 != nil {
-			fmt.Println("Error solving the r1cs", err_1)
-			return
-		}
-
-		z = wit.(*cs.R1CSSolution).W
-		for idx := 0; idx < len(z); idx++ {
-			extendZ = append(extendZ, z[idx])
-		}
-	}
-
-	Q1 := MulByChar_fn(&Q)
-	Q2 := MulByChar_fn(Q1)
-
-	var neg_Q2 bn254.G2Affine
-	neg_Q2.X = Q2.X
-	neg_Q2.Y.A1.Neg(&Q2.Y.A1)
-	neg_Q2.Y.A0.Neg(&Q2.Y.A0)
-
-	var RIn_val_2n G2Projective
-
-	RIn_val_2n.X.A0.SetString(z[22].String())
-	RIn_val_2n.X.A1.SetString(z[23].String())
-	RIn_val_2n.Y.A0.SetString(z[24].String())
-	RIn_val_2n.Y.A1.SetString(z[25].String())
-	RIn_val_2n.Z.A0.SetString(z[26].String())
-	RIn_val_2n.Z.A1.SetString(z[27].String())
-
-	R_New, computed_ell_coeff := LineAddition_fn(&RIn_val_2n, Q1)
-
-	_, ell_coeffs_last := LineAddition_fn(R_New, &neg_Q2)
-
-	actual_ell_coeff, actual_r := EllCoeffs_fn(&Q)
-
-	val1_x := R_New.X.Equal(&actual_r[2*n+1].X)
-	val1_y := R_New.Y.Equal(&actual_r[2*n+1].Y)
-	val1_z := R_New.Z.Equal(&actual_r[2*n+1].Z)
-
-	val2 := computed_ell_coeff.Equal(&actual_ell_coeff[2*n])
-	val3 := ell_coeffs_last.Equal(&actual_ell_coeff[2*n+1])
-
-	if val1_x && val1_y && val1_z && val2 && val3 == false {
-		fmt.Println("The result is not equal")
-	} else {
-		fmt.Println("The result is equal")
-	}
-}
-
-func TestCircuitMillerUniformIntegrated(t *testing.T) {
-	// Define the circuit
-
-	var circuit MillerUniformCircuit
-	// Compile the circuit into an R1CS
-	start := time.Now()
-	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
-	if err != nil {
-		t.Fatalf("Error compiling circuit: %s", err)
-	}
-
-	duration := time.Since(start)
-	fmt.Printf("Circuit compiled in: %s\n", duration)
-
-	fmt.Println("number of constraints of EllCoeffsUniformCircuit", r1cs.GetNbConstraints())
-	_, aCount, bCount, cCount := ExtractConstraints(r1cs)
-	println("aCount:", aCount, "bCount:", bCount, "cCount:", cCount)
-
-	_, _, g1GenAff, g2GenAff := bn254.Generators()
-
-	var P bn254.G1Affine
-	var Q bn254.G2Affine
-
-	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
-	P.ScalarMultiplication(&g1GenAff, scalar)
-	Q.ScalarMultiplication(&g2GenAff, scalar)
-
-	bits := []int{
-		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
-		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
-		-1, 0, 0, 0, 1, 0, 1,
-	}
-
-	Rin := ToProjective_fn(&Q)
-	var neg_Q bn254.G2Affine
-	neg_Q.X = Q.X
-	neg_Q.Y.A1.Neg(&Q.Y.A1)
-	neg_Q.Y.A0.Neg(&Q.Y.A0)
-	n := 64
-
-	var FIn bn254.E12
-	FIn.SetOne()
-
-	Rout, f1, f2, f3 := MillerLoopStepIntegrated_fn(&Rin, &Q, &neg_Q, &P, &FIn, bits[n-1])
-
-	var FOut [3]field_tower.Fp12
-
-	FOut[0] = field_tower.FromE12(&f1)
-	FOut[1] = field_tower.FromE12(&f2)
-	FOut[2] = field_tower.FromE12(&f3)
-
-	assignment := &MillerUniformCircuit{
-		FIn:  field_tower.FromE12(&FIn),
-		P:    groups.AffineFromG1Affine(&P),
-		Rin:  groups.FromBNG2Affine(&Q),
-		Q:    groups.G2AffineFromBNG2Affine(&Q),
-		NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
-		Rout: G2ProjectiveFromBNG2Projective(&Rout),
-		FOut: FOut,
-		Bit:  bits[n-1],
-	}
-
-	start_witness := time.Now()
-	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
-	if err != nil {
-		t.Fatal(err)
-	}
-	wit, err_1 := r1cs.Solve(witness)
-	if err_1 != nil {
-		fmt.Println("Error solving the r1cs", err_1)
-		return
-	}
-
-	z := wit.(*cs.R1CSSolution).W
-	duration_witness := time.Since(start_witness)
-	fmt.Printf("Witness generated in: %s\n", duration_witness)
-
-	var extendZ grumpkin_fr.Vector
-	zLen := len(z)
-	fmt.Println("zlen is ", len(z))
-
-	for idx := 0; idx < zLen; idx++ {
-		extendZ = append(extendZ, z[idx])
-	}
-
-	var RIn_val groups.G2Projective
-
-	var FIn_val field_tower.Fp12
-	for idx := 1; idx < n; idx++ {
-
-		RIn_val.X.A0 = z[29]
-		RIn_val.X.A1 = z[30]
-		RIn_val.Y.A0 = z[31]
-		RIn_val.Y.A1 = z[32]
-		RIn_val.Z.A0 = z[33]
-		RIn_val.Z.A1 = z[34]
-
-		FIn_val.A0.A0.A0 = z[60]
-		FIn_val.A0.A0.A1 = z[61]
-		FIn_val.A0.A1.A0 = z[62]
-		FIn_val.A0.A1.A1 = z[63]
-		FIn_val.A0.A2.A0 = z[64]
-		FIn_val.A0.A2.A1 = z[65]
-		FIn_val.A1.A0.A0 = z[66]
-		FIn_val.A1.A0.A1 = z[67]
-		FIn_val.A1.A1.A0 = z[68]
-		FIn_val.A1.A1.A1 = z[69]
-		FIn_val.A1.A2.A0 = z[70]
-		FIn_val.A1.A2.A1 = z[71]
-
-		Rout, f1, f2, f3 = MillerLoopStepIntegrated_fn(&Rout, &Q, &neg_Q, &P, &f3, bits[n-1-idx])
-
-		FOut[0] = field_tower.FromE12(&f1)
-		FOut[1] = field_tower.FromE12(&f2)
-		FOut[2] = field_tower.FromE12(&f3)
-
-		assignment := &MillerUniformCircuit{
-			FIn:  FIn_val,
-			P:    groups.AffineFromG1Affine(&P),
-			Rin:  RIn_val,
-			Q:    groups.G2AffineFromBNG2Affine(&Q),
-			NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
-			Rout: G2ProjectiveFromBNG2Projective(&Rout),
-			FOut: FOut,
-			Bit:  bits[n-1-idx],
-		}
-
-		witness, _ := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
-		if err != nil {
-			t.Fatal(err)
-		}
-		wit, err_1 := r1cs.Solve(witness)
-		if err_1 != nil {
-			fmt.Println("Error solving the r1cs", err_1)
-			return
-		}
-
-		z = wit.(*cs.R1CSSolution).W
-		for idx := 0; idx < len(z); idx++ {
-			extendZ = append(extendZ, z[idx])
-		}
-	}
-
-	f3.C0.B0.A0.SetString(z[60].String())
-	f3.C0.B0.A1.SetString(z[61].String())
-	f3.C0.B1.A0.SetString(z[62].String())
-	f3.C0.B1.A1.SetString(z[63].String())
-	f3.C0.B2.A0.SetString(z[64].String())
-	f3.C0.B2.A1.SetString(z[65].String())
-	f3.C1.B0.A0.SetString(z[66].String())
-	f3.C1.B0.A1.SetString(z[67].String())
-	f3.C1.B1.A0.SetString(z[68].String())
-	f3.C1.B1.A1.SetString(z[69].String())
-	f3.C1.B2.A0.SetString(z[70].String())
-	f3.C1.B2.A1.SetString(z[71].String())
-
-	Q1 := MulByChar_fn(&Q)
-	Q2 := MulByChar_fn(Q1)
-
-	var neg_Q2 bn254.G2Affine
-	neg_Q2.X = Q2.X
-	neg_Q2.Y.A1.Neg(&Q2.Y.A1)
-	neg_Q2.Y.A0.Neg(&Q2.Y.A0)
-
-	var RIn_val_2n G2Projective
-
-	k := 29
-	RIn_val_2n.X.A0.SetString(z[k].String())
-	RIn_val_2n.X.A1.SetString(z[k+1].String())
-	RIn_val_2n.Y.A0.SetString(z[k+2].String())
-	RIn_val_2n.Y.A1.SetString(z[k+3].String())
-	RIn_val_2n.Z.A0.SetString(z[k+4].String())
-	RIn_val_2n.Z.A1.SetString(z[k+5].String())
-
-	R_New, computed_ell_coeff := LineAddition_fn(&RIn_val_2n, Q1)
-
-	_, ell_coeffs_last := LineAddition_fn(R_New, &neg_Q2)
-	res := Ell_fn(&f3, computed_ell_coeff, &P)
-	miller_final_res := Ell_fn(res, ell_coeffs_last, &P)
-
-	actual_result := MillerLoop_fn(&Q, &P)
-	val := miller_final_res.Equal(actual_result)
-	if val == false {
-		fmt.Println("The result is not equal")
-	} else {
-		fmt.Println("The result is equal")
-	}
-
-	duration = time.Since(start)
-	fmt.Printf("Witness generation time 2 : %s\n", duration)
-}
-
-// //////////////////////////////////////////////////////////////////////
-// /////////////////////////////////////////////////////////////////////
-// /////////////////////////////////////////////////////////////////////
-// /////////////////////////////////////////////////////////////////////
-func TestCircuitMillerUniformWithInterface(t *testing.T) {
+// Test the miller output from witness with the MillerLoop function of gnark
+func TestCircuitMillerLoopUniformWithInterface(t *testing.T) {
 	// Define the circuit
 	n := 64
 
@@ -1091,8 +478,65 @@ func TestCircuitMillerUniformWithInterface(t *testing.T) {
 
 	dummyCircuit = &MillerUniformCircuit{}
 	r1cs := dummyCircuit.Compile()
-	_, _, _, _ = dummyCircuit.ExtractMatrices(*r1cs)
-	_ = dummyCircuit.GenerateWitness(circuits, r1cs, 64)
+	extendZ := dummyCircuit.GenerateWitness(circuits, r1cs, 64)
+
+	// extract values from circuit n - 1 and put them as inputs for MillerEllFinalStepCircuit circuit
+	var miller_final_circuit *MillerEllFinalStepCircuit
+
+	final_circuits := make([]*MillerEllFinalStepCircuit, 1)
+
+	final_circuits[0] = &MillerEllFinalStepCircuit{
+		FIn:  circuits[n-1].FOut[2],
+		P:    groups.AffineFromG1Affine(&P),
+		Rin:  circuits[n-1].Rout,
+		Q:    groups.G2AffineFromBNG2Affine(&Q),
+		Rout: circuits[n-1].Rout,    // dummy value
+		FOut: circuits[n-1].FOut[0], // dummy value
+		fIn:  circuits[n-1].fOut[2],
+		fOut: circuits[n-1].fOut[0], // dummy value
+		p:    P,
+		rin:  circuits[n-1].rout,
+		q:    Q,
+		rout: circuits[n-1].rout, // dummy value
+	}
+	miller_final_circuit = &MillerEllFinalStepCircuit{}
+
+	r1cs_1 := miller_final_circuit.Compile()
+	final_witness := miller_final_circuit.GenerateWitness(final_circuits, r1cs_1, 1)
+
+	for i := 0; i < len(final_witness); i++ {
+		extendZ = append(extendZ, final_witness[i])
+	}
+
+	P_arr := []bn254.G1Affine{P}
+	Q_arr := []bn254.G2Affine{Q}
+	actual_miller_res, _ := bn254.MillerLoop(P_arr, Q_arr)
+	actual_res_after_final_exp := bn254.FinalExponentiation(&actual_miller_res)
+
+	miller_final_res_from_witness := bn254.E12{}
+
+	// 22976 is the length of witness from MillerUniformCircuit
+	miller_final_res_from_witness.C0.B0.A0.SetString(extendZ[22976+19].String())
+	miller_final_res_from_witness.C0.B0.A1.SetString(extendZ[22976+20].String())
+	miller_final_res_from_witness.C0.B1.A0.SetString(extendZ[22976+21].String())
+	miller_final_res_from_witness.C0.B1.A1.SetString(extendZ[22976+22].String())
+	miller_final_res_from_witness.C0.B2.A0.SetString(extendZ[22976+23].String())
+	miller_final_res_from_witness.C0.B2.A1.SetString(extendZ[22976+24].String())
+	miller_final_res_from_witness.C1.B0.A0.SetString(extendZ[22976+25].String())
+	miller_final_res_from_witness.C1.B0.A1.SetString(extendZ[22976+26].String())
+	miller_final_res_from_witness.C1.B1.A0.SetString(extendZ[22976+27].String())
+	miller_final_res_from_witness.C1.B1.A1.SetString(extendZ[22976+28].String())
+	miller_final_res_from_witness.C1.B2.A0.SetString(extendZ[22976+29].String())
+	miller_final_res_from_witness.C1.B2.A1.SetString(extendZ[22976+30].String())
+
+	res_after_final_exp_for_witness := bn254.FinalExponentiation(&miller_final_res_from_witness)
+
+	val := actual_res_after_final_exp.Equal(&res_after_final_exp_for_witness)
+	if val == false {
+		fmt.Println("The result is NOT equal after exponentiation with gnark functions")
+	} else {
+		fmt.Println("The result is equal after exponentiation with gnark functions")
+	}
 }
 
 type Constraint struct {
