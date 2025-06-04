@@ -2,6 +2,7 @@ package pcs
 
 import (
 	"fmt"
+
 	"math/big"
 	"strconv"
 
@@ -9,8 +10,10 @@ import (
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
+
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/uniform"
+
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	bn254Fp "github.com/consensys/gnark-crypto/ecc/bn254/fp"
@@ -63,6 +66,7 @@ type gtExpUniformCircuit struct {
 }
 
 func (circuit *gtExpUniformCircuit) Compile() *constraint.ConstraintSystem {
+
 	circuitR1CS, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit.dummyCircuit)
 	if err != nil {
 		fmt.Println("err in compilation is ", err)
@@ -136,7 +140,6 @@ func (circuit *gtExpUniformCircuit) GenerateWitness() fr.Vector {
 			witness = append(witness, fr.Element(elem))
 		}
 	}
-
 	return witness
 }
 
