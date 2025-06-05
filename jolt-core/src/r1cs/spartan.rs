@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use tracer::instruction::RV32IMCycle;
-use tracing::{ span, Level };
+use tracing::{span, Level};
 
 use crate::field::JoltField;
 use crate::jolt::vm::rv32i_vm::ProofTranscript;
@@ -23,13 +23,17 @@ use ark_serialize::CanonicalSerialize;
 use thiserror::Error;
 
 use crate::{
-    poly::{ dense_mlpoly::DensePolynomial, eq_poly::{ EqPlusOnePolynomial, EqPolynomial } },
+    poly::{
+        dense_mlpoly::DensePolynomial,
+        eq_poly::{EqPlusOnePolynomial, EqPolynomial},
+    },
     subprotocols::sumcheck::SumcheckInstanceProof,
     utils::small_value::NUM_SVO_ROUNDS,
 };
 
 use super::builder::CombinedUniformBuilder;
 
+use crate::poly::split_eq_poly::SplitEqPolynomial;
 use rayon::prelude::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
@@ -78,17 +82,23 @@ pub struct R1CSInputsOracle<'a, F: JoltField> {
 impl<'a, F: JoltField> R1CSInputsOracle<'a, F> {
     pub fn new<PCS, ProofTranscript>(
         trace: &'a [RV32IMCycle],
-        preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>
-    )
-        -> Self
-        where PCS: CommitmentScheme<ProofTranscript, Field = F>, ProofTranscript: Transcript
+        preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
+    ) -> Self
+    where
+        PCS: CommitmentScheme<ProofTranscript, Field = F>,
+        ProofTranscript: Transcript,
     {
         let func = Box::new(|trace_shard: &[RV32IMCycle]| {
-            ALL_R1CS_INPUTS.par_iter()
+            ALL_R1CS_INPUTS
+                .par_iter()
                 .map(|var| var.generate_witness(trace_shard, preprocessing))
                 .collect()
         });
-        R1CSInputsOracle { step: 0, trace, func }
+        R1CSInputsOracle {
+            step: 0,
+            trace,
+            func,
+        }
     }
 
     pub fn peek(&self) -> Option<Vec<MultilinearPolynomial<F>>> {
@@ -140,14 +150,19 @@ pub struct UniformSpartanProof<F: JoltField, ProofTranscript: Transcript> {
 }
 
 impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
-    where F: JoltField, ProofTranscript: Transcript
+where
+    F: JoltField,
+    ProofTranscript: Transcript,
 {
     #[tracing::instrument(skip_all, name = "Spartan::setup")]
     pub fn setup(
         constraint_builder: &CombinedUniformBuilder<F>,
-        padded_num_steps: usize
+        padded_num_steps: usize,
     ) -> UniformSpartanKey<F> {
-        assert_eq!(padded_num_steps, constraint_builder.uniform_repeat().next_power_of_two());
+        assert_eq!(
+            padded_num_steps,
+            constraint_builder.uniform_repeat().next_power_of_two()
+        );
         UniformSpartanKey::from_builder(constraint_builder)
     }
 
@@ -158,11 +173,13 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
         key: &UniformSpartanKey<F>,
         trace: &[RV32IMCycle],
         opening_accumulator: &mut ProverOpeningAccumulator<F, ProofTranscript>,
-        transcript: &mut ProofTranscript
+        transcript: &mut ProofTranscript,
     ) -> Result<Self, SpartanError>
-        where PCS: CommitmentScheme<ProofTranscript, Field = F>
+    where
+        PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
-        let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS.par_iter()
+        let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
+            .par_iter()
             .map(|var| var.generate_witness(trace, preprocessing))
             .collect();
 
@@ -179,7 +196,7 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
                 &constraint_builder.offset_equality_constraints,
                 &input_polys,
                 &tau,
-                transcript
+                transcript,
             );
         let outer_sumcheck_r: Vec<F> = outer_sumcheck_r.into_iter().rev().collect();
 
@@ -218,9 +235,11 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
            - poly_z: z(y_var || rx_step), z_shift(..)
         */
 
-        let poly_ABC = DensePolynomial::new(
-            key.evaluate_matrix_mle_partial(rx_constr, rx_step, inner_sumcheck_RLC)
-        );
+        let poly_ABC = DensePolynomial::new(key.evaluate_matrix_mle_partial(
+            rx_constr,
+            rx_step,
+            inner_sumcheck_RLC,
+        ));
 
         // Binding z and z_shift polynomials at point rx_step
         let span = span!(Level::INFO, "binding_z_and_shift_z");
@@ -242,16 +261,15 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
         drop(_guard);
         drop(span);
 
-        let poly_z = DensePolynomial::new(
-            bind_z.into_iter().chain(bind_shift_z.into_iter()).collect()
-        );
+        let poly_z =
+            DensePolynomial::new(bind_z.into_iter().chain(bind_shift_z.into_iter()).collect());
         assert_eq!(poly_z.len(), poly_ABC.len());
 
         let num_rounds_inner_sumcheck = poly_ABC.len().log_2();
 
         let mut polys = vec![
             MultilinearPolynomial::LargeScalars(poly_ABC),
-            MultilinearPolynomial::LargeScalars(poly_z)
+            MultilinearPolynomial::LargeScalars(poly_z),
         ];
 
         let comb_func = |poly_evals: &[F]| -> F {
@@ -266,7 +284,7 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
                 &mut polys,
                 comb_func,
                 2,
-                transcript
+                transcript,
             );
 
         drop_in_background_thread(polys);
@@ -302,7 +320,7 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
 
         let mut shift_sumcheck_polys = vec![
             MultilinearPolynomial::from(bind_z_ry_var),
-            MultilinearPolynomial::from(eq_plus_one_rx_step)
+            MultilinearPolynomial::from(eq_plus_one_rx_step),
         ];
 
         let shift_sumcheck_claim = (0..1 << num_rounds_shift_sumcheck)
@@ -314,10 +332,7 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
                     .collect();
                 comb_func(&params)
             })
-            .reduce(
-                || F::zero(),
-                |acc, x| acc + x
-            );
+            .reduce(|| F::zero(), |acc, x| acc + x);
 
         let (shift_sumcheck_proof, shift_sumcheck_r, _shift_sumcheck_claims) =
             SumcheckInstanceProof::prove_arbitrary(
@@ -326,17 +341,16 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
                 &mut shift_sumcheck_polys,
                 comb_func,
                 2,
-                transcript
+                transcript,
             );
 
         drop_in_background_thread(shift_sumcheck_polys);
 
         let flattened_polys_ref: Vec<_> = input_polys.iter().collect();
+
         // Inner sumcheck evaluations: evaluate z on rx_step
-        let (claimed_witness_evals, chis) = MultilinearPolynomial::batch_evaluate(
-            &flattened_polys_ref,
-            rx_step
-        );
+        let (claimed_witness_evals, chis) =
+            MultilinearPolynomial::batch_evaluate(&flattened_polys_ref, rx_step);
 
         // opening_accumulator.append(
         //     &flattened_polys_ref,
@@ -347,10 +361,8 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
         // );
 
         // Shift sumcheck evaluations: evaluate z on ry_var
-        let (shift_sumcheck_witness_evals, chis2) = MultilinearPolynomial::batch_evaluate(
-            &flattened_polys_ref,
-            &shift_sumcheck_r
-        );
+        let (shift_sumcheck_witness_evals, chis2) =
+            MultilinearPolynomial::batch_evaluate(&flattened_polys_ref, &shift_sumcheck_r);
 
         // opening_accumulator.append(
         //     &flattened_polys_ref,
@@ -385,15 +397,17 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
         key: &UniformSpartanKey<F>,
         trace: &[RV32IMCycle],
         opening_accumulator: &mut ProverOpeningAccumulator<F, ProofTranscript>,
-        transcript: &mut ProofTranscript
+        transcript: &mut ProofTranscript,
     ) -> Result<Self, SpartanError>
-        where PCS: CommitmentScheme<ProofTranscript, Field = F>
+    where
+        PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
         let input_polys_oracle = R1CSInputsOracle::new(trace, preprocessing);
 
-        // let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS.par_iter()
-        //     .map(|var| var.generate_witness(trace, preprocessing))
-        //     .collect();
+        let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
+            .par_iter()
+            .map(|var| var.generate_witness(trace, preprocessing))
+            .collect();
 
         let num_rounds_x = key.num_rows_bits();
 
@@ -402,15 +416,25 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
         let tau: Vec<F> = transcript.challenge_vector(num_rounds_x);
 
         let (outer_sumcheck_proof, outer_sumcheck_r, outer_sumcheck_claims) =
-            SumcheckInstanceProof::prove_spartan_small_value_streaming::<NUM_SVO_ROUNDS>(
+            SumcheckInstanceProof::prove_spartan_small_value::<NUM_SVO_ROUNDS>(
                 num_rounds_x,
                 constraint_builder.padded_rows_per_step(),
                 &constraint_builder.uniform_builder.constraints,
                 &constraint_builder.offset_equality_constraints,
-                input_polys_oracle,
+                &input_polys,
                 &tau,
-                transcript
+                transcript,
             );
+        // let (outer_sumcheck_proof, outer_sumcheck_r, outer_sumcheck_claims) =
+        //     SumcheckInstanceProof::prove_spartan_small_value_streaming::<NUM_SVO_ROUNDS>(
+        //         num_rounds_x,
+        //         constraint_builder.padded_rows_per_step(),
+        //         &constraint_builder.uniform_builder.constraints,
+        //         &constraint_builder.offset_equality_constraints,
+        //         input_polys_oracle,
+        //         &tau,
+        //         transcript,
+        //     );
         let outer_sumcheck_r: Vec<F> = outer_sumcheck_r.into_iter().rev().collect();
 
         ProofTranscript::append_scalars(transcript, &outer_sumcheck_claims);
@@ -448,9 +472,11 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
            - poly_z: z(y_var || rx_step), z_shift(..)
         */
 
-        let poly_ABC = DensePolynomial::new(
-            key.evaluate_matrix_mle_partial(rx_constr, rx_step, inner_sumcheck_RLC)
-        );
+        let poly_ABC = DensePolynomial::new(key.evaluate_matrix_mle_partial(
+            rx_constr,
+            rx_step,
+            inner_sumcheck_RLC,
+        ));
 
         // Binding z and z_shift polynomials at point rx_step
         let span = span!(Level::INFO, "binding_z_and_shift_z");
@@ -472,16 +498,15 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
         drop(_guard);
         drop(span);
 
-        let poly_z = DensePolynomial::new(
-            bind_z.into_iter().chain(bind_shift_z.into_iter()).collect()
-        );
+        let poly_z =
+            DensePolynomial::new(bind_z.into_iter().chain(bind_shift_z.into_iter()).collect());
         assert_eq!(poly_z.len(), poly_ABC.len());
 
         let num_rounds_inner_sumcheck = poly_ABC.len().log_2();
 
         let mut polys = vec![
             MultilinearPolynomial::LargeScalars(poly_ABC),
-            MultilinearPolynomial::LargeScalars(poly_z)
+            MultilinearPolynomial::LargeScalars(poly_z),
         ];
 
         let comb_func = |poly_evals: &[F]| -> F {
@@ -496,7 +521,7 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
                 &mut polys,
                 comb_func,
                 2,
-                transcript
+                transcript,
             );
 
         drop_in_background_thread(polys);
@@ -532,7 +557,7 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
 
         let mut shift_sumcheck_polys = vec![
             MultilinearPolynomial::from(bind_z_ry_var),
-            MultilinearPolynomial::from(eq_plus_one_rx_step)
+            MultilinearPolynomial::from(eq_plus_one_rx_step),
         ];
 
         let shift_sumcheck_claim = (0..1 << num_rounds_shift_sumcheck)
@@ -544,29 +569,41 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
                     .collect();
                 comb_func(&params)
             })
-            .reduce(
-                || F::zero(),
-                |acc, x| acc + x
-            );
+            .reduce(|| F::zero(), |acc, x| acc + x);
 
+        let mut bindZ_oracle =
+            BindZRyVarOracle::new(trace, preprocessing, &eq_ry_var, &eq_ry_var_r2);
+
+        // let (shift_sumcheck_proof, shift_sumcheck_r, _shift_sumcheck_claims) =
+        //     SumcheckInstanceProof::prove_arbitrary(
+        //         &shift_sumcheck_claim,
+        //         num_rounds_shift_sumcheck,
+        //         &mut shift_sumcheck_polys,
+        //         comb_func,
+        //         2,
+        //         transcript,
+        //     );
+        let shard_length = trace.len() / 2;
+        let eq_rx_step = SplitEqPolynomial::new(rx_step);
         let (shift_sumcheck_proof, shift_sumcheck_r, _shift_sumcheck_claims) =
-            SumcheckInstanceProof::prove_arbitrary(
-                &shift_sumcheck_claim,
+            SumcheckInstanceProof::shift_sumcheck(
                 num_rounds_shift_sumcheck,
-                &mut shift_sumcheck_polys,
+                &mut bindZ_oracle,
+                eq_rx_step,
                 comb_func,
                 2,
-                transcript
+                shard_length,
+                2,
+                transcript,
             );
+        let shift_sumcheck_r: Vec<F> = shift_sumcheck_r.iter().rev().copied().collect();
 
         drop_in_background_thread(shift_sumcheck_polys);
 
         let flattened_polys_ref: Vec<_> = input_polys.iter().collect();
         // Inner sumcheck evaluations: evaluate z on rx_step
-        let (claimed_witness_evals, chis) = MultilinearPolynomial::batch_evaluate(
-            &flattened_polys_ref,
-            rx_step
-        );
+        let (claimed_witness_evals, chis) =
+            MultilinearPolynomial::batch_evaluate(&flattened_polys_ref, rx_step);
 
         // opening_accumulator.append(
         //     &flattened_polys_ref,
@@ -577,10 +614,8 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
         // );
 
         // Shift sumcheck evaluations: evaluate z on ry_var
-        let (shift_sumcheck_witness_evals, chis2) = MultilinearPolynomial::batch_evaluate(
-            &flattened_polys_ref,
-            &shift_sumcheck_r
-        );
+        let (shift_sumcheck_witness_evals, chis2) =
+            MultilinearPolynomial::batch_evaluate(&flattened_polys_ref, &shift_sumcheck_r);
 
         // opening_accumulator.append(
         //     &flattened_polys_ref,
@@ -614,10 +649,11 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
         key: &UniformSpartanKey<F>,
         // commitments: &JoltCommitments<PCS, ProofTranscript>,
         opening_accumulator: &mut VerifierOpeningAccumulator<F, PCS, ProofTranscript>,
-        transcript: &mut ProofTranscript
-    )
-        -> Result<(), SpartanError>
-        where PCS: CommitmentScheme<ProofTranscript, Field = F>, ProofTranscript: Transcript
+        transcript: &mut ProofTranscript,
+    ) -> Result<(), SpartanError>
+    where
+        PCS: CommitmentScheme<ProofTranscript, Field = F>,
+        ProofTranscript: Transcript,
     {
         let num_rounds_x = key.num_rows_total().log_2();
 
@@ -625,7 +661,8 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
          */
         let tau: Vec<F> = transcript.challenge_vector(num_rounds_x);
 
-        let (claim_outer_final, outer_sumcheck_r) = self.outer_sumcheck_proof
+        let (claim_outer_final, outer_sumcheck_r) = self
+            .outer_sumcheck_proof
             .verify(F::zero(), num_rounds_x, 3, transcript)
             .map_err(|_| SpartanError::InvalidOuterSumcheckProof)?;
 
@@ -644,7 +681,8 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
                 self.outer_sumcheck_claims.0,
                 self.outer_sumcheck_claims.1,
                 self.outer_sumcheck_claims.2,
-            ].as_slice()
+            ]
+            .as_slice(),
         );
 
         /* Sumcheck 2: Inner sumcheck
@@ -654,13 +692,13 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
            - verifying it involves computing each term with randomness ry_var
         */
         let inner_sumcheck_RLC: F = transcript.challenge_scalar();
-        let claim_inner_joint =
-            self.outer_sumcheck_claims.0 +
-            inner_sumcheck_RLC * self.outer_sumcheck_claims.1 +
-            inner_sumcheck_RLC.square() * self.outer_sumcheck_claims.2;
+        let claim_inner_joint = self.outer_sumcheck_claims.0
+            + inner_sumcheck_RLC * self.outer_sumcheck_claims.1
+            + inner_sumcheck_RLC.square() * self.outer_sumcheck_claims.2;
 
         let num_rounds_inner_sumcheck = (2 * key.num_vars_uniform_padded()).log_2() + 1; // +1 for shift evals
-        let (claim_inner_final, inner_sumcheck_r) = self.inner_sumcheck_proof
+        let (claim_inner_final, inner_sumcheck_r) = self
+            .inner_sumcheck_proof
             .verify(claim_inner_joint, num_rounds_inner_sumcheck, 2, transcript)
             .map_err(|_| SpartanError::InvalidInnerSumcheckProof)?;
 
@@ -670,17 +708,11 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
 
         let r_is_cross_step = inner_sumcheck_r[0];
         let ry_var = inner_sumcheck_r[1..].to_vec();
-        let eval_z = key.evaluate_z_mle_with_segment_evals(
-            &self.claimed_witness_evals,
-            &ry_var,
-            true
-        );
+        let eval_z =
+            key.evaluate_z_mle_with_segment_evals(&self.claimed_witness_evals, &ry_var, true);
 
-        let (eval_a, eval_b, eval_c) = key.evaluate_matrix_mle_full(
-            rx_constr,
-            &ry_var,
-            &r_is_cross_step
-        );
+        let (eval_a, eval_b, eval_c) =
+            key.evaluate_matrix_mle_full(rx_constr, &ry_var, &r_is_cross_step);
 
         let left_expected =
             eval_a + inner_sumcheck_RLC * eval_b + inner_sumcheck_RLC * inner_sumcheck_RLC * eval_c;
@@ -699,18 +731,24 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
         */
 
         let num_rounds_shift_sumcheck = num_steps_bits;
-        let (claim_shift_sumcheck, shift_sumcheck_r) = self.shift_sumcheck_proof
-            .verify(self.shift_sumcheck_claim, num_rounds_shift_sumcheck, 2, transcript)
+        let (claim_shift_sumcheck, shift_sumcheck_r) = self
+            .shift_sumcheck_proof
+            .verify(
+                self.shift_sumcheck_claim,
+                num_rounds_shift_sumcheck,
+                2,
+                transcript,
+            )
             .map_err(|_| SpartanError::InvalidInnerSumcheckProof)?;
+        let shift_sumcheck_r: Vec<F> = shift_sumcheck_r.iter().rev().copied().collect();
 
         let eval_z_shift_sumcheck = key.evaluate_z_mle_with_segment_evals(
             &self.shift_sumcheck_witness_evals,
             &ry_var,
-            false
+            false,
         );
-        let eq_plus_one_shift_sumcheck = EqPlusOnePolynomial::new(rx_step.to_vec()).evaluate(
-            &shift_sumcheck_r
-        );
+        let eq_plus_one_shift_sumcheck =
+            EqPlusOnePolynomial::new(rx_step.to_vec()).evaluate(&shift_sumcheck_r);
         let claim_shift_sumcheck_expected = eval_z_shift_sumcheck * eq_plus_one_shift_sumcheck;
 
         if claim_shift_sumcheck != claim_shift_sumcheck_expected {
@@ -742,6 +780,71 @@ impl<F, ProofTranscript> UniformSpartanProof<F, ProofTranscript>
     }
 }
 
+pub struct BindZRyVarOracle<'a, F: JoltField> {
+    pub step: usize,
+    pub trace: &'a [RV32IMCycle],
+    pub func: Box<dyn (Fn(&[RV32IMCycle]) -> MultilinearPolynomial<F>) + 'a>,
+}
+
+impl<'a, F: JoltField> BindZRyVarOracle<'a, F> {
+    pub fn new<PCS, ProofTranscript>(
+        trace: &'a [RV32IMCycle],
+        preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
+        eq_ry_var: &'a [F],
+        eq_ry_var_r2: &'a [F],
+    ) -> Self
+    where
+        PCS: CommitmentScheme<ProofTranscript, Field = F>,
+        ProofTranscript: Transcript,
+    {
+        let func = move |trace_shard: &[RV32IMCycle]| {
+            let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
+                .par_iter()
+                .map(|var| var.generate_witness(trace_shard, preprocessing))
+                .collect();
+            let shard_length = trace_shard.len();
+
+            let sum_vec: Vec<F> = (0..shard_length)
+                .map(|t| {
+                    input_polys
+                        .iter()
+                        .enumerate()
+                        .fold(F::zero(), |sum, (i, poly)| {
+                            sum + poly.scale_coeff(t, eq_ry_var[i], eq_ry_var_r2[i])
+                        })
+                })
+                .collect();
+            MultilinearPolynomial::from(sum_vec)
+        };
+
+        BindZRyVarOracle {
+            step: 0,
+            trace,
+            func: Box::new(func),
+        }
+    }
+}
+
+impl<F: JoltField> Oracle for BindZRyVarOracle<'_, F> {
+    type Shard = MultilinearPolynomial<F>;
+
+    fn next_shard(&mut self, shard_len: usize) -> Self::Shard {
+        let shard = (self.func)(&self.trace[self.step..self.step + shard_len]);
+        self.step += shard_len;
+        shard
+    }
+
+    fn reset(&mut self) {
+        if self.step == self.trace.len() {
+            self.step = 0;
+        } else {
+            panic!("Oracle can not be reset as trace hasn't been consumed completely");
+        }
+    }
+    fn get_step(&self) -> usize {
+        self.step
+    }
+}
 // #[cfg(test)]
 // mod test {
 //     use ark_bn254::Fr;

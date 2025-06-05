@@ -1060,16 +1060,3 @@ impl<const NUM_SVO_ROUNDS: usize, F: JoltField> SpartanInterleavedPolynomial<NUM
         [final_az_eval, final_bz_eval, final_cz_eval]
     }
 }
-
-
-pub struct SpartanInterleavedPolynomialOracle<'a, F: JoltField> {
-    pub input_polys_oracle: R1CSInputsOracle<'a, F>,
-    pub coeffs: Vec<SparseCoefficient<F>>,
-    pub func: Box<dyn Fn(&mut R1CSInputsOracle<'a, F>) -> Vec<SparseCoefficient<F>>>
-}
-
-impl <'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, F> {
-    pub fn new(&mut imput_polys_oracle: R1CSInputsOracle<'a, F>) -> Self {
-
-    }
-}

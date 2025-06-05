@@ -1,6 +1,5 @@
 pub trait Oracle {
     type Shard;
-
     fn next_shard(&mut self, shard_len: usize) -> Self::Shard;
 
     fn reset(&mut self);
@@ -13,7 +12,6 @@ pub trait Oracle {
         unimplemented!("Not required for all impl")
     }
 }
-
 
 // pub trait Oracle {
 //     type Shard;
