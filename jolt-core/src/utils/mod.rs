@@ -10,6 +10,7 @@ pub mod math;
 pub mod profiling;
 pub mod small_value;
 pub mod sol_types;
+pub mod streaming;
 pub mod thread;
 pub mod transcript;
 
@@ -20,7 +21,8 @@ pub mod transcript;
 /// Based on observations; multiple calls into icicle_msm functions can dramatically slow down GPU performance.
 #[macro_export]
 macro_rules! optimal_iter {
-    ($T:expr) => {{
+    ($T:expr) => {
+        {
         #[cfg(feature = "icicle")]
         {
             $T.iter()
@@ -29,12 +31,14 @@ macro_rules! optimal_iter {
         {
             $T.par_iter()
         }
-    }};
+        }
+    };
 }
 
 #[macro_export]
 macro_rules! into_optimal_iter {
-    ($T:expr) => {{
+    ($T:expr) => {
+        {
         #[cfg(feature = "icicle")]
         {
             $T.into_iter()
@@ -43,12 +47,14 @@ macro_rules! into_optimal_iter {
         {
             $T.into_par_iter()
         }
-    }};
+        }
+    };
 }
 
 #[macro_export]
 macro_rules! optimal_iter_mut {
-    ($T:expr) => {{
+    ($T:expr) => {
+        {
         #[cfg(feature = "icicle")]
         {
             $T.iter_mut()
@@ -57,12 +63,14 @@ macro_rules! optimal_iter_mut {
         {
             $T.par_iter_mut()
         }
-    }};
+        }
+    };
 }
 
 #[macro_export]
 macro_rules! join_conditional {
-    ($f1:expr, $f2:expr) => {{
+    ($f1:expr, $f2:expr) => {
+        {
         #[cfg(feature = "icicle")]
         {
             ($f1(), $f2())
@@ -71,7 +79,8 @@ macro_rules! join_conditional {
         {
             rayon::join($f1, $f2)
         }
-    }};
+        }
+    };
 }
 
 /// Converts an integer value to a bitvector (all values {0,1}) of field elements.
@@ -96,7 +105,7 @@ pub fn index_to_field_bitvector<F: JoltField>(value: u64, bits: usize) -> Vec<F>
     let mut bitvector: Vec<F> = Vec::with_capacity(bits);
 
     for i in (0..bits).rev() {
-        if (value >> i) & 1 == 1 {
+        if ((value >> i) & 1) == 1 {
             bitvector.push(F::one());
         } else {
             bitvector.push(F::zero());
@@ -137,11 +146,7 @@ pub fn mul_0_1_optimized<F: JoltField>(a: &F, b: &F) -> F {
 
 #[inline(always)]
 pub fn mul_0_optimized<F: JoltField>(likely_zero: &F, x: &F) -> F {
-    if likely_zero.is_zero() {
-        F::zero()
-    } else {
-        *likely_zero * *x
-    }
+    if likely_zero.is_zero() { F::zero() } else { *likely_zero * *x }
 }
 
 /// Checks if `num` is a power of 2.
@@ -202,17 +207,17 @@ pub fn uninterleave_bits(val: u64) -> (u32, u32) {
 
     // Compact the bits into the lower part of `x_bits`
     x_bits = (x_bits | (x_bits >> 1)) & 0x3333_3333_3333_3333;
-    x_bits = (x_bits | (x_bits >> 2)) & 0x0F0F_0F0F_0F0F_0F0F;
-    x_bits = (x_bits | (x_bits >> 4)) & 0x00FF_00FF_00FF_00FF;
-    x_bits = (x_bits | (x_bits >> 8)) & 0x0000_FFFF_0000_FFFF;
-    x_bits = (x_bits | (x_bits >> 16)) & 0x0000_0000_FFFF_FFFF;
+    x_bits = (x_bits | (x_bits >> 2)) & 0x0f0f_0f0f_0f0f_0f0f;
+    x_bits = (x_bits | (x_bits >> 4)) & 0x00ff_00ff_00ff_00ff;
+    x_bits = (x_bits | (x_bits >> 8)) & 0x0000_ffff_0000_ffff;
+    x_bits = (x_bits | (x_bits >> 16)) & 0x0000_0000_ffff_ffff;
 
     // And do the same for `y_bits`
     y_bits = (y_bits | (y_bits >> 1)) & 0x3333_3333_3333_3333;
-    y_bits = (y_bits | (y_bits >> 2)) & 0x0F0F_0F0F_0F0F_0F0F;
-    y_bits = (y_bits | (y_bits >> 4)) & 0x00FF_00FF_00FF_00FF;
-    y_bits = (y_bits | (y_bits >> 8)) & 0x0000_FFFF_0000_FFFF;
-    y_bits = (y_bits | (y_bits >> 16)) & 0x0000_0000_FFFF_FFFF;
+    y_bits = (y_bits | (y_bits >> 2)) & 0x0f0f_0f0f_0f0f_0f0f;
+    y_bits = (y_bits | (y_bits >> 4)) & 0x00ff_00ff_00ff_00ff;
+    y_bits = (y_bits | (y_bits >> 8)) & 0x0000_ffff_0000_ffff;
+    y_bits = (y_bits | (y_bits >> 16)) & 0x0000_0000_ffff_ffff;
 
     (x_bits as u32, y_bits as u32)
 }
@@ -239,17 +244,17 @@ pub fn uninterleave_bits(val: u64) -> (u32, u32) {
 pub fn interleave_bits(even_bits: u32, odd_bits: u32) -> u64 {
     // Insert zeros between each bit of `x_bits`
     let mut x_bits = even_bits as u64;
-    x_bits = (x_bits | (x_bits << 16)) & 0x0000_FFFF_0000_FFFF;
-    x_bits = (x_bits | (x_bits << 8)) & 0x00FF_00FF_00FF_00FF;
-    x_bits = (x_bits | (x_bits << 4)) & 0x0F0F_0F0F_0F0F_0F0F;
+    x_bits = (x_bits | (x_bits << 16)) & 0x0000_ffff_0000_ffff;
+    x_bits = (x_bits | (x_bits << 8)) & 0x00ff_00ff_00ff_00ff;
+    x_bits = (x_bits | (x_bits << 4)) & 0x0f0f_0f0f_0f0f_0f0f;
     x_bits = (x_bits | (x_bits << 2)) & 0x3333_3333_3333_3333;
     x_bits = (x_bits | (x_bits << 1)) & 0x5555_5555_5555_5555;
 
     // And do the same for `y_bits`
     let mut y_bits = odd_bits as u64;
-    y_bits = (y_bits | (y_bits << 16)) & 0x0000_FFFF_0000_FFFF;
-    y_bits = (y_bits | (y_bits << 8)) & 0x00FF_00FF_00FF_00FF;
-    y_bits = (y_bits | (y_bits << 4)) & 0x0F0F_0F0F_0F0F_0F0F;
+    y_bits = (y_bits | (y_bits << 16)) & 0x0000_ffff_0000_ffff;
+    y_bits = (y_bits | (y_bits << 8)) & 0x00ff_00ff_00ff_00ff;
+    y_bits = (y_bits | (y_bits << 4)) & 0x0f0f_0f0f_0f0f_0f0f;
     y_bits = (y_bits | (y_bits << 2)) & 0x3333_3333_3333_3333;
     y_bits = (y_bits | (y_bits << 1)) & 0x5555_5555_5555_5555;
 

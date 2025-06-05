@@ -3,6 +3,7 @@ use super::{
     sparse_interleaved_poly::SparseCoefficient, split_eq_poly::GruenSplitEqPolynomial,
     unipoly::CompressedUniPoly,
 };
+use crate::r1cs::spartan::R1CSInputsOracle;
 use crate::subprotocols::sumcheck::process_eq_sumcheck_round;
 use crate::{
     field::{JoltField, OptimizedMul, OptimizedMulI128},
@@ -1057,5 +1058,18 @@ impl<const NUM_SVO_ROUNDS: usize, F: JoltField> SpartanInterleavedPolynomial<NUM
             }
         }
         [final_az_eval, final_bz_eval, final_cz_eval]
+    }
+}
+
+
+pub struct SpartanInterleavedPolynomialOracle<'a, F: JoltField> {
+    pub input_polys_oracle: R1CSInputsOracle<'a, F>,
+    pub coeffs: Vec<SparseCoefficient<F>>,
+    pub func: Box<dyn Fn(&mut R1CSInputsOracle<'a, F>) -> Vec<SparseCoefficient<F>>>
+}
+
+impl <'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, F> {
+    pub fn new(&mut imput_polys_oracle: R1CSInputsOracle<'a, F>) -> Self {
+
     }
 }
