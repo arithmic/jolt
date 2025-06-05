@@ -675,14 +675,14 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         comb_fn: Func,
         degree: usize,
         shard_length: usize,
-        num_polys: usize,
         transcript: &mut ProofTranscript,
-    ) -> (Self, Vec<F>, Vec<F>)
+    ) -> (Self, Vec<F>)
     where
         Func: Fn(&[F]) -> F + Sync,
     {
-        let mut r: Vec<F> = Vec::new();
-        let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::new();
+        let num_polys = 2;
+        let mut r: Vec<F> = Vec::with_capacity(num_rounds);
+        let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::with_capacity(num_rounds);
         let mut witness_eval_for_final_eval = vec![vec![F::zero(); 2]; num_polys];
 
         let mid = num_rounds - num_rounds / 2;
@@ -702,67 +702,59 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             }
         };
 
+        let mut eq_eval_idx_s_vec = vec![vec![F::one(); 2]; degree + 1];
+        let mut witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
+
+        let num_x1_bits = eq_rx_step.E1_len.log_2();
+        let x1_bitmask = (1 << (num_x1_bits)) - 1;
+
+        for s in 0..=degree {
+            let val = F::from_u64(s as u64);
+            eq_eval_idx_s_vec[s][0] = F::one() - val;
+            eq_eval_idx_s_vec[s][1] = val;
+        }
+
         for round in 0..mid {
             let mut accumulator = vec![F::zero(); degree + 1];
-            let mut witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
             for shard_idx in 0..num_shards {
                 let mut polys = Vec::new();
-                polys.push(stream_polys.next_shard(shard_length));
+                polys.push(stream_polys.next_shard());
                 let step = stream_polys.get_step();
-                let num_x1_bits = eq_rx_step.E1_len.log_2();
-                let x1_bitmask = (1 << (num_x1_bits)) - 1;
                 let step_shard = step - shard_length;
-
-                polys.push(if step_shard == 0 {
-                    let mut evals: Vec<F> = (0..shard_length - 1)
-                        .map(|idx| {
-                            let poly_idx = step_shard + idx;
-                            let x1 = poly_idx & x1_bitmask;
-                            let x2 = poly_idx >> num_x1_bits;
-                            eq_rx_step.E1[x1] * eq_rx_step.E2[x2]
-                        })
-                        .collect();
-                    evals.insert(0, F::zero());
-                    MultilinearPolynomial::from(evals)
-                } else {
-                    let evals = (0..shard_length)
-                        .map(|idx| {
-                            let poly_idx = step_shard + idx - 1;
-                            let x1 = poly_idx & x1_bitmask;
-                            let x2 = poly_idx >> num_x1_bits;
-                            eq_rx_step.E1[x1] * eq_rx_step.E2[x2]
-                        })
-                        .collect::<Vec<F>>();
-                    MultilinearPolynomial::from(evals)
-                });
+                polys.push(eq_plus_one_shards(
+                    step_shard,
+                    shard_length,
+                    &eq_rx_step,
+                    num_x1_bits,
+                    x1_bitmask,
+                ));
 
                 for idx_in_shard in 0..shard_length {
                     let idx_in_poly = shard_length * shard_idx + idx_in_shard;
-                    let mut eq_eval_idx_s_vec = vec![F::one(); degree + 1];
                     let bit = (idx_in_poly >> round) & 1;
 
-                    for s in 0..=degree {
-                        let val = F::from_u64(s as u64);
-                        eq_eval_idx_s_vec[s] = if bit == 0 { F::one() - val } else { val };
-                    }
-
-                    for k in 0..num_polys {
-                        for s in 0..=degree {
-                            witness_eval[k][s] += evals_1[idx_in_poly % (1 << round)]
-                                * eq_eval_idx_s_vec[s]
-                                * polys[k].get_coeff(idx_in_shard);
-                        }
-                    }
+                    witness_eval
+                        .iter_mut()
+                        .zip(polys.iter())
+                        .for_each(|(eval, poly)| {
+                            let coeff = poly.get_coeff(idx_in_shard);
+                            let eval_1 = evals_1[idx_in_poly % (1 << round)];
+                            eval.iter_mut().zip(eq_eval_idx_s_vec.iter()).for_each(
+                                |(e, eq_eval)| {
+                                    *e += eval_1 * eq_eval[bit] * coeff;
+                                },
+                            );
+                        });
 
                     if (idx_in_poly + 1) % (1 << (round + 1)) == 0 {
-                        for s in 0..=degree {
+                        (0..=degree).for_each(|s| {
                             let eval = comb_fn(
                                 &(0..num_polys)
                                     .map(|k| witness_eval[k][s])
                                     .collect::<Vec<F>>(),
                             );
                             accumulator[s] += eval;
-                        }
+                        });
                         witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
                     }
                 }
@@ -780,56 +772,33 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
             stream_polys.reset();
         }
+        let mut int_witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
 
         for round in mid..num_rounds {
             let mut accumulator = vec![F::zero(); degree + 1];
-            let mut witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
-            let mut int_witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
             for shard_idx in 0..num_shards {
                 let mut polys = Vec::new();
-                polys.push(stream_polys.next_shard(shard_length));
+                polys.push(stream_polys.next_shard());
+
                 let step = stream_polys.get_step();
-                let num_x1_bits = eq_rx_step.E1_len.log_2();
-                let x1_bitmask = (1 << (num_x1_bits)) - 1;
                 let step_shard = step - shard_length;
 
-                polys.push(if step_shard == 0 {
-                    let mut evals: Vec<F> = (0..shard_length - 1)
-                        .map(|idx| {
-                            let poly_idx = step_shard + idx;
-                            let x1 = poly_idx & x1_bitmask;
-                            let x2 = poly_idx >> num_x1_bits;
-                            eq_rx_step.E1[x1] * eq_rx_step.E2[x2]
-                        })
-                        .collect();
-                    evals.insert(0, F::zero());
-                    MultilinearPolynomial::from(evals)
-                } else {
-                    let evals = (0..shard_length)
-                        .map(|idx| {
-                            let poly_idx = step_shard + idx - 1;
-                            let x1 = poly_idx & x1_bitmask;
-                            let x2 = poly_idx >> num_x1_bits;
-                            eq_rx_step.E1[x1] * eq_rx_step.E2[x2]
-                        })
-                        .collect::<Vec<F>>();
-                    MultilinearPolynomial::from(evals)
-                });
+                polys.push(eq_plus_one_shards(
+                    step_shard,
+                    shard_length,
+                    &eq_rx_step,
+                    num_x1_bits,
+                    x1_bitmask,
+                ));
 
                 for idx_in_shard in 0..shard_length {
                     let idx_in_poly = shard_length * shard_idx + idx_in_shard;
-                    let mut eq_eval_idx_s_vec = vec![F::one(); degree + 1];
-
                     let bit = (idx_in_poly >> round) & 1;
-                    for s in 0..=degree {
-                        let val = F::from_u64(s as u64);
-                        eq_eval_idx_s_vec[s] = if bit == 0 { F::one() - val } else { val };
-                    }
 
                     for k in 0..num_polys {
                         for s in 0..=degree {
                             int_witness_eval[k][s] += evals_1[idx_in_poly % (1 << mid)]
-                                * eq_eval_idx_s_vec[s]
+                                * eq_eval_idx_s_vec[s][bit]
                                 * polys[k].get_coeff(idx_in_shard);
                         }
                     }
@@ -877,14 +846,44 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             stream_polys.reset();
         }
 
-        let final_eval = (0..num_polys)
-            .map(|i| {
-                (F::one() - r[num_rounds - 1]) * witness_eval_for_final_eval[i][0]
-                    + r[num_rounds - 1] * witness_eval_for_final_eval[i][1]
+        // let r_final = r[num_rounds - 1];
+        // let r_final_comp = F::one() - r_final;
+        // let final_eval = witness_eval_for_final_eval
+        //     .iter()
+        //     .map(|eval| r_final_comp * eval[0] + r_final * eval[1])
+        //     .collect();
+
+        (SumcheckInstanceProof::new(compressed_polys), r)
+    }
+}
+pub fn eq_plus_one_shards<F: JoltField>(
+    step_shard: usize,
+    shard_length: usize,
+    eq_rx_step: &SplitEqPolynomial<F>,
+    num_x1_bits: usize,
+    x1_bitmask: usize,
+) -> MultilinearPolynomial<F> {
+    if step_shard == 0 {
+        let mut evals: Vec<F> = (0..shard_length - 1)
+            .map(|idx| {
+                let poly_idx = step_shard + idx;
+                let x1 = poly_idx & x1_bitmask;
+                let x2 = poly_idx >> num_x1_bits;
+                eq_rx_step.E1[x1] * eq_rx_step.E2[x2]
             })
             .collect();
-
-        (SumcheckInstanceProof::new(compressed_polys), r, final_eval)
+        evals.insert(0, F::zero());
+        MultilinearPolynomial::from(evals)
+    } else {
+        let evals = (0..shard_length)
+            .map(|idx| {
+                let poly_idx = step_shard + idx - 1;
+                let x1 = poly_idx & x1_bitmask;
+                let x2 = poly_idx >> num_x1_bits;
+                eq_rx_step.E1[x1] * eq_rx_step.E2[x2]
+            })
+            .collect::<Vec<F>>();
+        MultilinearPolynomial::from(evals)
     }
 }
 

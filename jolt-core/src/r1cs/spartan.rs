@@ -3,7 +3,6 @@ use tracer::instruction::RV32IMCycle;
 use tracing::{span, Level};
 
 use crate::field::JoltField;
-use crate::jolt::vm::rv32i_vm::ProofTranscript;
 use crate::jolt::vm::JoltProverPreprocessing;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::poly::multilinear_polynomial::MultilinearPolynomial;
@@ -34,6 +33,7 @@ use crate::{
 use super::builder::CombinedUniformBuilder;
 
 use crate::poly::split_eq_poly::SplitEqPolynomial;
+use crate::subprotocols::sumcheck::eq_plus_one_shards;
 use rayon::prelude::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
@@ -74,6 +74,7 @@ pub enum SpartanError {
 /// An oracle to stream all witness polynomials of the R1CS instance.
 /// This oracle is used by the shift sum-check of the Spartan prover.
 pub struct R1CSInputsOracle<'a, F: JoltField> {
+    pub shard_length: usize,
     pub step: usize,
     pub trace: &'a [RV32IMCycle],
     pub func: Box<dyn (Fn(&[RV32IMCycle]) -> Vec<MultilinearPolynomial<F>>) + 'a>,
@@ -81,6 +82,7 @@ pub struct R1CSInputsOracle<'a, F: JoltField> {
 
 impl<'a, F: JoltField> R1CSInputsOracle<'a, F> {
     pub fn new<PCS, ProofTranscript>(
+        shard_length: usize,
         trace: &'a [RV32IMCycle],
         preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
     ) -> Self
@@ -95,6 +97,7 @@ impl<'a, F: JoltField> R1CSInputsOracle<'a, F> {
                 .collect()
         });
         R1CSInputsOracle {
+            shard_length,
             step: 0,
             trace,
             func,
@@ -112,9 +115,9 @@ impl<'a, F: JoltField> R1CSInputsOracle<'a, F> {
 
 impl<F: JoltField> Oracle for R1CSInputsOracle<'_, F> {
     type Shard = Vec<MultilinearPolynomial<F>>;
-    fn next_shard(&mut self, shard_len: usize) -> Self::Shard {
-        let shard = (self.func)(&self.trace[self.step..self.step + shard_len]);
-        self.step += shard_len;
+    fn next_shard(&mut self) -> Self::Shard {
+        let shard = (self.func)(&self.trace[self.step..self.step + self.shard_length]);
+        self.step += self.shard_length;
         shard
     }
 
@@ -402,7 +405,7 @@ where
     where
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
-        let input_polys_oracle = R1CSInputsOracle::new(trace, preprocessing);
+        // let input_polys_oracle = R1CSInputsOracle::new(trace, preprocessing);
 
         let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
             .par_iter()
@@ -532,60 +535,71 @@ where
 
         let ry_var = inner_sumcheck_r[1..].to_vec();
         let eq_ry_var = EqPolynomial::evals(&ry_var);
-        let eq_ry_var_r2 = EqPolynomial::evals(&ry_var);
+        // let eq_ry_var_r2 = EqPolynomial::evals(&ry_var);
 
-        let mut bind_z_ry_var: Vec<F> = Vec::with_capacity(num_steps);
-
-        let span = span!(Level::INFO, "bind_z_ry_var");
-        let _guard = span.enter();
-        let num_steps_unpadded = constraint_builder.uniform_repeat();
-        (0..num_steps_unpadded) // unpadded number of steps is sufficient
-            .into_par_iter()
-            .map(|t| {
-                input_polys
-                    .iter()
-                    .enumerate()
-                    .map(|(i, poly)| poly.scale_coeff(t, eq_ry_var[i], eq_ry_var_r2[i]))
-                    .sum()
-            })
-            .collect_into_vec(&mut bind_z_ry_var);
-        drop(_guard);
-        drop(span);
+        // let mut bind_z_ry_var: Vec<F> = Vec::with_capacity(num_steps);
+        // 
+        // let span = span!(Level::INFO, "bind_z_ry_var");
+        // let _guard = span.enter();
+        // let num_steps_unpadded = constraint_builder.uniform_repeat();
+        // (0..num_steps_unpadded) // unpadded number of steps is sufficient
+        //     .into_par_iter()
+        //     .map(|t| {
+        //         input_polys
+        //             .iter()
+        //             .enumerate()
+        //             .map(|(i, poly)| poly.scale_coeff(t, eq_ry_var[i], eq_ry_var_r2[i]))
+        //             .sum()
+        //     })
+        //     .collect_into_vec(&mut bind_z_ry_var);
+        // drop(_guard);
+        // drop(span);
 
         let num_rounds_shift_sumcheck = num_steps_bits;
-        assert_eq!(bind_z_ry_var.len(), eq_plus_one_rx_step.len());
+        // assert_eq!(bind_z_ry_var.len(), eq_plus_one_rx_step.len());
 
-        let mut shift_sumcheck_polys = vec![
-            MultilinearPolynomial::from(bind_z_ry_var),
-            MultilinearPolynomial::from(eq_plus_one_rx_step),
-        ];
+        let shard_length = 1 << (trace.len().log_2() >> 1);
+        let mut bindZ_oracle = BindZRyVarOracle::new(
+            trace,
+            shard_length,
+            preprocessing,
+            &eq_ry_var,
+        );
 
-        let shift_sumcheck_claim = (0..1 << num_rounds_shift_sumcheck)
-            .into_par_iter()
-            .map(|i| {
-                let params: Vec<F> = shift_sumcheck_polys
-                    .iter()
-                    .map(|poly| poly.get_coeff(i))
-                    .collect();
-                comb_func(&params)
-            })
-            .reduce(|| F::zero(), |acc, x| acc + x);
-
-        let mut bindZ_oracle =
-            BindZRyVarOracle::new(trace, preprocessing, &eq_ry_var, &eq_ry_var_r2);
-
-        // let (shift_sumcheck_proof, shift_sumcheck_r, _shift_sumcheck_claims) =
-        //     SumcheckInstanceProof::prove_arbitrary(
-        //         &shift_sumcheck_claim,
-        //         num_rounds_shift_sumcheck,
-        //         &mut shift_sumcheck_polys,
-        //         comb_func,
-        //         2,
-        //         transcript,
-        //     );
-        let shard_length = trace.len() / 2;
         let eq_rx_step = SplitEqPolynomial::new(rx_step);
-        let (shift_sumcheck_proof, shift_sumcheck_r, _shift_sumcheck_claims) =
+        let num_shards = (1 << num_rounds_shift_sumcheck) / shard_length;
+
+        let num_x1_bits = eq_rx_step.E1_len.log_2();
+        let x1_bitmask = (1 << (num_x1_bits)) - 1;
+
+        let shift_sumcheck_claim: F = (0..num_shards)
+            .map(|_| {
+                let mut polys = Vec::with_capacity(2);
+                polys.push(bindZ_oracle.next_shard());
+                let step = bindZ_oracle.get_step();
+                let step_shard = step - shard_length;
+
+                polys.push(eq_plus_one_shards(
+                    step_shard,
+                    shard_length,
+                    &eq_rx_step,
+                    num_x1_bits,
+                    x1_bitmask,
+                ));
+
+                (0..shard_length)
+                    .into_par_iter()
+                    .map(|j| {
+                        let params: Vec<F> = polys.iter().map(|poly| poly.get_coeff(j)).collect();
+                        comb_func(&params)
+                    })
+                    .sum::<F>()
+            })
+            .sum();
+
+        bindZ_oracle.reset();
+
+        let (shift_sumcheck_proof, shift_sumcheck_r) =
             SumcheckInstanceProof::shift_sumcheck(
                 num_rounds_shift_sumcheck,
                 &mut bindZ_oracle,
@@ -593,12 +607,11 @@ where
                 comb_func,
                 2,
                 shard_length,
-                2,
                 transcript,
             );
         let shift_sumcheck_r: Vec<F> = shift_sumcheck_r.iter().rev().copied().collect();
 
-        drop_in_background_thread(shift_sumcheck_polys);
+        // drop_in_background_thread(shift_sumcheck_polys);
 
         let flattened_polys_ref: Vec<_> = input_polys.iter().collect();
         // Inner sumcheck evaluations: evaluate z on rx_step
@@ -782,6 +795,7 @@ where
 
 pub struct BindZRyVarOracle<'a, F: JoltField> {
     pub step: usize,
+    pub shard_length: usize,
     pub trace: &'a [RV32IMCycle],
     pub func: Box<dyn (Fn(&[RV32IMCycle]) -> MultilinearPolynomial<F>) + 'a>,
 }
@@ -789,9 +803,9 @@ pub struct BindZRyVarOracle<'a, F: JoltField> {
 impl<'a, F: JoltField> BindZRyVarOracle<'a, F> {
     pub fn new<PCS, ProofTranscript>(
         trace: &'a [RV32IMCycle],
+        shard_length: usize,
         preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
         eq_ry_var: &'a [F],
-        eq_ry_var_r2: &'a [F],
     ) -> Self
     where
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
@@ -803,14 +817,14 @@ impl<'a, F: JoltField> BindZRyVarOracle<'a, F> {
                 .map(|var| var.generate_witness(trace_shard, preprocessing))
                 .collect();
             let shard_length = trace_shard.len();
-
             let sum_vec: Vec<F> = (0..shard_length)
+                .into_par_iter()
                 .map(|t| {
                     input_polys
                         .iter()
                         .enumerate()
                         .fold(F::zero(), |sum, (i, poly)| {
-                            sum + poly.scale_coeff(t, eq_ry_var[i], eq_ry_var_r2[i])
+                            sum + poly.scale_coeff(t, eq_ry_var[i], eq_ry_var[i])
                         })
                 })
                 .collect();
@@ -818,6 +832,7 @@ impl<'a, F: JoltField> BindZRyVarOracle<'a, F> {
         };
 
         BindZRyVarOracle {
+            shard_length,
             step: 0,
             trace,
             func: Box::new(func),
@@ -828,9 +843,15 @@ impl<'a, F: JoltField> BindZRyVarOracle<'a, F> {
 impl<F: JoltField> Oracle for BindZRyVarOracle<'_, F> {
     type Shard = MultilinearPolynomial<F>;
 
-    fn next_shard(&mut self, shard_len: usize) -> Self::Shard {
-        let shard = (self.func)(&self.trace[self.step..self.step + shard_len]);
-        self.step += shard_len;
+    fn next_shard(&mut self) -> Self::Shard {
+        let shard = (self.func)(&self.trace[self.step..self.step + self.shard_length]);
+        self.step += self.shard_length;
+        assert_eq!(self.shard_length, shard.len(), "Incorrect shard length");
+        assert_eq!(
+            self.shard_length,
+            1 << (self.get_len().log_2() / 2),
+            "Incorrect shard length"
+        );
         shard
     }
 
@@ -841,8 +862,13 @@ impl<F: JoltField> Oracle for BindZRyVarOracle<'_, F> {
             panic!("Oracle can not be reset as trace hasn't been consumed completely");
         }
     }
+
     fn get_step(&self) -> usize {
         self.step
+    }
+
+    fn get_len(&self) -> usize {
+        self.trace.len()
     }
 }
 // #[cfg(test)]

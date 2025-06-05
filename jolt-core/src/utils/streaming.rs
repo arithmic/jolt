@@ -1,6 +1,6 @@
 pub trait Oracle {
     type Shard;
-    fn next_shard(&mut self, shard_len: usize) -> Self::Shard;
+    fn next_shard(&mut self) -> Self::Shard;
 
     fn reset(&mut self);
 
