@@ -532,7 +532,7 @@ where
         /*  Sumcheck 3: Shift sumcheck
             sumcheck claim is = z_shift(ry_var || rx_step) = \sum_t z(ry_var || t) * eq_plus_one(rx_step, t)
         */
-
+        
         let ry_var = inner_sumcheck_r[1..].to_vec();
         let eq_ry_var = EqPolynomial::evals(&ry_var);
         // let eq_ry_var_r2 = EqPolynomial::evals(&ry_var);
@@ -557,8 +557,9 @@ where
 
         let num_rounds_shift_sumcheck = num_steps_bits;
         // assert_eq!(bind_z_ry_var.len(), eq_plus_one_rx_step.len());
-
-        let shard_length = 1 << (trace.len().log_2() >> 1);
+        
+        let log2_trace_len = trace.len().log_2();
+        let shard_length = 1 << (log2_trace_len - (log2_trace_len/2));
         let mut bindZ_oracle = BindZRyVarOracle::new(
             trace,
             shard_length,
@@ -847,9 +848,11 @@ impl<F: JoltField> Oracle for BindZRyVarOracle<'_, F> {
         let shard = (self.func)(&self.trace[self.step..self.step + self.shard_length]);
         self.step += self.shard_length;
         assert_eq!(self.shard_length, shard.len(), "Incorrect shard length");
+        let log2_trace_len = self.get_len().log_2();
+        let shard_length = 1 << (log2_trace_len - (log2_trace_len/2));
         assert_eq!(
             self.shard_length,
-            1 << (self.get_len().log_2() / 2),
+            shard_length,
             "Incorrect shard length"
         );
         shard

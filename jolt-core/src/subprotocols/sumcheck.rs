@@ -670,7 +670,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
     }
     pub fn shift_sumcheck<'a, Func>(
         num_rounds: usize,
-        stream_polys: &mut BindZRyVarOracle<F>,
+        stream_poly: &mut BindZRyVarOracle<F>,
         eq_rx_step: SplitEqPolynomial<F>,
         comb_fn: Func,
         degree: usize,
@@ -683,7 +683,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let num_polys = 2;
         let mut r: Vec<F> = Vec::with_capacity(num_rounds);
         let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::with_capacity(num_rounds);
-        let mut witness_eval_for_final_eval = vec![vec![F::zero(); 2]; num_polys];
+        // let mut witness_eval_for_final_eval = vec![vec![F::zero(); 2]; num_polys];
 
         let mid = num_rounds - num_rounds / 2;
 
@@ -715,12 +715,15 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         }
 
         for round in 0..mid {
+            let mask = (1 << (round + 1)) - 1;
             let mut accumulator = vec![F::zero(); degree + 1];
             for shard_idx in 0..num_shards {
                 let mut polys = Vec::new();
-                polys.push(stream_polys.next_shard());
-                let step = stream_polys.get_step();
+                polys.push(stream_poly.next_shard());
+
+                let step = stream_poly.get_step();
                 let step_shard = step - shard_length;
+
                 polys.push(eq_plus_one_shards(
                     step_shard,
                     shard_length,
@@ -746,7 +749,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                             );
                         });
 
-                    if (idx_in_poly + 1) % (1 << (round + 1)) == 0 {
+                    if (idx_in_poly + 1) & mask== 0 {
                         (0..=degree).for_each(|s| {
                             let eval = comb_fn(
                                 &(0..num_polys)
@@ -770,17 +773,19 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
             update_evals(&mut evals_1, r_i, 1 << round);
 
-            stream_polys.reset();
+            stream_poly.reset();
         }
         let mut int_witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
-
+        let mask1 = (1 << mid) - 1;
         for round in mid..num_rounds {
             let mut accumulator = vec![F::zero(); degree + 1];
+            let mask2 = (1 << (round - mid)) - 1 ;
+            let mask3 = (1 << (round + 1)) - 1; 
             for shard_idx in 0..num_shards {
                 let mut polys = Vec::new();
-                polys.push(stream_polys.next_shard());
+                polys.push(stream_poly.next_shard());
 
-                let step = stream_polys.get_step();
+                let step = stream_poly.get_step();
                 let step_shard = step - shard_length;
 
                 polys.push(eq_plus_one_shards(
@@ -794,45 +799,54 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                 for idx_in_shard in 0..shard_length {
                     let idx_in_poly = shard_length * shard_idx + idx_in_shard;
                     let bit = (idx_in_poly >> round) & 1;
+                    int_witness_eval
+                        .iter_mut()
+                        .zip(polys.iter())
+                        .enumerate()
+                        .for_each(|(k, (witness_poly, poly))| {
+                            let poly_coeff = poly.get_coeff(idx_in_shard);
+                            witness_poly
+                                .iter_mut()
+                                .zip(eq_eval_idx_s_vec.iter())
+                                .for_each(|(witness_val, eq_eval)| {
+                                    *witness_val += evals_1[idx_in_shard] * eq_eval[bit] * poly_coeff;
+                                });
+                        });
 
-                    for k in 0..num_polys {
-                        for s in 0..=degree {
-                            int_witness_eval[k][s] += evals_1[idx_in_poly % (1 << mid)]
-                                * eq_eval_idx_s_vec[s][bit]
-                                * polys[k].get_coeff(idx_in_shard);
-                        }
-                    }
-
-                    if (idx_in_poly + 1) % (1 << mid) == 0 {
+                    if (idx_in_poly + 1) & mask1 == 0 {
                         let temp = idx_in_poly >> mid;
                         for k in 0..num_polys {
                             for s in 0..=degree {
-                                witness_eval[k][s] +=
-                                    evals_2[temp % (1 << (round - mid))] * int_witness_eval[k][s];
+                                let temp =  evals_2[temp & mask2] * int_witness_eval[k][s];
+                                witness_eval[k][s] += temp;
+
                             }
                         }
                         int_witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
                     }
 
-                    if (idx_in_poly + 1) % (1 << (round + 1)) == 0 {
+                    if (idx_in_poly + 1) & mask3 == 0 {
+                            let temp = idx_in_poly >> mid;
                         for s in 0..=degree {
                             let eval = comb_fn(
                                 &(0..num_polys)
-                                    .map(|k| witness_eval[k][s])
+                                    .map(|k|witness_eval[k][s])
                                     .collect::<Vec<F>>(),
                             );
                             accumulator[s] += eval;
                         }
-                        if round == num_rounds - 1 {
-                            for k in 0..num_polys {
-                                witness_eval_for_final_eval[k][0] = witness_eval[k][0];
-                                witness_eval_for_final_eval[k][1] = witness_eval[k][1];
-                            }
-                        }
+
+                        // if round == num_rounds - 1 {
+                        //     for k in 0..num_polys {
+                        //         witness_eval_for_final_eval[k][0] = witness_eval[k][0];
+                        //         witness_eval_for_final_eval[k][1] = witness_eval[k][1];
+                        //     }
+                        // }
                         witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
                     }
                 }
             }
+
             let univariate_poly = UniPoly::from_evals(&accumulator);
             let compressed_poly = univariate_poly.compress();
             compressed_poly.append_to_transcript(transcript);
@@ -843,7 +857,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
             update_evals(&mut evals_2, r_i, 1 << (round - mid));
 
-            stream_polys.reset();
+            stream_poly.reset();
         }
 
         // let r_final = r[num_rounds - 1];
