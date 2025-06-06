@@ -253,3 +253,62 @@ func TestGTMultiMul(t *testing.T) {
 	fmt.Println("No of Constraints ", gtmultimulR1Cs.GetNbConstraints())
 	gtmultimulCircuit.GenerateWitness(gtmultimulR1Cs)
 }
+
+func TestMSM(t *testing.T) {
+
+	var one fr.Element
+	one.SetOne()
+	var random fr.Element
+	_, _ = random.SetRandom()
+
+	var rPowers [13]fr.Element
+	rPowers[0] = one
+	for i := 1; i < 13; i++ {
+		rPowers[i].Mul(&random, &rPowers[i-1])
+	}
+
+	n := 50
+	basesArr := make([]bn254.E12, n)
+	for i := 0; i < n; i++ {
+		_, _ = basesArr[i].SetRandom()
+	}
+
+	basesArrvalue := make([][]fr.Element, n)
+	for i := 0; i < n; i++ {
+		basesArrvalue[i] = FromE12(&basesArr[i])
+	}
+
+	powers := make([]fr.Element, n)
+	for i := 0; i < n; i++ {
+		powers[i].SetRandom()
+	}
+
+	powersBigInt := make([]big.Int, n)
+
+	for i := 0; i < n; i++ {
+		powers[i].BigInt(&powersBigInt[i])
+	}
+
+	var out_res bn254.E12
+	out_res.SetOne()
+	gt_exp := make([]bn254.E12, n)
+
+	for i := 0; i < n; i++ {
+		gt_exp[i].Exp(basesArr[i], &powersBigInt[i])
+		out_res.Mul(&out_res, &gt_exp[i])
+	}
+
+	msmCircuit := MSM{
+		bases:      basesArrvalue,
+		rPowers:    rPowers,
+		powers:     powersBigInt,
+		out:        FromE12(&out_res),
+		gtExp:      &GTExp{},
+		gtMultiMul: &GTMultiMul{},
+	}
+
+	msmR1Cs := msmCircuit.CreateStepCircuits()
+	// fmt.Println("No of Constraints in exp ", msmCircuit.GetConstraints())
+	msmCircuit.GenerateWitness(msmR1Cs)
+
+}
