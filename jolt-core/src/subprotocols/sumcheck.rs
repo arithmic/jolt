@@ -716,8 +716,10 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         }
 
         for round in 0..mid {
+            let mask = (1 << round) - 1;
             let mut accumulator = vec![F::zero(); degree + 1];
             for shard_idx in 0..num_shards {
+                let base_poly_idx = shard_length * shard_idx;
                 let mut polys = Vec::new();
                 polys.push(stream_poly.next_shard());
 
@@ -735,16 +737,18 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                 let no_of_chunks = shard_length / chunk_size;
                 (0..no_of_chunks)
                     .for_each(|chunk_iter| {
+                        let base_chunk_idx = chunk_iter * chunk_size;
                         for idx_in_chunk in 0..chunk_size {
-                            let idx_in_poly =
-                                shard_length * shard_idx + chunk_iter * chunk_size + idx_in_chunk;
+                            let idx_in_shard = base_chunk_idx + idx_in_chunk;
+                            let idx_in_poly =base_poly_idx
+                                 + idx_in_shard;
                             let bit = (idx_in_poly >> round) & 1;
                             witness_eval
                                 .iter_mut()
                                 .zip(polys.iter())
                                 .for_each(|(eval, poly)| {
-                                    let coeff = poly.get_coeff(chunk_iter * chunk_size + idx_in_chunk);
-                                    let eval_1 = evals_1[idx_in_poly % (1 << round)];
+                                    let coeff = poly.get_coeff(idx_in_shard);
+                                    let eval_1 = evals_1[idx_in_poly & mask];
                                     eval.iter_mut().zip(eq_eval_idx_s_vec.iter()).for_each(
                                         |(e, eq_eval)| {
                                             *e += eval_1 * eq_eval[bit] * coeff;
@@ -759,9 +763,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                                     .collect::<Vec<F>>(),
                             );
                         });
-                        witness_eval.iter_mut().for_each(|eval| {
-                            eval.iter_mut().for_each(|e| *e = F::zero());
-                        });
+                        witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
                     });
             }
 
