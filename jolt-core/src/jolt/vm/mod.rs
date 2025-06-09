@@ -276,16 +276,19 @@ where
         );
         transcript.append_scalar(&spartan_key.vk_digest);
 
-        // let r1cs_proof = UniformSpartanProof::prove::<PCS>(
-        //     &preprocessing,
-        //     &constraint_builder,
-        //     &spartan_key,
-        //     &trace,
-        //     &mut opening_accumulator,
-        //     &mut transcript,
-        // )
-        // .ok()
-        // .unwrap();
+        #[cfg(not(test))]
+        let r1cs_proof = UniformSpartanProof::prove::<PCS>(
+            &preprocessing,
+            &constraint_builder,
+            &spartan_key,
+            &trace,
+            &mut opening_accumulator,
+            &mut transcript,
+        )
+        .ok()
+        .unwrap();
+
+        #[cfg(test)]
         let r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
             &preprocessing,
             &constraint_builder,

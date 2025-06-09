@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use std::time::Instant;
 use tracer::instruction::RV32IMCycle;
 use tracing::{span, Level};
 
@@ -503,7 +502,7 @@ where
         let num_x1_bits = eq_rx_step.E1_len.log_2();
         let x1_bitmask = (1 << (num_x1_bits)) - 1;
         #[inline(always)]
-        fn process_polynomial_generic<F, T>(
+        fn process_small_scalar_polys<F, T>(
             coeffs: &[T],
             bind_z_int_eval: &mut F,
             bind_z_eval: &mut F,
@@ -530,14 +529,14 @@ where
                     let e1_index = x1.wrapping_sub(1) & x1_bitmask;
                     *bind_shift_z_int_eval += coeffs[i].field_mul(eq_rx_step.E1[e1_index]);
                 }
-                let e1_end = x1 == e1_len_minus_1;
-                if e1_end {
+                let e1_last = x1 == e1_len_minus_1;
+                if e1_last {
                     let x2 = poly_idx >> num_x1_bits;
                     *bind_z_eval += *bind_z_int_eval * eq_rx_step.E2[x2];
                     *bind_z_int_eval = F::zero();
                 }
                 let x1_is_zero = x1 == 0;
-                let boundary_case = x1_is_zero | (is_last_shard && e1_end);
+                let boundary_case = x1_is_zero | (is_last_shard && e1_last);
 
                 if boundary_case && poly_idx != 0 {
                     let x2 = poly_idx >> num_x1_bits;
@@ -548,8 +547,8 @@ where
             }
         }
 
+        let e1_len_minus_1 = e1_len - 1;
         for shard_idx in 0..num_shards {
-            let e1_len_minus_1 = e1_len - 1;
             let is_last_shard = shard_idx == num_shards - 1;
             let base_poly_idx = shard_idx * shard_length;
             let polynomials = input_polys_oracle.next_shard();
@@ -606,7 +605,7 @@ where
                             }
 
                             MultilinearPolynomial::U8Scalars(poly) => {
-                                process_polynomial_generic(
+                                process_small_scalar_polys(
                                     &poly.coeffs,
                                     bind_z_int_eval,
                                     bind_z_eval,
@@ -622,7 +621,7 @@ where
                                 );
                             }
                             MultilinearPolynomial::U16Scalars(poly) => {
-                                process_polynomial_generic(
+                                process_small_scalar_polys(
                                     &poly.coeffs,
                                     bind_z_int_eval,
                                     bind_z_eval,
@@ -638,7 +637,7 @@ where
                                 );
                             }
                             MultilinearPolynomial::U32Scalars(poly) => {
-                                process_polynomial_generic(
+                                process_small_scalar_polys(
                                     &poly.coeffs,
                                     bind_z_int_eval,
                                     bind_z_eval,
@@ -654,7 +653,7 @@ where
                                 );
                             }
                             MultilinearPolynomial::U64Scalars(poly) => {
-                                process_polynomial_generic(
+                                process_small_scalar_polys(
                                     &poly.coeffs,
                                     bind_z_int_eval,
                                     bind_z_eval,
@@ -670,7 +669,7 @@ where
                                 );
                             }
                             MultilinearPolynomial::I64Scalars(poly) => {
-                                process_polynomial_generic(
+                                process_small_scalar_polys(
                                     &poly.coeffs,
                                     bind_z_int_eval,
                                     bind_z_eval,
@@ -781,7 +780,6 @@ where
         );
         let shift_sumcheck_r: Vec<F> = shift_sumcheck_r.iter().rev().copied().collect();
 
-        let flattened_polys_ref: Vec<_> = input_polys.iter().collect();
         // Inner sumcheck evaluations: evaluate z on rx_step
         let claimed_witness_evals = MultilinearPolynomial::stream_batch_evaluate(
             &mut input_polys_oracle,
@@ -799,17 +797,13 @@ where
         // );
 
         // Shift sumcheck evaluations: evaluate z on ry_var
-        let start_time = Instant::now();
         let shift_sumcheck_witness_evals = MultilinearPolynomial::stream_batch_evaluate(
             &mut input_polys_oracle,
             &shift_sumcheck_r,
             num_shards,
             shard_length,
         );
-        println!(
-            "time to evaluate shift sumcheck witness: {:?}",
-            start_time.elapsed()
-        );
+
         // opening_accumulator.append(
         //     &flattened_polys_ref,
         //     DensePolynomial::new(chis2),
@@ -1041,12 +1035,12 @@ impl<F: JoltField> Oracle for BindZRyVarOracle<'_, F> {
         }
     }
 
-    fn get_step(&self) -> usize {
-        self.step
-    }
-
     fn get_len(&self) -> usize {
         self.trace.len()
+    }
+
+    fn get_step(&self) -> usize {
+        self.step
     }
 }
 // #[cfg(test)]
