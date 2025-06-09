@@ -8,6 +8,10 @@ pub trait Oracle {
         unimplemented!("Not required for all impl")
     }
 
+    fn peek(&self) -> Option<Self::Shard> {
+        unimplemented!("Not required for all impl")
+    }
+
     fn get_step(&self) -> usize {
         unimplemented!("Not required for all impl")
     }

@@ -1,8 +1,9 @@
 use std::marker::PhantomData;
+use std::time::Instant;
 use tracer::instruction::RV32IMCycle;
 use tracing::{span, Level};
 
-use crate::field::JoltField;
+use crate::field::{JoltField, OptimizedMul};
 use crate::jolt::vm::JoltProverPreprocessing;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::poly::multilinear_polynomial::MultilinearPolynomial;
@@ -32,6 +33,7 @@ use crate::{
 
 use super::builder::CombinedUniformBuilder;
 
+use crate::poly::compact_polynomial::SmallScalar;
 use crate::poly::split_eq_poly::SplitEqPolynomial;
 use crate::subprotocols::sumcheck::eq_plus_one_shards;
 use rayon::prelude::*;
@@ -103,14 +105,6 @@ impl<'a, F: JoltField> R1CSInputsOracle<'a, F> {
             func,
         }
     }
-
-    pub fn peek(&self) -> Option<Vec<MultilinearPolynomial<F>>> {
-        if self.step < self.trace.len() {
-            Some((self.func)(&self.trace[self.step..self.step + 1]))
-        } else {
-            None
-        }
-    }
 }
 
 impl<F: JoltField> Oracle for R1CSInputsOracle<'_, F> {
@@ -131,6 +125,13 @@ impl<F: JoltField> Oracle for R1CSInputsOracle<'_, F> {
 
     fn get_len(&self) -> usize {
         self.trace.len()
+    }
+    fn peek(&self) -> Option<Vec<MultilinearPolynomial<F>>> {
+        if self.step < self.trace.len() {
+            Some((self.func)(&self.trace[self.step..self.step + 1]))
+        } else {
+            None
+        }
     }
     fn get_step(&self) -> usize {
         self.step
@@ -468,7 +469,7 @@ where
 
         let (rx_step, rx_constr) = outer_sumcheck_r.split_at(num_steps_bits);
 
-        let (eq_rx_step, eq_plus_one_rx_step) = EqPlusOnePolynomial::evals(rx_step, None);
+        // let (eq_rx_step, eq_plus_one_rx_step) = EqPlusOnePolynomial::evals(rx_step, None);
 
         /* Compute the two polynomials provided as input to the second sumcheck:
            - poly_ABC: A(r_x, y_var || rx_step), A_shift(..) at all variables y_var
@@ -481,30 +482,227 @@ where
             inner_sumcheck_RLC,
         ));
 
+        let log2_trace_len = trace.len().log_2();
+        let shard_length = 1 << (log2_trace_len - (log2_trace_len / 2));
+
         // Binding z and z_shift polynomials at point rx_step
         let span = span!(Level::INFO, "binding_z_and_shift_z");
         let _guard = span.enter();
+        let mut input_polys_oracle = R1CSInputsOracle::new(shard_length, trace, preprocessing);
+        let num_shards = trace.len() / shard_length;
+        let num_polys = input_polys_oracle.peek().unwrap().len();
 
-        let mut bind_z = vec![F::zero(); num_vars_uniform * 2];
-        let mut bind_shift_z = vec![F::zero(); num_vars_uniform * 2];
+        let mut bind_z_stream = vec![F::zero(); num_vars_uniform * 2];
+        let mut bind_shift_z_stream = vec![F::zero(); num_vars_uniform * 2];
 
-        input_polys
-            .par_iter()
-            .zip(bind_z.par_iter_mut().zip(bind_shift_z.par_iter_mut()))
-            .for_each(|(poly, (eval, eval_shifted))| {
-                *eval = poly.dot_product(&eq_rx_step);
-                *eval_shifted = poly.dot_product(&eq_plus_one_rx_step);
-            });
+        let mut bind_z_int = vec![F::zero(); num_polys];
+        let mut bind_shift_z_int = vec![F::zero(); num_polys];
 
-        bind_z[num_vars_uniform] = F::one();
+        let eq_rx_step = SplitEqPolynomial::new(rx_step);
+        let e1_len = eq_rx_step.E1_len;
+        let num_x1_bits = eq_rx_step.E1_len.log_2();
+        let x1_bitmask = (1 << (num_x1_bits)) - 1;
+        #[inline(always)]
+        fn process_polynomial_generic<F, T>(
+            coeffs: &[T],
+            bind_z_int_eval: &mut F,
+            bind_z_eval: &mut F,
+            bind_shift_z_int_eval: &mut F,
+            bind_shift_z_eval: &mut F,
+            shard_length: usize,
+            eq_rx_step: &SplitEqPolynomial<F>,
+            x1_bitmask: usize,
+            num_x1_bits: usize,
+            e1_len_minus_1: usize,
+            is_last_shard: bool,
+            base_poly_idx: usize,
+        ) where
+            F: JoltField,
+            T: SmallScalar,
+        {
+            for i in 0..shard_length {
+                let poly_idx = base_poly_idx + i;
+                let x1 = poly_idx & x1_bitmask;
+
+                *bind_z_int_eval += coeffs[i].field_mul(eq_rx_step.E1[x1]);
+
+                if poly_idx != 0 {
+                    let e1_index = x1.wrapping_sub(1) & x1_bitmask;
+                    *bind_shift_z_int_eval += coeffs[i].field_mul(eq_rx_step.E1[e1_index]);
+                }
+                let e1_end = x1 == e1_len_minus_1;
+                if e1_end {
+                    let x2 = poly_idx >> num_x1_bits;
+                    *bind_z_eval += *bind_z_int_eval * eq_rx_step.E2[x2];
+                    *bind_z_int_eval = F::zero();
+                }
+                let x1_is_zero = x1 == 0;
+                let boundary_case = x1_is_zero | (is_last_shard && e1_end);
+
+                if boundary_case && poly_idx != 0 {
+                    let x2 = poly_idx >> num_x1_bits;
+                    let e2_index = x2 - x1_is_zero as usize;
+                    *bind_shift_z_eval += *bind_shift_z_int_eval * eq_rx_step.E2[e2_index];
+                    *bind_shift_z_int_eval = F::zero();
+                }
+            }
+        }
+
+        for shard_idx in 0..num_shards {
+            let e1_len_minus_1 = e1_len - 1;
+            let is_last_shard = shard_idx == num_shards - 1;
+            let base_poly_idx = shard_idx * shard_length;
+            let polynomials = input_polys_oracle.next_shard();
+            polynomials
+                .par_iter()
+                .zip(
+                    bind_z_int
+                        .par_iter_mut()
+                        .zip(bind_z_stream.par_iter_mut().take(num_polys))
+                        .zip(
+                            bind_shift_z_int
+                                .par_iter_mut()
+                                .zip(bind_shift_z_stream.par_iter_mut().take(num_polys)),
+                        ),
+                )
+                .for_each(
+                    |(
+                        poly,
+                        (
+                            (bind_z_int_eval, bind_z_eval),
+                            (bind_shift_z_int_eval, bind_shift_z_eval),
+                        ),
+                    )| {
+                        match poly {
+                            MultilinearPolynomial::LargeScalars(poly) => {
+                                for i in 0..shard_length {
+                                    let poly_idx = base_poly_idx + i;
+                                    let x1 = poly_idx & x1_bitmask;
+                                    *bind_z_int_eval +=
+                                        poly.Z[i].mul_01_optimized(eq_rx_step.E1[x1]);
+
+                                    if poly_idx != 0 {
+                                        let e1_index = x1.wrapping_sub(1) & x1_bitmask;
+                                        *bind_shift_z_int_eval +=
+                                            poly.Z[i] * eq_rx_step.E1[e1_index];
+                                    }
+                                    let e1_end = x1 == e1_len_minus_1;
+                                    if x1 == e1_len_minus_1 {
+                                        let x2 = poly_idx >> num_x1_bits;
+                                        *bind_z_eval += *bind_z_int_eval * eq_rx_step.E2[x2];
+                                        *bind_z_int_eval = F::zero();
+                                    }
+                                    let x1_is_zero = x1 == 0;
+                                    let boundary_case = x1_is_zero | (is_last_shard && e1_end);
+
+                                    if boundary_case && poly_idx != 0 {
+                                        let x2 = poly_idx >> num_x1_bits;
+                                        let e2_index = x2 - x1_is_zero as usize;
+                                        *bind_shift_z_eval +=
+                                            *bind_shift_z_int_eval * eq_rx_step.E2[e2_index];
+                                        *bind_shift_z_int_eval = F::zero();
+                                    }
+                                }
+                            }
+
+                            MultilinearPolynomial::U8Scalars(poly) => {
+                                process_polynomial_generic(
+                                    &poly.coeffs,
+                                    bind_z_int_eval,
+                                    bind_z_eval,
+                                    bind_shift_z_int_eval,
+                                    bind_shift_z_eval,
+                                    shard_length,
+                                    &eq_rx_step,
+                                    x1_bitmask,
+                                    num_x1_bits,
+                                    e1_len_minus_1,
+                                    is_last_shard,
+                                    base_poly_idx,
+                                );
+                            }
+                            MultilinearPolynomial::U16Scalars(poly) => {
+                                process_polynomial_generic(
+                                    &poly.coeffs,
+                                    bind_z_int_eval,
+                                    bind_z_eval,
+                                    bind_shift_z_int_eval,
+                                    bind_shift_z_eval,
+                                    shard_length,
+                                    &eq_rx_step,
+                                    x1_bitmask,
+                                    num_x1_bits,
+                                    e1_len_minus_1,
+                                    is_last_shard,
+                                    base_poly_idx,
+                                );
+                            }
+                            MultilinearPolynomial::U32Scalars(poly) => {
+                                process_polynomial_generic(
+                                    &poly.coeffs,
+                                    bind_z_int_eval,
+                                    bind_z_eval,
+                                    bind_shift_z_int_eval,
+                                    bind_shift_z_eval,
+                                    shard_length,
+                                    &eq_rx_step,
+                                    x1_bitmask,
+                                    num_x1_bits,
+                                    e1_len_minus_1,
+                                    is_last_shard,
+                                    base_poly_idx,
+                                );
+                            }
+                            MultilinearPolynomial::U64Scalars(poly) => {
+                                process_polynomial_generic(
+                                    &poly.coeffs,
+                                    bind_z_int_eval,
+                                    bind_z_eval,
+                                    bind_shift_z_int_eval,
+                                    bind_shift_z_eval,
+                                    shard_length,
+                                    &eq_rx_step,
+                                    x1_bitmask,
+                                    num_x1_bits,
+                                    e1_len_minus_1,
+                                    is_last_shard,
+                                    base_poly_idx,
+                                );
+                            }
+                            MultilinearPolynomial::I64Scalars(poly) => {
+                                process_polynomial_generic(
+                                    &poly.coeffs,
+                                    bind_z_int_eval,
+                                    bind_z_eval,
+                                    bind_shift_z_int_eval,
+                                    bind_shift_z_eval,
+                                    shard_length,
+                                    &eq_rx_step,
+                                    x1_bitmask,
+                                    num_x1_bits,
+                                    e1_len_minus_1,
+                                    is_last_shard,
+                                    base_poly_idx,
+                                );
+                            }
+                        };
+                    },
+                );
+        }
+        bind_z_stream[num_vars_uniform] = F::one();
+
+        input_polys_oracle.reset();
 
         drop(_guard);
         drop(span);
 
-        let poly_z =
-            DensePolynomial::new(bind_z.into_iter().chain(bind_shift_z.into_iter()).collect());
+        let poly_z = DensePolynomial::new(
+            bind_z_stream
+                .into_iter()
+                .chain(bind_shift_z_stream.into_iter())
+                .collect(),
+        );
         assert_eq!(poly_z.len(), poly_ABC.len());
-
         let num_rounds_inner_sumcheck = poly_ABC.len().log_2();
 
         let mut polys = vec![
@@ -532,43 +730,16 @@ where
         /*  Sumcheck 3: Shift sumcheck
             sumcheck claim is = z_shift(ry_var || rx_step) = \sum_t z(ry_var || t) * eq_plus_one(rx_step, t)
         */
-        
+
         let ry_var = inner_sumcheck_r[1..].to_vec();
         let eq_ry_var = EqPolynomial::evals(&ry_var);
-        // let eq_ry_var_r2 = EqPolynomial::evals(&ry_var);
-
-        // let mut bind_z_ry_var: Vec<F> = Vec::with_capacity(num_steps);
-        // 
-        // let span = span!(Level::INFO, "bind_z_ry_var");
-        // let _guard = span.enter();
-        // let num_steps_unpadded = constraint_builder.uniform_repeat();
-        // (0..num_steps_unpadded) // unpadded number of steps is sufficient
-        //     .into_par_iter()
-        //     .map(|t| {
-        //         input_polys
-        //             .iter()
-        //             .enumerate()
-        //             .map(|(i, poly)| poly.scale_coeff(t, eq_ry_var[i], eq_ry_var_r2[i]))
-        //             .sum()
-        //     })
-        //     .collect_into_vec(&mut bind_z_ry_var);
-        // drop(_guard);
-        // drop(span);
 
         let num_rounds_shift_sumcheck = num_steps_bits;
-        // assert_eq!(bind_z_ry_var.len(), eq_plus_one_rx_step.len());
-        
-        let log2_trace_len = trace.len().log_2();
-        let shard_length = 1 << (log2_trace_len - (log2_trace_len/2));
-        let mut bindZ_oracle = BindZRyVarOracle::new(
-            trace,
-            shard_length,
-            preprocessing,
-            &eq_ry_var,
-        );
+
+        let mut bindZ_oracle =
+            BindZRyVarOracle::new(trace, shard_length, preprocessing, &eq_ry_var);
 
         let eq_rx_step = SplitEqPolynomial::new(rx_step);
-        let num_shards = (1 << num_rounds_shift_sumcheck) / shard_length;
 
         let num_x1_bits = eq_rx_step.E1_len.log_2();
         let x1_bitmask = (1 << (num_x1_bits)) - 1;
@@ -600,25 +771,25 @@ where
 
         bindZ_oracle.reset();
 
-        let (shift_sumcheck_proof, shift_sumcheck_r) =
-            SumcheckInstanceProof::shift_sumcheck(
-                num_rounds_shift_sumcheck,
-                &mut bindZ_oracle,
-                eq_rx_step,
-                comb_func,
-                2,
-                shard_length,
-                transcript,
-            );
+        let (shift_sumcheck_proof, shift_sumcheck_r) = SumcheckInstanceProof::shift_sumcheck(
+            num_rounds_shift_sumcheck,
+            &mut bindZ_oracle,
+            eq_rx_step,
+            comb_func,
+            shard_length,
+            transcript,
+        );
         let shift_sumcheck_r: Vec<F> = shift_sumcheck_r.iter().rev().copied().collect();
-
-        // drop_in_background_thread(shift_sumcheck_polys);
 
         let flattened_polys_ref: Vec<_> = input_polys.iter().collect();
         // Inner sumcheck evaluations: evaluate z on rx_step
-        let (claimed_witness_evals, chis) =
-            MultilinearPolynomial::batch_evaluate(&flattened_polys_ref, rx_step);
-
+        let claimed_witness_evals = MultilinearPolynomial::stream_batch_evaluate(
+            &mut input_polys_oracle,
+            rx_step,
+            num_shards,
+            shard_length,
+        );
+        input_polys_oracle.reset();
         // opening_accumulator.append(
         //     &flattened_polys_ref,
         //     DensePolynomial::new(chis),
@@ -628,9 +799,17 @@ where
         // );
 
         // Shift sumcheck evaluations: evaluate z on ry_var
-        let (shift_sumcheck_witness_evals, chis2) =
-            MultilinearPolynomial::batch_evaluate(&flattened_polys_ref, &shift_sumcheck_r);
-
+        let start_time = Instant::now();
+        let shift_sumcheck_witness_evals = MultilinearPolynomial::stream_batch_evaluate(
+            &mut input_polys_oracle,
+            &shift_sumcheck_r,
+            num_shards,
+            shard_length,
+        );
+        println!(
+            "time to evaluate shift sumcheck witness: {:?}",
+            start_time.elapsed()
+        );
         // opening_accumulator.append(
         //     &flattened_polys_ref,
         //     DensePolynomial::new(chis2),
@@ -849,12 +1028,8 @@ impl<F: JoltField> Oracle for BindZRyVarOracle<'_, F> {
         self.step += self.shard_length;
         assert_eq!(self.shard_length, shard.len(), "Incorrect shard length");
         let log2_trace_len = self.get_len().log_2();
-        let shard_length = 1 << (log2_trace_len - (log2_trace_len/2));
-        assert_eq!(
-            self.shard_length,
-            shard_length,
-            "Incorrect shard length"
-        );
+        let shard_length = 1 << (log2_trace_len - (log2_trace_len / 2));
+        assert_eq!(self.shard_length, shard_length, "Incorrect shard length");
         shard
     }
 
