@@ -6,25 +6,22 @@ use crate::{
         compact_polynomial::SmallScalar,
         eq_poly::EqPolynomial,
         multilinear_polynomial::{
-            BindingOrder,
-            MultilinearPolynomial,
-            PolynomialBinding,
-            PolynomialEvaluation,
+            BindingOrder, MultilinearPolynomial, PolynomialBinding, PolynomialEvaluation,
         },
-        unipoly::{ CompressedUniPoly, UniPoly },
+        unipoly::{CompressedUniPoly, UniPoly},
     },
     subprotocols::sumcheck::SumcheckInstanceProof,
     utils::{
         errors::ProofVerifyError,
         math::Math,
         thread::unsafe_allocate_zero_vec,
-        transcript::{ AppendToTranscript, Transcript },
+        transcript::{AppendToTranscript, Transcript},
     },
 };
-use ark_serialize::{ CanonicalDeserialize, CanonicalSerialize };
-use common::constants::{ BYTES_PER_INSTRUCTION, RAM_START_ADDRESS };
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use common::constants::{BYTES_PER_INSTRUCTION, RAM_START_ADDRESS};
 use rayon::prelude::*;
-use tracer::instruction::{ NormalizedInstruction, RV32IMCycle, RV32IMInstruction };
+use tracer::instruction::{NormalizedInstruction, RV32IMCycle, RV32IMInstruction};
 
 #[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct BytecodePreprocessing {
@@ -111,7 +108,7 @@ impl<F: JoltField, ProofTranscript: Transcript> BytecodeShoutProof<F, ProofTrans
     pub fn prove(
         preprocessing: &BytecodePreprocessing,
         trace: &[RV32IMCycle],
-        transcript: &mut ProofTranscript
+        transcript: &mut ProofTranscript,
     ) -> Self {
         let K = preprocessing.bytecode.len().next_power_of_two();
         let T = trace.len();
@@ -128,7 +125,9 @@ impl<F: JoltField, ProofTranscript: Transcript> BytecodeShoutProof<F, ProofTrans
         let span = tracing::span!(tracing::Level::INFO, "compute F");
         let _guard = span.enter();
 
-        let num_chunks = rayon::current_num_threads().next_power_of_two().min(trace.len());
+        let num_chunks = rayon::current_num_threads()
+            .next_power_of_two()
+            .min(trace.len());
         let chunk_size = (trace.len() / num_chunks).max(1);
         let F: Vec<_> = trace
             .par_chunks(chunk_size)
@@ -138,7 +137,8 @@ impl<F: JoltField, ProofTranscript: Transcript> BytecodeShoutProof<F, ProofTrans
                 let mut j = chunk_index * chunk_size;
                 for cycle in trace_chunk {
                     let instr = cycle.instruction().normalize();
-                    let k = preprocessing.virtual_address_map
+                    let k = preprocessing
+                        .virtual_address_map
                         .get(&(instr.address, instr.virtual_sequence_remaining.unwrap_or(0)))
                         .unwrap();
                     result[*k] += E[j];
@@ -156,7 +156,7 @@ impl<F: JoltField, ProofTranscript: Transcript> BytecodeShoutProof<F, ProofTrans
                             *x += y;
                         });
                     running
-                }
+                },
             );
         drop(_guard);
         drop(span);
@@ -168,7 +168,8 @@ impl<F: JoltField, ProofTranscript: Transcript> BytecodeShoutProof<F, ProofTrans
         let gamma: F = transcript.challenge_scalar();
         let val: Vec<F> = bytecode_to_val(&preprocessing.bytecode, gamma);
 
-        let rv_claim: F = F.par_iter()
+        let rv_claim: F = F
+            .par_iter()
             .zip(val.par_iter())
             .map(|(&ra, &val)| ra * val)
             .sum();
@@ -195,20 +196,21 @@ impl<F: JoltField, ProofTranscript: Transcript> BytecodeShoutProof<F, ProofTrans
                     let ra_evals = ra.sumcheck_evals(i, DEGREE, BindingOrder::LowToHigh);
                     let val_evals = val.sumcheck_evals(i, DEGREE, BindingOrder::LowToHigh);
 
-                    [ra_evals[0] * (z + val_evals[0]), ra_evals[1] * (z + val_evals[1])]
+                    [
+                        ra_evals[0] * (z + val_evals[0]),
+                        ra_evals[1] * (z + val_evals[1]),
+                    ]
                 })
                 .reduce(
                     || [F::zero(); 2],
-                    |running, new| [running[0] + new[0], running[1] + new[1]]
+                    |running, new| [running[0] + new[0], running[1] + new[1]],
                 );
 
-            let univariate_poly = UniPoly::from_evals(
-                &[
-                    univariate_poly_evals[0],
-                    previous_claim - univariate_poly_evals[0],
-                    univariate_poly_evals[1],
-                ]
-            );
+            let univariate_poly = UniPoly::from_evals(&[
+                univariate_poly_evals[0],
+                previous_claim - univariate_poly_evals[0],
+                univariate_poly_evals[1],
+            ]);
 
             drop(_inner_guard);
             drop(inner_span);
@@ -225,7 +227,7 @@ impl<F: JoltField, ProofTranscript: Transcript> BytecodeShoutProof<F, ProofTrans
             // Bind polynomials
             rayon::join(
                 || ra.bind_parallel(r_j, BindingOrder::LowToHigh),
-                || val.bind_parallel(r_j, BindingOrder::LowToHigh)
+                || val.bind_parallel(r_j, BindingOrder::LowToHigh),
             );
         }
 
@@ -255,19 +257,16 @@ impl<F: JoltField, ProofTranscript: Transcript> BytecodeShoutProof<F, ProofTrans
         &self,
         preprocessing: &BytecodePreprocessing,
         T: usize,
-        transcript: &mut ProofTranscript
+        transcript: &mut ProofTranscript,
     ) -> Result<(), ProofVerifyError> {
         let K = preprocessing.bytecode.len();
         let r_cycle: Vec<F> = transcript.challenge_vector(T.log_2());
         let z: F = transcript.challenge_scalar();
         let gamma: F = transcript.challenge_scalar();
 
-        let (sumcheck_claim, mut r_address) = self.core_piop_sumcheck.verify(
-            self.rv_claim + z,
-            K.log_2(),
-            2,
-            transcript
-        )?;
+        let (sumcheck_claim, mut r_address) =
+            self.core_piop_sumcheck
+                .verify(self.rv_claim + z, K.log_2(), 2, transcript)?;
         r_address = r_address.into_iter().rev().collect();
 
         // Used to combine the various fields in each instruction into a single
@@ -281,12 +280,9 @@ impl<F: JoltField, ProofTranscript: Transcript> BytecodeShoutProof<F, ProofTrans
             "Core PIOP + Hamming weight sumcheck failed"
         );
 
-        let (sumcheck_claim, r_booleanity) = self.booleanity_sumcheck.verify(
-            F::zero(),
-            K.log_2() + T.log_2(),
-            3,
-            transcript
-        )?;
+        let (sumcheck_claim, r_booleanity) =
+            self.booleanity_sumcheck
+                .verify(F::zero(), K.log_2() + T.log_2(), 3, transcript)?;
         let (r_address_prime, r_cycle_prime) = r_booleanity.split_at(K.log_2());
         let eq_eval_address = EqPolynomial::new(r_address).evaluate(r_address_prime);
         let r_cycle: Vec<_> = r_cycle.iter().copied().rev().collect();
@@ -315,7 +311,7 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
     r: &[F],
     D: Vec<F>,
     G: Vec<F>,
-    transcript: &mut ProofTranscript
+    transcript: &mut ProofTranscript,
 ) -> (SumcheckInstanceProof<F, ProofTranscript>, Vec<F>, Vec<F>, F) {
     const DEGREE: usize = 3;
     let K = r.len().pow2();
@@ -339,12 +335,12 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
     // EQ(k_m, c) for k_m \in {0, 1} and c \in {0, 2, 3}
     let eq_km_c: [[F; DEGREE]; 2] = [
         [
-            F::one(), // eq(0, 0) = 0 * 0 + (1 - 0) * (1 - 0)
+            F::one(),        // eq(0, 0) = 0 * 0 + (1 - 0) * (1 - 0)
             F::from_i64(-1), // eq(0, 2) = 0 * 2 + (1 - 0) * (1 - 2)
             F::from_i64(-2), // eq(0, 3) = 0 * 3 + (1 - 0) * (1 - 3)
         ],
         [
-            F::zero(), // eq(1, 0) = 1 * 0 + (1 - 1) * (1 - 0)
+            F::zero(),     // eq(1, 0) = 1 * 0 + (1 - 1) * (1 - 0)
             F::from_u8(2), // eq(1, 2) = 1 * 2 + (1 - 1) * (1 - 2)
             F::from_u8(3), // eq(1, 3) = 1 * 3 + (1 - 1) * (1 - 3)
         ],
@@ -356,7 +352,10 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
     ];
 
     // First log(K) rounds of sumcheck
-    let span = tracing::span!(tracing::Level::INFO, "First log(K) rounds of Booleanity sumcheck");
+    let span = tracing::span!(
+        tracing::Level::INFO,
+        "First log(K) rounds of Booleanity sumcheck"
+    );
     let _guard = span.enter();
 
     for round in 0..K.log_2() {
@@ -369,7 +368,8 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
             .into_par_iter()
             .map(|k_prime| {
                 let B_evals = B.sumcheck_evals(k_prime, DEGREE, BindingOrder::LowToHigh);
-                let inner_sum = G[k_prime << m..(k_prime + 1) << m].par_iter()
+                let inner_sum = G[k_prime << m..(k_prime + 1) << m]
+                    .par_iter()
                     .enumerate()
                     .map(|(k, &G_k)| {
                         // Since we're binding variables from low to high, k_m is the high bit
@@ -390,25 +390,37 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
                     .reduce(
                         || [F::zero(); 3],
                         |running, new| {
-                            [running[0] + new[0], running[1] + new[1], running[2] + new[2]]
-                        }
+                            [
+                                running[0] + new[0],
+                                running[1] + new[1],
+                                running[2] + new[2],
+                            ]
+                        },
                     );
 
-                [B_evals[0] * inner_sum[0], B_evals[1] * inner_sum[1], B_evals[2] * inner_sum[2]]
+                [
+                    B_evals[0] * inner_sum[0],
+                    B_evals[1] * inner_sum[1],
+                    B_evals[2] * inner_sum[2],
+                ]
             })
             .reduce(
                 || [F::zero(); 3],
-                |running, new| { [running[0] + new[0], running[1] + new[1], running[2] + new[2]] }
+                |running, new| {
+                    [
+                        running[0] + new[0],
+                        running[1] + new[1],
+                        running[2] + new[2],
+                    ]
+                },
             );
 
-        let univariate_poly = UniPoly::from_evals(
-            &[
-                univariate_poly_evals[0],
-                previous_claim - univariate_poly_evals[0],
-                univariate_poly_evals[1],
-                univariate_poly_evals[2],
-            ]
-        );
+        let univariate_poly = UniPoly::from_evals(&[
+            univariate_poly_evals[0],
+            previous_claim - univariate_poly_evals[0],
+            univariate_poly_evals[1],
+            univariate_poly_evals[2],
+        ]);
 
         drop(_inner_guard);
         drop(inner_span);
@@ -429,7 +441,8 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
 
         // Update F for this round (see Equation 55)
         let (F_left, F_right) = F.split_at_mut(1 << round);
-        F_left.par_iter_mut()
+        F_left
+            .par_iter_mut()
             .zip(F_right.par_iter_mut())
             .for_each(|(x, y)| {
                 *y = *x * r_j;
@@ -440,7 +453,10 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
     drop(_guard);
     drop(span);
 
-    let span = tracing::span!(tracing::Level::INFO, "Last log(T) rounds of Booleanity sumcheck");
+    let span = tracing::span!(
+        tracing::Level::INFO,
+        "Last log(T) rounds of Booleanity sumcheck"
+    );
     let _guard = span.enter();
 
     let eq_r_r = B.final_sumcheck_claim();
@@ -448,7 +464,8 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
         .par_iter()
         .map(|cycle| {
             let instr = cycle.instruction().normalize();
-            let k = preprocessing.virtual_address_map
+            let k = preprocessing
+                .virtual_address_map
                 .get(&(instr.address, instr.virtual_sequence_remaining.unwrap_or(0)))
                 .unwrap();
             F[*k]
@@ -463,16 +480,18 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
     for _round in 0..T.log_2() {
         #[cfg(test)]
         {
-            let expected: F =
-                eq_r_r *
-                (0..H.len())
+            let expected: F = eq_r_r
+                * (0..H.len())
                     .map(|j| {
                         let D_j = D.get_bound_coeff(j);
                         let H_j = H.get_bound_coeff(j);
                         D_j * (H_j.square() - H_j)
                     })
                     .sum::<F>();
-            assert_eq!(expected, previous_claim, "Sumcheck sanity check failed in round {_round}");
+            assert_eq!(
+                expected, previous_claim,
+                "Sumcheck sanity check failed in round {_round}"
+            );
         }
 
         let inner_span = tracing::span!(tracing::Level::INFO, "Compute univariate poly");
@@ -492,7 +511,13 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
             })
             .reduce(
                 || [F::zero(); 3],
-                |running, new| { [running[0] + new[0], running[1] + new[1], running[2] + new[2]] }
+                |running, new| {
+                    [
+                        running[0] + new[0],
+                        running[1] + new[1],
+                        running[2] + new[2],
+                    ]
+                },
             );
 
         univariate_poly_evals = [
@@ -501,14 +526,12 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
             eq_r_r * univariate_poly_evals[2],
         ];
 
-        let univariate_poly = UniPoly::from_evals(
-            &[
-                univariate_poly_evals[0],
-                previous_claim - univariate_poly_evals[0],
-                univariate_poly_evals[1],
-                univariate_poly_evals[2],
-            ]
-        );
+        let univariate_poly = UniPoly::from_evals(&[
+            univariate_poly_evals[0],
+            previous_claim - univariate_poly_evals[0],
+            univariate_poly_evals[1],
+            univariate_poly_evals[2],
+        ]);
 
         drop(_inner_guard);
         drop(inner_span);
@@ -525,10 +548,15 @@ pub fn prove_booleanity<F: JoltField, ProofTranscript: Transcript>(
         // Bind polynomials
         rayon::join(
             || D.bind_parallel(r_j, BindingOrder::LowToHigh),
-            || H.bind_parallel(r_j, BindingOrder::LowToHigh)
+            || H.bind_parallel(r_j, BindingOrder::LowToHigh),
         );
     }
 
     let ra_claim = H.final_sumcheck_claim();
-    (SumcheckInstanceProof::new(compressed_polys), r_address_prime, r_cycle_prime, ra_claim)
+    (
+        SumcheckInstanceProof::new(compressed_polys),
+        r_address_prime,
+        r_cycle_prime,
+        ra_claim,
+    )
 }

@@ -21,8 +21,7 @@ pub mod transcript;
 /// Based on observations; multiple calls into icicle_msm functions can dramatically slow down GPU performance.
 #[macro_export]
 macro_rules! optimal_iter {
-    ($T:expr) => {
-        {
+    ($T:expr) => {{
         #[cfg(feature = "icicle")]
         {
             $T.iter()
@@ -31,14 +30,12 @@ macro_rules! optimal_iter {
         {
             $T.par_iter()
         }
-        }
-    };
+    }};
 }
 
 #[macro_export]
 macro_rules! into_optimal_iter {
-    ($T:expr) => {
-        {
+    ($T:expr) => {{
         #[cfg(feature = "icicle")]
         {
             $T.into_iter()
@@ -47,14 +44,12 @@ macro_rules! into_optimal_iter {
         {
             $T.into_par_iter()
         }
-        }
-    };
+    }};
 }
 
 #[macro_export]
 macro_rules! optimal_iter_mut {
-    ($T:expr) => {
-        {
+    ($T:expr) => {{
         #[cfg(feature = "icicle")]
         {
             $T.iter_mut()
@@ -63,14 +58,12 @@ macro_rules! optimal_iter_mut {
         {
             $T.par_iter_mut()
         }
-        }
-    };
+    }};
 }
 
 #[macro_export]
 macro_rules! join_conditional {
-    ($f1:expr, $f2:expr) => {
-        {
+    ($f1:expr, $f2:expr) => {{
         #[cfg(feature = "icicle")]
         {
             ($f1(), $f2())
@@ -79,8 +72,7 @@ macro_rules! join_conditional {
         {
             rayon::join($f1, $f2)
         }
-        }
-    };
+    }};
 }
 
 /// Converts an integer value to a bitvector (all values {0,1}) of field elements.
@@ -146,7 +138,11 @@ pub fn mul_0_1_optimized<F: JoltField>(a: &F, b: &F) -> F {
 
 #[inline(always)]
 pub fn mul_0_optimized<F: JoltField>(likely_zero: &F, x: &F) -> F {
-    if likely_zero.is_zero() { F::zero() } else { *likely_zero * *x }
+    if likely_zero.is_zero() {
+        F::zero()
+    } else {
+        *likely_zero * *x
+    }
 }
 
 /// Checks if `num` is a power of 2.

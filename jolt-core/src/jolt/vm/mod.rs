@@ -276,6 +276,8 @@ where
         );
         transcript.append_scalar(&spartan_key.vk_digest);
 
+        let mut transcript_1 = transcript.clone();
+
         let r1cs_proof = UniformSpartanProof::prove::<PCS>(
             &preprocessing,
             &constraint_builder,
@@ -286,6 +288,49 @@ where
         )
         .ok()
         .unwrap();
+
+        #[cfg(test)]
+        {
+            println!("Comparing streaming and non-streaming first sum-check outputs.");
+
+            let shard_len = 128;
+            let r1cs_proof_streaming = UniformSpartanProof::prove_streaming::<PCS>(
+                &preprocessing,
+                &constraint_builder,
+                &spartan_key,
+                &trace,
+                shard_len,
+                &mut opening_accumulator,
+                &mut transcript_1,
+            );
+
+            println!("*********************");
+            for i in 0..r1cs_proof_streaming.compressed_polys.len() {
+                println!("Round {i}");
+                println!(
+                    "Polynomial computed by streaming sum-check = {:?}",
+                    r1cs_proof_streaming.compressed_polys[i]
+                );
+                println!(
+                    "Polynomial computed by non-streaming sum-check  = {:?}",
+                    r1cs_proof.outer_sumcheck_proof.compressed_polys[i]
+                );
+                println!("");
+
+                for i in 0..(r1cs_proof_streaming.compressed_polys[i].coeffs_except_linear_term).len() {
+                    let lhs =  r1cs_proof_streaming.compressed_polys[i].coeffs_except_linear_term[i];
+                    let rhs =  r1cs_proof.outer_sumcheck_proof.compressed_polys[i].coeffs_except_linear_term[i];
+                    
+                    assert_eq!(
+                        lhs,
+                        rhs,
+                        "Polynomials differ at index {i}. LHS: {lhs}, RHS: {rhs}"
+                    );
+                }
+            }
+            
+            println!("Streaming sum-check and linear space sum-check give the same output.");
+        }
 
         let instruction_proof = LookupsProof::prove(
             &preprocessing.shared.generators,

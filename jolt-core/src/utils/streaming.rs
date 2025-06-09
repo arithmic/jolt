@@ -3,8 +3,12 @@ pub trait Oracle {
 
     fn next_shard(&mut self, shard_len: usize) -> Self::Shard;
 
+    // TODO: We want to run Jolt on programs with upto 2^40 instructions. On a 32 bit machine, the
+    // length won't fit in a usize.
     fn reset(&mut self);
 
+    // TODO: We want to run Jolt on programs with upto 2^40 instructions. On a 32 bit machine, the
+    // step won't fit in a usize.
     fn get_len(&self) -> usize {
         unimplemented!("Not required for all impl")
     }
@@ -13,7 +17,6 @@ pub trait Oracle {
         unimplemented!("Not required for all impl")
     }
 }
-
 
 // pub trait Oracle {
 //     type Shard;
