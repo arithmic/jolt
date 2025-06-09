@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::time::Instant;
 use tracer::instruction::RV32IMCycle;
 use tracing::{span, Level};
 
@@ -769,7 +770,7 @@ where
             .sum();
 
         bindZ_oracle.reset();
-
+        let start_time = Instant::now();
         let (shift_sumcheck_proof, shift_sumcheck_r) = SumcheckInstanceProof::shift_sumcheck(
             num_rounds_shift_sumcheck,
             &mut bindZ_oracle,
@@ -778,6 +779,7 @@ where
             shard_length,
             transcript,
         );
+        println!("shift sum check proof time {:?}", start_time.elapsed());
         let shift_sumcheck_r: Vec<F> = shift_sumcheck_r.iter().rev().copied().collect();
 
         // Inner sumcheck evaluations: evaluate z on rx_step

@@ -19,6 +19,7 @@ use crate::utils::streaming::Oracle;
 use crate::utils::thread::drop_in_background_thread;
 use crate::utils::transcript::{AppendToTranscript, Transcript};
 use ark_serialize::*;
+use itertools::Itertools;
 use rayon::prelude::*;
 use std::marker::PhantomData;
 
@@ -715,7 +716,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         }
 
         for round in 0..mid {
-            let mask = (1 << (round + 1)) - 1;
             let mut accumulator = vec![F::zero(); degree + 1];
             for shard_idx in 0..num_shards {
                 let mut polys = Vec::new();
@@ -731,36 +731,38 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                     num_x1_bits,
                     x1_bitmask,
                 ));
-
-                for idx_in_shard in 0..shard_length {
-                    let idx_in_poly = shard_length * shard_idx + idx_in_shard;
-                    let bit = (idx_in_poly >> round) & 1;
-
-                    witness_eval
-                        .iter_mut()
-                        .zip(polys.iter())
-                        .for_each(|(eval, poly)| {
-                            let coeff = poly.get_coeff(idx_in_shard);
-                            let eval_1 = evals_1[idx_in_poly % (1 << round)];
-                            eval.iter_mut().zip(eq_eval_idx_s_vec.iter()).for_each(
-                                |(e, eq_eval)| {
-                                    *e += eval_1 * eq_eval[bit] * coeff;
-                                },
-                            );
-                        });
-
-                    if (idx_in_poly + 1) & mask == 0 {
-                        (0..=degree).for_each(|s| {
-                            let eval = comb_fn(
+                let chunk_size = 1 << (round + 1);
+                let no_of_chunks = shard_length / chunk_size;
+                (0..no_of_chunks)
+                    .for_each(|chunk_iter| {
+                        for idx_in_chunk in 0..chunk_size {
+                            let idx_in_poly =
+                                shard_length * shard_idx + chunk_iter * chunk_size + idx_in_chunk;
+                            let bit = (idx_in_poly >> round) & 1;
+                            witness_eval
+                                .iter_mut()
+                                .zip(polys.iter())
+                                .for_each(|(eval, poly)| {
+                                    let coeff = poly.get_coeff(chunk_iter * chunk_size + idx_in_chunk);
+                                    let eval_1 = evals_1[idx_in_poly % (1 << round)];
+                                    eval.iter_mut().zip(eq_eval_idx_s_vec.iter()).for_each(
+                                        |(e, eq_eval)| {
+                                            *e += eval_1 * eq_eval[bit] * coeff;
+                                        },
+                                    );
+                                });
+                        }
+                        accumulator.iter_mut().enumerate().for_each(|(s, acc) | {
+                            * acc +=  comb_fn(
                                 &(0..num_polys)
                                     .map(|k| witness_eval[k][s])
                                     .collect::<Vec<F>>(),
                             );
-                            accumulator[s] += eval;
                         });
-                        witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
-                    }
-                }
+                        witness_eval.iter_mut().for_each(|eval| {
+                            eval.iter_mut().for_each(|e| *e = F::zero());
+                        });
+                    });
             }
 
             let univariate_poly = UniPoly::from_evals(&accumulator);
@@ -867,7 +869,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         //     .iter()
         //     .map(|eval| r_final_comp * eval[0] + r_final * eval[1])
         //     .collect();
-
         (SumcheckInstanceProof::new(compressed_polys), r)
     }
 }
