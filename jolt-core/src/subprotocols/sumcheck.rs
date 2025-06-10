@@ -13,13 +13,13 @@ use crate::r1cs::builder::{Constraint, OffsetEqConstraint};
 use crate::r1cs::spartan::{BindZRyVarOracle, R1CSInputsOracle};
 use crate::utils::errors::ProofVerifyError;
 use crate::utils::math::Math;
-use crate::utils::mul_0_optimized;
 use crate::utils::small_value::svo_helpers::process_svo_sumcheck_rounds;
 use crate::utils::streaming::Oracle;
 use crate::utils::thread::drop_in_background_thread;
 use crate::utils::transcript::{AppendToTranscript, Transcript};
+use crate::utils::{compute_dotproduct_low_optimized, mul_0_optimized};
+use crate::{into_optimal_iter, optimal_iter};
 use ark_serialize::*;
-use itertools::Itertools;
 use rayon::prelude::*;
 use std::marker::PhantomData;
 
@@ -342,6 +342,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         polys: &mut Vec<MultilinearPolynomial<F>>,
         comb_func: Func,
         combined_degree: usize,
+        binding_order: BindingOrder,
         transcript: &mut ProofTranscript,
     ) -> (Self, Vec<F>, Vec<F>)
     where
@@ -380,11 +381,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                     let evals: Vec<_> = polys
                         .iter()
                         .map(|poly| {
-                            poly.sumcheck_evals(
-                                poly_term_i,
-                                combined_degree,
-                                BindingOrder::HighToLow,
-                            )
+                            poly.sumcheck_evals(poly_term_i, combined_degree, binding_order)
                         })
                         .collect();
                     for j in 0..combined_degree {
@@ -419,7 +416,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             // bound all tables to the verifier's challenge
             polys
                 .par_iter_mut()
-                .for_each(|poly| poly.bind(r_j, BindingOrder::HighToLow));
+                .for_each(|poly| poly.bind(r_j, binding_order));
             previous_claim = univariate_poly.evaluate(&r_j);
             compressed_polys.push(compressed_poly);
         }
@@ -673,7 +670,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         num_rounds: usize,
         stream_poly: &mut BindZRyVarOracle<F>,
         eq_rx_step: SplitEqPolynomial<F>,
-        comb_fn: Func,
+        comb_func: Func,
         shard_length: usize,
         transcript: &mut ProofTranscript,
     ) -> (Self, Vec<F>)
@@ -684,12 +681,11 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let degree = 2;
         let mut r: Vec<F> = Vec::with_capacity(num_rounds);
         let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::with_capacity(num_rounds);
-        // let mut witness_eval_for_final_eval = vec![vec![F::zero(); 2]; num_polys];
 
         let mid = num_rounds - num_rounds / 2;
-
+        
         let mut evals_1 = vec![F::zero(); 1 << mid];
-        let mut evals_2 = vec![F::zero(); 1 << num_rounds - mid];
+        let mut evals_2 = vec![F::zero(); 1 << (num_rounds - mid)];
         evals_1[0] = F::one();
         evals_2[0] = F::one();
 
@@ -735,36 +731,34 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                 ));
                 let chunk_size = 1 << (round + 1);
                 let no_of_chunks = shard_length / chunk_size;
-                (0..no_of_chunks)
-                    .for_each(|chunk_iter| {
-                        let base_chunk_idx = chunk_iter * chunk_size;
-                        for idx_in_chunk in 0..chunk_size {
-                            let idx_in_shard = base_chunk_idx + idx_in_chunk;
-                            let idx_in_poly =base_poly_idx
-                                 + idx_in_shard;
-                            let bit = (idx_in_poly >> round) & 1;
-                            witness_eval
-                                .iter_mut()
-                                .zip(polys.iter())
-                                .for_each(|(eval, poly)| {
-                                    let coeff = poly.get_coeff(idx_in_shard);
-                                    let eval_1 = evals_1[idx_in_poly & mask];
-                                    eval.iter_mut().zip(eq_eval_idx_s_vec.iter()).for_each(
-                                        |(e, eq_eval)| {
-                                            *e += eval_1 * eq_eval[bit] * coeff;
-                                        },
-                                    );
-                                });
-                        }
-                        accumulator.iter_mut().enumerate().for_each(|(s, acc) | {
-                            * acc +=  comb_fn(
-                                &(0..num_polys)
-                                    .map(|k| witness_eval[k][s])
-                                    .collect::<Vec<F>>(),
-                            );
-                        });
-                        witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
+                (0..no_of_chunks).for_each(|chunk_iter| {
+                    let base_chunk_idx = chunk_iter * chunk_size;
+                    for idx_in_chunk in 0..chunk_size {
+                        let idx_in_shard = base_chunk_idx + idx_in_chunk;
+                        let idx_in_poly = base_poly_idx + idx_in_shard;
+                        let bit = (idx_in_poly >> round) & 1;
+                        witness_eval
+                            .iter_mut()
+                            .zip(polys.iter())
+                            .for_each(|(eval, poly)| {
+                                let coeff = poly.get_coeff(idx_in_shard);
+                                let eval_1 = evals_1[idx_in_poly & mask];
+                                eval.iter_mut().zip(eq_eval_idx_s_vec.iter()).for_each(
+                                    |(e, eq_eval)| {
+                                        *e += eval_1 * eq_eval[bit] * coeff;
+                                    },
+                                );
+                            });
+                    }
+                    accumulator.iter_mut().enumerate().for_each(|(s, acc)| {
+                        *acc += comb_func(
+                            &(0..num_polys)
+                                .map(|k| witness_eval[k][s])
+                                .collect::<Vec<F>>(),
+                        );
                     });
+                    witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
+                });
             }
 
             let univariate_poly = UniPoly::from_evals(&accumulator);
@@ -779,98 +773,73 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
             stream_poly.reset();
         }
-        let mask1 = (1 << mid) - 1;
-        let mut int_witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
 
-        for round in mid..num_rounds {
-            let mut accumulator = vec![F::zero(); degree + 1];
-            let mask2 = (1 << (round - mid)) - 1;
-            let mask3 = (1 << (round + 1)) - 1;
-            for shard_idx in 0..num_shards {
-                let mut polys = Vec::new();
-                polys.push(stream_poly.next_shard());
+        //Bind Polynomials
+        let chunk_size = evals_1.len();
+        let no_of_chunks = shard_length / chunk_size;
+        let mut bind_poly1 = Vec::with_capacity(num_shards * no_of_chunks);
+        let mut bind_poly2 = Vec::with_capacity(num_shards * no_of_chunks);
+        for _ in 0..num_shards {
+            let mut polys = Vec::with_capacity(2);
+            polys.push(stream_poly.next_shard());
 
-                let step = stream_poly.get_step();
-                let step_shard = step - shard_length;
+            let step = stream_poly.get_step();
+            let step_shard = step - shard_length;
 
-                polys.push(eq_plus_one_shards(
-                    step_shard,
-                    shard_length,
-                    &eq_rx_step,
-                    num_x1_bits,
-                    x1_bitmask,
-                ));
+            polys.push(eq_plus_one_shards(
+                step_shard,
+                shard_length,
+                &eq_rx_step,
+                num_x1_bits,
+                x1_bitmask,
+            ));
 
-                for idx_in_shard in 0..shard_length {
-                    let idx_in_poly = shard_length * shard_idx + idx_in_shard;
-                    let bit = (idx_in_poly >> round) & 1;
-                    int_witness_eval
-                        .iter_mut()
-                        .zip(polys.iter())
-                        .enumerate()
-                        .for_each(|(k, (witness_poly, poly))| {
-                            let poly_coeff = poly.get_coeff(idx_in_shard);
-                            witness_poly
-                                .iter_mut()
-                                .zip(eq_eval_idx_s_vec.iter())
-                                .for_each(|(witness_val, eq_eval)| {
-                                    *witness_val +=
-                                        evals_1[idx_in_shard] * eq_eval[bit] * poly_coeff;
-                                });
-                        });
+            (0..no_of_chunks).for_each(|chunk_iter| {
+                let start_idx = chunk_iter * chunk_size;
+                let end_idx = start_idx + chunk_size;
+                let (dot1, dot2) = into_optimal_iter!(start_idx..end_idx)
+                    .zip(optimal_iter!(evals_1))
+                    .map(|(i, eval)| (polys[0].get_coeff(i), polys[1].get_coeff(i), eval))
+                    .fold(
+                        || (F::zero(), F::zero()),
+                        |(acc1, acc2), (coeff1, coeff2, eval)| {
+                            (acc1 + coeff1 * eval, acc2 + coeff2 * eval)
+                        },
+                    )
+                    .reduce(
+                        || (F::zero(), F::zero()),
+                        |(acc1, acc2), (sum1, sum2)| (acc1 + sum1, acc2 + sum2),
+                    );
 
-                    if (idx_in_poly + 1) & mask1 == 0 {
-                        let temp = idx_in_poly >> mid;
-                        for k in 0..num_polys {
-                            for s in 0..=degree {
-                                let temp = evals_2[temp & mask2] * int_witness_eval[k][s];
-                                witness_eval[k][s] += temp;
-                            }
-                        }
-                        int_witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
-                    }
-
-                    if (idx_in_poly + 1) & mask3 == 0 {
-                        let temp = idx_in_poly >> mid;
-                        for s in 0..=degree {
-                            let eval = comb_fn(
-                                &(0..num_polys)
-                                    .map(|k| witness_eval[k][s])
-                                    .collect::<Vec<F>>(),
-                            );
-                            accumulator[s] += eval;
-                        }
-
-                        // if round == num_rounds - 1 {
-                        //     for k in 0..num_polys {
-                        //         witness_eval_for_final_eval[k][0] = witness_eval[k][0];
-                        //         witness_eval_for_final_eval[k][1] = witness_eval[k][1];
-                        //     }
-                        // }
-                        witness_eval = vec![vec![F::zero(); degree + 1]; num_polys];
-                    }
-                }
-            }
-
-            let univariate_poly = UniPoly::from_evals(&accumulator);
-            let compressed_poly = univariate_poly.compress();
-            compressed_poly.append_to_transcript(transcript);
-
-            let r_i = transcript.challenge_scalar();
-            r.push(r_i);
-            compressed_polys.push(compressed_poly);
-
-            update_evals(&mut evals_2, r_i, 1 << (round - mid));
-
-            stream_poly.reset();
+                bind_poly1.push(dot1);
+                bind_poly2.push(dot2);
+            });
         }
+        let mut bind_polys = vec![
+            MultilinearPolynomial::from(bind_poly1),
+            MultilinearPolynomial::from(bind_poly2),
+        ];
+        let second_half_claim = (0..1 << (num_rounds - mid))
+            .into_par_iter()
+            .map(|i| {
+                let params: Vec<F> = bind_polys.iter().map(|poly| poly.get_coeff(i)).collect();
+                comb_func(&params)
+            })
+            .reduce(|| F::zero(), |acc, x| acc + x);
 
-        // let r_final = r[num_rounds - 1];
-        // let r_final_comp = F::one() - r_final;
-        // let final_eval = witness_eval_for_final_eval
-        //     .iter()
-        //     .map(|eval| r_final_comp * eval[0] + r_final * eval[1])
-        //     .collect();
+        let (mut second_half_proof, mut second_half_r, _) =
+            SumcheckInstanceProof::prove_arbitrary(
+                &second_half_claim,
+                (num_rounds - mid),
+                &mut bind_polys,
+                comb_func,
+                2,
+                BindingOrder::LowToHigh,
+                transcript,
+            );
+        compressed_polys.append(&mut second_half_proof.compressed_polys);
+        r.append(&mut second_half_r);
+
         (SumcheckInstanceProof::new(compressed_polys), r)
     }
 }

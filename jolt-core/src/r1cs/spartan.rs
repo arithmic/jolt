@@ -1,13 +1,8 @@
-use std::marker::PhantomData;
-use std::time::Instant;
-use tracer::instruction::RV32IMCycle;
-use tracing::{span, Level};
-
 use crate::field::{JoltField, OptimizedMul};
 use crate::jolt::vm::JoltProverPreprocessing;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
-use crate::poly::multilinear_polynomial::MultilinearPolynomial;
 use crate::poly::multilinear_polynomial::PolynomialEvaluation;
+use crate::poly::multilinear_polynomial::{BindingOrder, MultilinearPolynomial};
 use crate::poly::opening_proof::ProverOpeningAccumulator;
 use crate::poly::opening_proof::VerifierOpeningAccumulator;
 use crate::r1cs::inputs::ALL_R1CS_INPUTS;
@@ -15,6 +10,10 @@ use crate::r1cs::key::UniformSpartanKey;
 use crate::utils::math::Math;
 use crate::utils::streaming::Oracle;
 use crate::utils::thread::drop_in_background_thread;
+use std::marker::PhantomData;
+use std::time::Instant;
+use tracer::instruction::RV32IMCycle;
+use tracing::{span, Level};
 
 use crate::utils::transcript::Transcript;
 use ark_serialize::CanonicalDeserialize;
@@ -288,6 +287,7 @@ where
                 &mut polys,
                 comb_func,
                 2,
+                BindingOrder::HighToLow,
                 transcript,
             );
 
@@ -345,6 +345,7 @@ where
                 &mut shift_sumcheck_polys,
                 comb_func,
                 2,
+                BindingOrder::HighToLow,
                 transcript,
             );
 
@@ -722,6 +723,7 @@ where
                 &mut polys,
                 comb_func,
                 2,
+                BindingOrder::HighToLow,
                 transcript,
             );
 
@@ -779,7 +781,7 @@ where
             shard_length,
             transcript,
         );
-        println!("shift sum check proof time {:?}", start_time.elapsed());
+        println!("shift_sumcheck_proof time: {:?}", start_time.elapsed());
         let shift_sumcheck_r: Vec<F> = shift_sumcheck_r.iter().rev().copied().collect();
 
         // Inner sumcheck evaluations: evaluate z on rx_step
