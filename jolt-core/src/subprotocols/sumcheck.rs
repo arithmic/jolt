@@ -483,14 +483,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
         // Round (NUM_SVO_ROUNDS + 1)..num_rounds : do the linear time sumcheck
         for i in NUM_SVO_ROUNDS + 1..num_rounds {
-            if i == 7 {
-                println!("r_i = {}", r[6]);
-                println!(
-                    "Non-streamed bound coeffs len = {}, Non-streamed bound coeffs = {:?}",
-                    az_bz_cz_poly.bound_coeffs.len(),
-                    az_bz_cz_poly.bound_coeffs
-                );
-            }
             az_bz_cz_poly.remaining_sumcheck_round(
                 &mut eq_poly,
                 transcript,
@@ -532,17 +524,20 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             flattened_polys_oracle,
         );
 
-        let now = Instant::now();
-        // First, precompute the accumulators and also the `SpartanInterleavedPolynomial`
-        let (accums_zero_non_streaming, accums_infty_non_streaming, mut az_bz_cz_poly) =
-            SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::new_with_precompute(
-                padded_num_constraints,
-                uniform_constraints,
-                cross_step_constraints,
-                flattened_polys,
-                tau,
-            );
-        println!("Precompute time = {:?}", now.elapsed());
+        #[cfg(test)]
+        {
+            let now = Instant::now();
+            // First, precompute the accumulators and also the `SpartanInterleavedPolynomial`
+            let (accums_zero_non_streaming, accums_infty_non_streaming, mut az_bz_cz_poly) =
+                SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::new_with_precompute(
+                    padded_num_constraints,
+                    uniform_constraints,
+                    cross_step_constraints,
+                    flattened_polys,
+                    tau,
+                );
+            println!("Precompute time = {:?}", now.elapsed());
+        }
 
         // #[cfg(test)]
         // {
@@ -593,14 +588,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         // }
 
         let mut eq_poly = GruenSplitEqPolynomial::new(tau);
-        let in_len = eq_poly.E_in_vec.len();
-        let out_len = eq_poly.E_out_vec.len();
-        println!(
-            "E_in_vec length = {}, E_out_vec length = {}",
-            eq_poly.E_in_vec[in_len - 1].len(),
-            eq_poly.E_out_vec[out_len - 1].len()
-        );
-
         process_svo_sumcheck_rounds::<NUM_SVO_ROUNDS, F, ProofTranscript>(
             &accums_zero,
             &accums_infty,
@@ -611,14 +598,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             &mut eq_poly,
         );
 
-        let in_len = eq_poly.E_in_vec.len();
-        let out_len = eq_poly.E_out_vec.len();
-        println!(
-            "After SVO rounds, E_in_vec length = {}, E_out_vec length = {}",
-            eq_poly.E_in_vec[in_len - 1].len(),
-            eq_poly.E_out_vec[out_len - 1].len()
-        );
-
+        // TODO: Do we want to do it like this? Or do we want to switch after floor(n / 2) rounds?
         let potential_streaming_rounds_start = NUM_SVO_ROUNDS;
         let binding_round = (trace_shard_len.log_2() + padded_num_constraints.log_2() + 1) / 2;
         let streaming_rounds_start =
@@ -642,24 +622,8 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             transcript,
         );
 
-        println!(
-            "Bound az_bz_cz_poly len = {}, Bound az_bz_poly = {:?}",
-            az_bz_poly_oracle.bound_coeffs.len(),
-            az_bz_poly_oracle.bound_coeffs
-        );
-        //
-        // // Round NUM_SVO_ROUNDS : do the streaming sumcheck to compute cached values
-        // az_bz_cz_poly.streaming_sumcheck_round(
-        //     &mut eq_poly,
-        //     transcript,
-        //     &mut r,
-        //     &mut polys,
-        //     &mut claim,
-        // );
-        //
-        // Round (NUM_SVO_ROUNDS + 1)..num_rounds : do the linear time sumcheck
         for _ in binding_round + 1..num_rounds {
-            az_bz_poly_oracle.remaining_sumcheck_round(
+            az_bz_poly_oracle.remaining_sumcheck_rounds(
                 &mut eq_poly,
                 transcript,
                 &mut r,
@@ -671,7 +635,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         (
             SumcheckInstanceProof::new(polys),
             r,
-            az_bz_cz_poly.final_sumcheck_evals(),
+            az_bz_poly_oracle.final_sumcheck_evals(),
         )
     }
 

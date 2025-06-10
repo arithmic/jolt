@@ -1381,74 +1381,73 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
         tau: &[F],
         shard_length: usize,
     ) -> ([F; NUM_ACCUMS_EVAL_ZERO], [F; NUM_ACCUMS_EVAL_INFTY]) {
-        {
-            // 1. Stream a shard of self.
-            // 2. Divide the shard using chunk_by()
-            // 3. Call svo_helpers::compute_and_update_tA_inplace_generic() on each chunk to compute
-            //    temp_A (tA) values.
-            // 4. Distribute the tA values to evals of 0 and infinity.
-            // 5. Add evals of 0 and infinity to the global accumulator.
+        // 1. Stream a shard of self.
+        // 2. Divide the shard using chunk_by()
+        // 3. Call svo_helpers::compute_and_update_tA_inplace_generic() on each chunk to compute
+        //    temp_A (tA) values.
+        // 4. Distribute the tA values to evals of 0 and infinity.
+        // 5. Add evals of 0 and infinity to the global accumulator.
 
-            assert!(shard_length.is_power_of_two());
+        assert!(shard_length.is_power_of_two());
 
-            let total_num_vars = (self.get_len() * padded_num_constraints).ilog2() as usize;
-            let num_step_vars = self.get_len().ilog2() as usize;
-            let num_constraint_vars = if padded_num_constraints > 0 {
-                padded_num_constraints.log_2()
-            } else {
-                0
-            };
+        let total_num_vars = (self.get_len() * padded_num_constraints).ilog2() as usize;
+        let num_step_vars = self.get_len().ilog2() as usize;
+        let num_constraint_vars = if padded_num_constraints > 0 {
+            padded_num_constraints.log_2()
+        } else {
+            0
+        };
 
-            assert_eq!(total_num_vars, num_constraint_vars + num_step_vars);
-            assert_eq!(
-                tau.len(),
-                total_num_vars,
-                "tau length ({}) mismatch with R1CS variable count (step_vars {} + constraint_vars {})",
-                tau.len(),
-                num_step_vars,
-                num_constraint_vars
-            );
-            assert!(
-                NUM_SVO_ROUNDS <= num_constraint_vars,
-                "NUM_SVO_ROUNDS ({}) cannot exceed total constraint variables ({})",
-                NUM_SVO_ROUNDS,
-                num_constraint_vars
-            );
+        assert_eq!(total_num_vars, num_constraint_vars + num_step_vars);
+        assert_eq!(
+            tau.len(),
+            total_num_vars,
+            "tau length ({}) mismatch with R1CS variable count (step_vars {} + constraint_vars {})",
+            tau.len(),
+            num_step_vars,
+            num_constraint_vars
+        );
+        assert!(
+            NUM_SVO_ROUNDS <= num_constraint_vars,
+            "NUM_SVO_ROUNDS ({}) cannot exceed total constraint variables ({})",
+            NUM_SVO_ROUNDS,
+            num_constraint_vars
+        );
 
-            // Number of constraint variables that are NOT part of the SVO prefix Y.
-            let num_non_svo_constraint_vars = num_constraint_vars.saturating_sub(NUM_SVO_ROUNDS);
-            let num_non_svo_z_vars = num_step_vars + num_non_svo_constraint_vars;
-            assert_eq!(
-                num_non_svo_z_vars,
-                total_num_vars - NUM_SVO_ROUNDS,
-                "num_non_svo_z_vars ({}) + NUM_SVO_ROUNDS ({}) must be == total_num_vars ({})",
-                num_non_svo_z_vars,
-                NUM_SVO_ROUNDS,
-                total_num_vars
-            );
+        // Number of constraint variables that are NOT part of the SVO prefix Y.
+        let num_non_svo_constraint_vars = num_constraint_vars.saturating_sub(NUM_SVO_ROUNDS);
+        let num_non_svo_z_vars = num_step_vars + num_non_svo_constraint_vars;
+        assert_eq!(
+            num_non_svo_z_vars,
+            total_num_vars - NUM_SVO_ROUNDS,
+            "num_non_svo_z_vars ({}) + NUM_SVO_ROUNDS ({}) must be == total_num_vars ({})",
+            num_non_svo_z_vars,
+            NUM_SVO_ROUNDS,
+            total_num_vars
+        );
 
-            // --- Define Iteration Spaces for Non-SVO Z variables (x_out_val, x_in_val) ---
-            let potential_x_out_vars = total_num_vars / 2 - NUM_SVO_ROUNDS;
-            let iter_num_x_out_vars = std::cmp::min(potential_x_out_vars, num_step_vars);
-            let iter_num_x_in_vars = num_non_svo_z_vars - iter_num_x_out_vars;
+        // --- Define Iteration Spaces for Non-SVO Z variables (x_out_val, x_in_val) ---
+        let potential_x_out_vars = total_num_vars / 2 - NUM_SVO_ROUNDS;
+        let iter_num_x_out_vars = std::cmp::min(potential_x_out_vars, num_step_vars);
+        let iter_num_x_in_vars = num_non_svo_z_vars - iter_num_x_out_vars;
 
-            let iter_num_x_in_step_vars = num_step_vars - iter_num_x_out_vars;
-            let iter_num_x_in_constraint_vars = num_non_svo_constraint_vars;
-            assert_eq!(
-                iter_num_x_in_vars,
-                iter_num_x_in_step_vars + iter_num_x_in_constraint_vars
-            );
-            assert_eq!(num_non_svo_z_vars, iter_num_x_out_vars + iter_num_x_in_vars);
+        let iter_num_x_in_step_vars = num_step_vars - iter_num_x_out_vars;
+        let iter_num_x_in_constraint_vars = num_non_svo_constraint_vars;
+        assert_eq!(
+            iter_num_x_in_vars,
+            iter_num_x_in_step_vars + iter_num_x_in_constraint_vars
+        );
+        assert_eq!(num_non_svo_z_vars, iter_num_x_out_vars + iter_num_x_in_vars);
 
-            // Assertions about the layout of uniform + offset constraints
-            let num_cross_step_constraints = cross_step_constraints.len();
-            let num_uniform_r1cs_constraints = uniform_constraints.len();
-            let constraints_per_cycle = num_uniform_r1cs_constraints + num_cross_step_constraints;
-            let rem_num_uniform_r1cs_constraints = num_uniform_r1cs_constraints % Y_SVO_SPACE_SIZE;
+        // Assertions about the layout of uniform + offset constraints
+        let num_cross_step_constraints = cross_step_constraints.len();
+        let num_uniform_r1cs_constraints = uniform_constraints.len();
+        let constraints_per_cycle = num_uniform_r1cs_constraints + num_cross_step_constraints;
+        let rem_num_uniform_r1cs_constraints = num_uniform_r1cs_constraints % Y_SVO_SPACE_SIZE;
 
-            // TODO: remove this assertion by handling the switchover point more generally
-            // Currently, it should not fail with 3 or 4 SVO rounds
-            assert!(
+        // TODO: remove this assertion by handling the switchover point more generally
+        // Currently, it should not fail with 3 or 4 SVO rounds
+        assert!(
                 rem_num_uniform_r1cs_constraints + num_cross_step_constraints < Y_SVO_SPACE_SIZE,
                 "The last block of {} uniform constraints + {} cross step constraints must fit in a single block of size {}",
                 rem_num_uniform_r1cs_constraints,
@@ -1456,82 +1455,140 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
                 Y_SVO_SPACE_SIZE
             );
 
-            // --- Setup: E_in and E_out tables ---
-            // Call GruenSplitEqPolynomial::new_for_small_value with the determined variable splits.
-            let eq_poly = GruenSplitEqPolynomial::new_for_small_value(
-                tau,
-                iter_num_x_out_vars,
-                iter_num_x_in_vars,
-                NUM_SVO_ROUNDS,
-            );
-            let E_in_evals = eq_poly.E_in_current();
-            let E_out_vec = &eq_poly.E_out_vec;
+        // --- Setup: E_in and E_out tables ---
+        // Call GruenSplitEqPolynomial::new_for_small_value with the determined variable splits.
+        let eq_poly = GruenSplitEqPolynomial::new_for_small_value(
+            tau,
+            iter_num_x_out_vars,
+            iter_num_x_in_vars,
+            NUM_SVO_ROUNDS,
+        );
+        let E_in_evals = eq_poly.E_in_current();
+        let E_out_vec = &eq_poly.E_out_vec;
 
-            assert_eq!(E_out_vec.len(), NUM_SVO_ROUNDS);
+        assert_eq!(E_out_vec.len(), NUM_SVO_ROUNDS);
 
-            let num_x_out_vals = 1usize << iter_num_x_out_vars;
-            let num_x_in_step_vals = 1usize << iter_num_x_in_step_vars;
-            let _num_x_in_non_svo_constraint_vals: usize = 1usize << iter_num_x_in_constraint_vars;
+        let num_x_out_vals = 1usize << iter_num_x_out_vars;
+        let num_x_in_step_vals = 1usize << iter_num_x_in_step_vars;
+        let _num_x_in_non_svo_constraint_vals: usize = 1usize << iter_num_x_in_constraint_vars;
 
-            assert_eq!(
-                1usize << iter_num_x_in_vars,
-                E_in_evals.len(),
-                "num_x_in_vals ({}) != E_in_evals.len ({})",
-                1usize << iter_num_x_in_vars,
-                E_in_evals.len()
-            );
+        assert_eq!(
+            1usize << iter_num_x_in_vars,
+            E_in_evals.len(),
+            "num_x_in_vals ({}) != E_in_evals.len ({})",
+            1usize << iter_num_x_in_vars,
+            E_in_evals.len()
+        );
 
-            let num_shards = self.get_len() / shard_length;
-            let num_shard_vars = (shard_length.ilog2() + padded_num_constraints.ilog2()) as usize;
-            // println!(
-            //     "num_shards: {}, num_shard_vars: {}",
-            //     num_shards, num_shard_vars
-            // );
+        let num_shards = self.get_len() / shard_length;
+        assert!(num_shards > 0);
+        let num_shard_vars = (shard_length.ilog2() + padded_num_constraints.ilog2()) as usize;
+        // println!(
+        //     "num_shards: {}, num_shard_vars: {}",
+        //     num_shards, num_shard_vars
+        // );
 
-            let mut svo_accums_zero = [F::zero(); NUM_ACCUMS_EVAL_ZERO];
-            let mut svo_accums_infty = [F::zero(); NUM_ACCUMS_EVAL_INFTY];
+        let mut svo_accums_zero = [F::zero(); NUM_ACCUMS_EVAL_ZERO];
+        let mut svo_accums_infty = [F::zero(); NUM_ACCUMS_EVAL_INFTY];
 
-            // Without parallelisation, if is twice as slow as the else case.
-            // If we remove parallelisation from new_with_precompute(), it is slower than the else case.
-            if num_shard_vars < NUM_SVO_ROUNDS + iter_num_x_in_vars {
-                // println!("Shard smaller than an x_out_val block");
-                // There are multiple shards for every value of x_out_vars. So we iterate over every value of x_out_vars
-                // and stream all shards corresponding to that value of x_out_vars.
-                let shards_per_x_out_val = num_shards / num_x_out_vals;
-                // println!("shards_per_x_out_val: {}", shards_per_x_out_val);
-                // println!("num_shards: {}", num_shards);
-                // println!("num_x_out_vals: {}", num_x_out_vals);
-                // 1 << (NUM_SVO_ROUNDS + iter_num_x_in_vars - num_shard_vars);
-                for x_out_val in 0..num_x_out_vals {
+        // Without parallelisation, if is twice as slow as the else case.
+        // If we remove parallelisation from new_with_precompute(), it is slower than the else case.
+        if num_shard_vars < NUM_SVO_ROUNDS + iter_num_x_in_vars {
+            // println!("Shard smaller than an x_out_val block");
+            // There are multiple shards for every value of x_out_vars. So we iterate over every value of x_out_vars
+            // and stream all shards corresponding to that value of x_out_vars.
+            let shards_per_x_out_val = num_shards / num_x_out_vals;
+            // println!("shards_per_x_out_val: {}", shards_per_x_out_val);
+            // println!("num_shards: {}", num_shards);
+            // println!("num_x_out_vals: {}", num_x_out_vals);
+            // 1 << (NUM_SVO_ROUNDS + iter_num_x_in_vars - num_shard_vars);
+            for x_out_val in 0..num_x_out_vals {
+                // Accumulator for SUM_{x_in} E_in * P_ext for this specific x_out_val.
+                let mut tA_sum_for_current_x_out = [F::zero(); NUM_NONTRIVIAL_TERNARY_POINTS];
+                let mut current_x_out_svo_zero = [F::zero(); NUM_ACCUMS_EVAL_ZERO];
+                let mut current_x_out_svo_infty = [F::zero(); NUM_ACCUMS_EVAL_INFTY];
+
+                for shard_idx in 0..shards_per_x_out_val {
+                    // println!("block_idx = {}, shard_idx: {}", x_out_val, shard_idx);
+                    let shard = self.next_shard(shard_length);
+
+                    // TODO: Process entries in a single shard in parallel.
+                    let svo_blocks = shard.chunk_by(|a, b| {
+                        (a.index >> (NUM_SVO_ROUNDS + 1)) == (b.index >> (NUM_SVO_ROUNDS + 1))
+                    });
+
+                    for block in svo_blocks {
+                        let block_idx = block[0].index >> (NUM_SVO_ROUNDS + 1);
+                        let x_in_val = block_idx & ((1 << iter_num_x_in_vars) - 1);
+                        let E_in_val = E_in_evals[x_in_val];
+
+                        svo_helpers::process_svo_block(
+                            block,
+                            &mut tA_sum_for_current_x_out,
+                            E_in_val,
+                        );
+                    }
+                }
+
+                // All shards corresponding to x_out_val have been processed.
+                // Distribute the accumulated tA values to the SVO accumulators
+                svo_helpers::distribute_tA_to_svo_accumulators_generic::<NUM_SVO_ROUNDS, F>(
+                    &tA_sum_for_current_x_out,
+                    x_out_val,
+                    E_out_vec,
+                    &mut current_x_out_svo_zero,
+                    &mut current_x_out_svo_infty,
+                );
+
+                // Add current_x_out_svo_zero and current_x_out_svo_infty to svo_accums_zero and svo_accums_infty
+                for i in 0..NUM_ACCUMS_EVAL_ZERO {
+                    svo_accums_zero[i] += current_x_out_svo_zero[i];
+                }
+                for i in 0..NUM_ACCUMS_EVAL_INFTY {
+                    svo_accums_infty[i] += current_x_out_svo_infty[i];
+                }
+            }
+        } else {
+            // There are multiple values of x_out_vars in the same shard. So we stream a shard and divide it into blocks
+            // based on the value of x_out_vars.
+            let num_x_out_vals_per_shard = num_x_out_vals / num_shards;
+
+            for shard_idx in 0..num_shards {
+                let shard = self.next_shard(shard_length);
+
+                // TODO: Below we use chunk_by() twice, one for x_out_val and another for x_in_val.
+                // This means we are iterating over the shard twice. Rewrite the code to go over the shard only once.
+                let x_out_val_blocks = shard.chunk_by(|a, b| {
+                    (a.index >> (NUM_SVO_ROUNDS + iter_num_x_in_vars + 1))
+                        == (b.index >> (NUM_SVO_ROUNDS + iter_num_x_in_vars + 1))
+                });
+
+                for x_out_val_block in x_out_val_blocks {
                     // Accumulator for SUM_{x_in} E_in * P_ext for this specific x_out_val.
                     let mut tA_sum_for_current_x_out = [F::zero(); NUM_NONTRIVIAL_TERNARY_POINTS];
                     let mut current_x_out_svo_zero = [F::zero(); NUM_ACCUMS_EVAL_ZERO];
                     let mut current_x_out_svo_infty = [F::zero(); NUM_ACCUMS_EVAL_INFTY];
 
-                    for shard_idx in 0..shards_per_x_out_val {
-                        // println!("block_idx = {}, shard_idx: {}", x_out_val, shard_idx);
-                        let shard = self.next_shard(shard_length);
+                    let svo_blocks = x_out_val_block.chunk_by(|a, b| {
+                        (a.index >> (NUM_SVO_ROUNDS + 1)) == (b.index >> (NUM_SVO_ROUNDS + 1))
+                    });
 
-                        // TODO: Process entries in a single shard in parallel.
-                        let svo_blocks = shard.chunk_by(|a, b| {
-                            (a.index >> (NUM_SVO_ROUNDS + 1)) == (b.index >> (NUM_SVO_ROUNDS + 1))
-                        });
+                    for block in svo_blocks {
+                        let block_idx = block[0].index >> (NUM_SVO_ROUNDS + 1);
+                        let x_in_val = block_idx & ((1 << iter_num_x_in_vars) - 1);
+                        let E_in_val = E_in_evals[x_in_val];
 
-                        for block in svo_blocks {
-                            let block_idx = block[0].index >> (NUM_SVO_ROUNDS + 1);
-                            let x_in_val = block_idx & ((1 << iter_num_x_in_vars) - 1);
-                            let E_in_val = E_in_evals[x_in_val];
-
-                            svo_helpers::process_svo_block(
-                                block,
-                                &mut tA_sum_for_current_x_out,
-                                E_in_val,
-                            );
-                        }
+                        svo_helpers::process_svo_block(
+                            block,
+                            &mut tA_sum_for_current_x_out,
+                            E_in_val,
+                        );
                     }
 
-                    // All shards corresponding to x_out_val have been processed.
-                    // Distribute the accumulated tA values to the SVO accumulators
+                    // All blocks corresponding to x_out_val have been processed.
+                    // Distribute the accumulated tA values to the SVO accumulators.
+                    let x_out_val =
+                        x_out_val_block[0].index >> (NUM_SVO_ROUNDS + iter_num_x_in_vars + 1);
                     svo_helpers::distribute_tA_to_svo_accumulators_generic::<NUM_SVO_ROUNDS, F>(
                         &tA_sum_for_current_x_out,
                         x_out_val,
@@ -1548,68 +1605,9 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
                         svo_accums_infty[i] += current_x_out_svo_infty[i];
                     }
                 }
-            } else {
-                // There are multiple values of x_out_vars in the same shard. So we stream a shard and divide it into blocks
-                // based on the value of x_out_vars.
-                let num_x_out_vals_per_shard = num_x_out_vals / num_shards;
-
-                for shard_idx in 0..num_shards {
-                    let shard = self.next_shard(shard_length);
-
-                    // TODO: Below we use chunk_by() twice, one for x_out_val and another for x_in_val.
-                    // This means we are iterating over the shard twice. Rewrite the code to go over the shard only once.
-                    let x_out_val_blocks = shard.chunk_by(|a, b| {
-                        (a.index >> (NUM_SVO_ROUNDS + iter_num_x_in_vars + 1))
-                            == (b.index >> (NUM_SVO_ROUNDS + iter_num_x_in_vars + 1))
-                    });
-
-                    for x_out_val_block in x_out_val_blocks {
-                        // Accumulator for SUM_{x_in} E_in * P_ext for this specific x_out_val.
-                        let mut tA_sum_for_current_x_out =
-                            [F::zero(); NUM_NONTRIVIAL_TERNARY_POINTS];
-                        let mut current_x_out_svo_zero = [F::zero(); NUM_ACCUMS_EVAL_ZERO];
-                        let mut current_x_out_svo_infty = [F::zero(); NUM_ACCUMS_EVAL_INFTY];
-
-                        let svo_blocks = x_out_val_block.chunk_by(|a, b| {
-                            (a.index >> (NUM_SVO_ROUNDS + 1)) == (b.index >> (NUM_SVO_ROUNDS + 1))
-                        });
-
-                        for block in svo_blocks {
-                            let block_idx = block[0].index >> (NUM_SVO_ROUNDS + 1);
-                            let x_in_val = block_idx & ((1 << iter_num_x_in_vars) - 1);
-                            let E_in_val = E_in_evals[x_in_val];
-
-                            svo_helpers::process_svo_block(
-                                block,
-                                &mut tA_sum_for_current_x_out,
-                                E_in_val,
-                            );
-                        }
-
-                        // All blocks corresponding to x_out_val have been processed.
-                        // Distribute the accumulated tA values to the SVO accumulators.
-                        let x_out_val =
-                            x_out_val_block[0].index >> (NUM_SVO_ROUNDS + iter_num_x_in_vars + 1);
-                        svo_helpers::distribute_tA_to_svo_accumulators_generic::<NUM_SVO_ROUNDS, F>(
-                            &tA_sum_for_current_x_out,
-                            x_out_val,
-                            E_out_vec,
-                            &mut current_x_out_svo_zero,
-                            &mut current_x_out_svo_infty,
-                        );
-
-                        // Add current_x_out_svo_zero and current_x_out_svo_infty to svo_accums_zero and svo_accums_infty
-                        for i in 0..NUM_ACCUMS_EVAL_ZERO {
-                            svo_accums_zero[i] += current_x_out_svo_zero[i];
-                        }
-                        for i in 0..NUM_ACCUMS_EVAL_INFTY {
-                            svo_accums_infty[i] += current_x_out_svo_infty[i];
-                        }
-                    }
-                }
             }
-            (svo_accums_zero, svo_accums_infty)
         }
+        (svo_accums_zero, svo_accums_infty)
     }
 
     // TODO: Implement Dao-Thaler optimisation.
@@ -1839,8 +1837,7 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
         let mut binding_output_len = 0;
 
         for block in partially_bound_coeffs.chunk_by(|c1, c2| c1.index / 6 == c2.index / 6) {
-            binding_output_len +=
-                SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::binding_output_length(&block);
+            binding_output_len += Self::binding_output_length(&block);
         }
 
         // Prepare binding_scratch_space
@@ -1853,8 +1850,6 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
         }
 
         let mut scratch_space_idx = 0;
-        println!("r_i = {}", r[streaming_rounds_end]);
-        println!("binding round = {}", streaming_rounds_end);
         for block in partially_bound_coeffs.chunk_by(|c1, c2| c1.index / 6 == c2.index / 6) {
             if block.is_empty() {
                 continue;
@@ -1914,7 +1909,7 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
         std::mem::swap(&mut self.bound_coeffs, &mut self.binding_scratch_space);
     }
 
-    pub fn remaining_sumcheck_round<ProofTranscript: Transcript>(
+    pub fn remaining_sumcheck_rounds<ProofTranscript: Transcript>(
         &mut self,
         eq_poly: &mut GruenSplitEqPolynomial<F>,
         transcript: &mut ProofTranscript,
@@ -2161,6 +2156,29 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
             }
         }
         output_size
+    }
+
+    pub fn final_sumcheck_evals(&self) -> [F; 3] {
+        let mut final_az_eval = F::zero();
+        let mut final_bz_eval = F::zero();
+        let mut final_cz_eval = F::zero();
+        for i in 0..3 {
+            if let Some(coeff) = self.bound_coeffs.get(i) {
+                match coeff.index {
+                    0 => {
+                        final_az_eval = coeff.value;
+                    }
+                    1 => {
+                        final_bz_eval = coeff.value;
+                    }
+                    2 => {
+                        final_cz_eval = coeff.value;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        [final_az_eval, final_bz_eval, final_cz_eval]
     }
 }
 
