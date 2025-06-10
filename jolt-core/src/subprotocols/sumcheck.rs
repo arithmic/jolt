@@ -683,7 +683,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::with_capacity(num_rounds);
 
         let mid = num_rounds - num_rounds / 2;
-        
+
         let mut evals_1 = vec![F::zero(); 1 << mid];
         let mut evals_2 = vec![F::zero(); 1 << (num_rounds - mid)];
         evals_1[0] = F::one();
@@ -827,16 +827,15 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             })
             .reduce(|| F::zero(), |acc, x| acc + x);
 
-        let (mut second_half_proof, mut second_half_r, _) =
-            SumcheckInstanceProof::prove_arbitrary(
-                &second_half_claim,
-                (num_rounds - mid),
-                &mut bind_polys,
-                comb_func,
-                2,
-                BindingOrder::LowToHigh,
-                transcript,
-            );
+        let (mut second_half_proof, mut second_half_r, _) = SumcheckInstanceProof::prove_arbitrary(
+            &second_half_claim,
+            (num_rounds - mid),
+            &mut bind_polys,
+            comb_func,
+            2,
+            BindingOrder::LowToHigh,
+            transcript,
+        );
         compressed_polys.append(&mut second_half_proof.compressed_polys);
         r.append(&mut second_half_r);
 

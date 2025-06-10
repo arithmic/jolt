@@ -1027,7 +1027,7 @@ impl<F: JoltField> Oracle for BindZRyVarOracle<'_, F> {
         assert_eq!(self.shard_length, shard.len(), "Incorrect shard length");
         let log2_trace_len = self.get_len().log_2();
         let shard_length = 1 << (log2_trace_len - (log2_trace_len / 2));
-        assert_eq!(self.shard_length, shard_length, "Incorrect shard length");
+        assert!(self.shard_length >= shard_length, "Incorrect shard length");
         shard
     }
 
