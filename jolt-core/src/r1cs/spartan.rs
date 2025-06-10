@@ -1,4 +1,8 @@
 use crate::field::{JoltField, OptimizedMul};
+use std::marker::PhantomData;
+use tracer::instruction::RV32IMCycle;
+use tracing::{span, Level};
+use crate::jolt::vm::rv32i_vm::ProofTranscript;
 use crate::jolt::vm::JoltProverPreprocessing;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::poly::multilinear_polynomial::PolynomialEvaluation;
@@ -35,6 +39,7 @@ use super::builder::CombinedUniformBuilder;
 use crate::poly::compact_polynomial::SmallScalar;
 use crate::poly::split_eq_poly::SplitEqPolynomial;
 use crate::subprotocols::sumcheck::eq_plus_one_shards;
+use crate::poly::unipoly::CompressedUniPoly;
 use rayon::prelude::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
@@ -401,45 +406,31 @@ where
         constraint_builder: &CombinedUniformBuilder<F>,
         key: &UniformSpartanKey<F>,
         trace: &[RV32IMCycle],
+        shard_length: usize,
         opening_accumulator: &mut ProverOpeningAccumulator<F, ProofTranscript>,
         transcript: &mut ProofTranscript,
     ) -> Result<Self, SpartanError>
     where
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
-        // let input_polys_oracle = R1CSInputsOracle::new(trace, preprocessing);
-
-        let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
-            .par_iter()
-            .map(|var| var.generate_witness(trace, preprocessing))
-            .collect();
+        let input_polys_oracle = R1CSInputsOracle::new(shard_length, trace, preprocessing);
 
         let num_rounds_x = key.num_rows_bits();
 
         /* Sumcheck 1: Outer sumcheck */
 
         let tau: Vec<F> = transcript.challenge_vector(num_rounds_x);
-
+      
         let (outer_sumcheck_proof, outer_sumcheck_r, outer_sumcheck_claims) =
-            SumcheckInstanceProof::prove_spartan_small_value::<NUM_SVO_ROUNDS>(
+            SumcheckInstanceProof::prove_spartan_small_value_streaming::<NUM_SVO_ROUNDS>(
                 num_rounds_x,
                 constraint_builder.padded_rows_per_step(),
                 &constraint_builder.uniform_builder.constraints,
                 &constraint_builder.offset_equality_constraints,
-                &input_polys,
+                input_polys_oracle,
                 &tau,
                 transcript,
             );
-        // let (outer_sumcheck_proof, outer_sumcheck_r, outer_sumcheck_claims) =
-        //     SumcheckInstanceProof::prove_spartan_small_value_streaming::<NUM_SVO_ROUNDS>(
-        //         num_rounds_x,
-        //         constraint_builder.padded_rows_per_step(),
-        //         &constraint_builder.uniform_builder.constraints,
-        //         &constraint_builder.offset_equality_constraints,
-        //         input_polys_oracle,
-        //         &tau,
-        //         transcript,
-        //     );
         let outer_sumcheck_r: Vec<F> = outer_sumcheck_r.into_iter().rev().collect();
 
         ProofTranscript::append_scalars(transcript, &outer_sumcheck_claims);
@@ -482,9 +473,6 @@ where
             rx_step,
             inner_sumcheck_RLC,
         ));
-
-        let log2_trace_len = trace.len().log_2();
-        let shard_length = 1 << (log2_trace_len - (log2_trace_len / 2));
 
         // Binding z and z_shift polynomials at point rx_step
         let span = span!(Level::INFO, "binding_z_and_shift_z");
@@ -703,6 +691,7 @@ where
                 .chain(bind_shift_z_stream.into_iter())
                 .collect(),
         );
+
         assert_eq!(poly_z.len(), poly_ABC.len());
         let num_rounds_inner_sumcheck = poly_ABC.len().log_2();
 
@@ -792,6 +781,7 @@ where
             shard_length,
         );
         input_polys_oracle.reset();
+
         // opening_accumulator.append(
         //     &flattened_polys_ref,
         //     DensePolynomial::new(chis),
@@ -807,6 +797,7 @@ where
             num_shards,
             shard_length,
         );
+
 
         // opening_accumulator.append(
         //     &flattened_polys_ref,
