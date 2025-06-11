@@ -1187,6 +1187,7 @@ pub struct SpartanInterleavedPolynomialOracle<'a, const NUM_SVO_ROUNDS: usize, F
     pub bound_coeffs: Vec<SparseCoefficient<F>>,
 
     binding_scratch_space: Vec<SparseCoefficient<F>>,
+    shard_length: usize,
 }
 
 impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F> {
@@ -1196,6 +1197,7 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
         cross_step_constraints: &'a [OffsetEqConstraint],
         tau: &[F],
         input_polys_oracle: R1CSInputsOracle<'a, F>,
+        shard_length: usize,
     ) -> Self {
         let total_num_steps = input_polys_oracle.get_len();
 
@@ -1370,6 +1372,7 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
             func,
             bound_coeffs: vec![],
             binding_scratch_space: vec![],
+            shard_length,
         }
     }
 
@@ -1510,7 +1513,7 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
 
                 for shard_idx in 0..shards_per_x_out_val {
                     // println!("block_idx = {}, shard_idx: {}", x_out_val, shard_idx);
-                    let shard = self.next_shard(shard_length);
+                    let shard = self.next_shard();
 
                     // TODO: Process entries in a single shard in parallel.
                     let svo_blocks = shard.chunk_by(|a, b| {
@@ -1554,7 +1557,7 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
             let num_x_out_vals_per_shard = num_x_out_vals / num_shards;
 
             for shard_idx in 0..num_shards {
-                let shard = self.next_shard(shard_length);
+                let shard = self.next_shard();
 
                 // TODO: Below we use chunk_by() twice, one for x_out_val and another for x_in_val.
                 // This means we are iterating over the shard twice. Rewrite the code to go over the shard only once.
@@ -1634,7 +1637,7 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
             let mut eval_at_infinity = F::zero();
 
             for i in 0..num_shards {
-                let shard = self.next_shard(trace_shard_len);
+                let shard = self.next_shard();
 
                 let num_x_in_vars = eq_poly.E_in_current_len().log_2();
                 // let num_x_out_vars = eq_poly.E_out_current_len().log_2();
@@ -2185,9 +2188,9 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
 impl<'a, F: JoltField> Oracle for SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F> {
     type Shard = Vec<SparseCoefficient<i128>>;
 
-    fn next_shard(&mut self, shard_len: usize) -> Self::Shard {
-        let shard_idx = self.input_polys_oracle.get_step() / shard_len;
-        let input_polys_shard = self.input_polys_oracle.next_shard(shard_len);
+    fn next_shard(&mut self) -> Self::Shard {
+        let shard_idx = self.input_polys_oracle.get_step() / self.shard_length;
+        let input_polys_shard = self.input_polys_oracle.next_shard();
 
         if self.input_polys_oracle.peek().is_some() {
             let input_polys_peek = self.input_polys_oracle.peek().unwrap();

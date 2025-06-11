@@ -287,10 +287,10 @@ where
         )
         .ok()
         .unwrap();
-      
+
         let shard_len = std::cmp::min(256, trace_length) as usize;
-        
-         #[cfg(test)]
+
+        #[cfg(test)]
         let r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
             &preprocessing,
             &constraint_builder,
