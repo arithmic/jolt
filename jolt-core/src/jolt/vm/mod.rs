@@ -294,7 +294,7 @@ where
 
         #[cfg(test)]
         {
-            let shard_len = std::cmp::min(2048, trace_length) as usize;
+            let shard_len = std::cmp::min(2048, trace_length.next_power_of_two()) as usize;
             r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
                 &preprocessing,
                 &constraint_builder,
@@ -307,21 +307,6 @@ where
             .ok()
             .unwrap();
         }
-
-        let shard_len = std::cmp::min(256, trace_length) as usize;
-
-        #[cfg(test)]
-        let r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
-            &preprocessing,
-            &constraint_builder,
-            &spartan_key,
-            &trace,
-            shard_len,
-            &mut opening_accumulator,
-            &mut transcript,
-        )
-        .ok()
-        .unwrap();
 
         let instruction_proof = LookupsProof::prove(
             &preprocessing.shared.generators,

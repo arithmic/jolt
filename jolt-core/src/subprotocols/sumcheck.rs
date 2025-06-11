@@ -7,13 +7,13 @@ use crate::poly::eq_poly::EqPolynomial;
 use crate::poly::multilinear_polynomial::{
     BindingOrder, MultilinearPolynomial, PolynomialBinding, PolynomialEvaluation,
 };
-use crate::r1cs::spartan::{BindZRyVarOracle, R1CSInputsOracle};
 use crate::poly::spartan_interleaved_poly::{
     SpartanInterleavedPolynomial, SpartanInterleavedPolynomialOracle,
 };
 use crate::poly::split_eq_poly::{GruenSplitEqPolynomial, SplitEqPolynomial};
 use crate::poly::unipoly::{CompressedUniPoly, UniPoly};
 use crate::r1cs::builder::{Constraint, OffsetEqConstraint};
+use crate::r1cs::spartan::{BindZRyVarOracle, R1CSInputsOracle};
 use crate::utils::errors::ProofVerifyError;
 use crate::utils::math::Math;
 use crate::utils::mul_0_optimized;
@@ -644,7 +644,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             az_bz_poly_oracle.final_sumcheck_evals(),
         )
     }
-    
+
     // pub fn prove_spartan_small_value_streaming<'a, const NUM_SVO_ROUNDS: usize>(
     //     num_rounds: usize,
     //     trace_shard_len: usize, // This is the shard length of the trace. So size of each az, bz shard <= 128 * shard len.

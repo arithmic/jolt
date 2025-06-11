@@ -1188,7 +1188,6 @@ pub struct SpartanInterleavedPolynomialOracle<'a, const NUM_SVO_ROUNDS: usize, F
     pub bound_coeffs: Vec<SparseCoefficient<F>>,
 
     binding_scratch_space: Vec<SparseCoefficient<F>>,
-
 }
 
 impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F> {
@@ -1284,7 +1283,6 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
                                     let az_coeff = eq_a_eval - eq_b_eval;
                                     if !az_coeff.is_zero() {
                                         local_az_bz_coeffs.push((global_index, az_coeff).into());
-
                                     } else {
                                         let bz_coeff = eval_offset_lc(
                                             &constraint.cond,
@@ -2319,7 +2317,6 @@ impl<'a, F: JoltField> Oracle for SpartanInterleavedPolynomialOracle<'a, NUM_SVO
         self.input_polys_oracle.get_step()
     }
 }
-
 
 // pub struct SpartanInterleavedPolynomialOracle<'a, const NUM_SVO_ROUNDS: usize, F: JoltField> {
 //     pub step: usize,
