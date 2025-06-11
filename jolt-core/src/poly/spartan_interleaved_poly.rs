@@ -1497,26 +1497,24 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
                     time_to_stream_shards += now.elapsed();
 
                     // TODO: Process entries in a single shard in parallel.
-
-                    let svo_blocks = shard.chunk_by(|a, b| {
-                        (a.index >> (NUM_SVO_ROUNDS + 1)) == (b.index >> (NUM_SVO_ROUNDS + 1))
-                    });
-                    // println!("Time to chunk by: {:?}", now.elapsed());
-
                     let now = Instant::now();
-                    let blocks = svo_blocks.collect::<Vec<&[SparseCoefficient<i128>]>>();
+                    let svo_blocks = shard
+                        .chunk_by(|a, b| {
+                            (a.index >> (NUM_SVO_ROUNDS + 1)) == (b.index >> (NUM_SVO_ROUNDS + 1))
+                        })
+                        .collect::<Vec<&[SparseCoefficient<i128>]>>();
                     time_to_chunk_and_collect += now.elapsed();
 
                     let num_parallel_chunks =
-                        if blocks.len() < rayon::current_num_threads().next_power_of_two() {
+                        if svo_blocks.len() < rayon::current_num_threads().next_power_of_two() {
                             1
                         } else {
                             rayon::current_num_threads().next_power_of_two()
                         };
 
                     let now = Instant::now();
-                    let tA_sum_for_current_x_out_shard = blocks
-                        .par_chunks(blocks.len() / num_parallel_chunks)
+                    let tA_sum_for_current_x_out_shard = svo_blocks
+                        .par_chunks(svo_blocks.len() / num_parallel_chunks)
                         .map(|chunk| {
                             let mut tA_sum_for_current_x_out_chunk =
                                 [F::zero(); NUM_NONTRIVIAL_TERNARY_POINTS];
@@ -1612,8 +1610,12 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
                 time_to_compute_preprocessing
             );
         } else {
+            let mut time_to_stream_shards = std::time::Duration::ZERO;
+            let mut time_to_chunk_and_collect = std::time::Duration::ZERO;
+            let mut time_to_compute_preprocessing = std::time::Duration::ZERO;
             // There are multiple values of x_out_vars in the same shard. So we stream a shard and divide it into blocks
             // based on the value of x_out_vars.
+            println!("Shard larger than an x_out_val block");
             let num_x_out_vals_per_shard = num_x_out_vals / num_shards;
 
             for shard_idx in 0..num_shards {
@@ -1632,21 +1634,68 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
                     let mut current_x_out_svo_zero = [F::zero(); NUM_ACCUMS_EVAL_ZERO];
                     let mut current_x_out_svo_infty = [F::zero(); NUM_ACCUMS_EVAL_INFTY];
 
-                    let svo_blocks = x_out_val_block.chunk_by(|a, b| {
-                        (a.index >> (NUM_SVO_ROUNDS + 1)) == (b.index >> (NUM_SVO_ROUNDS + 1))
-                    });
+                    let svo_blocks = x_out_val_block
+                        .chunk_by(|a, b| {
+                            (a.index >> (NUM_SVO_ROUNDS + 1)) == (b.index >> (NUM_SVO_ROUNDS + 1))
+                        })
+                        .collect::<Vec<&[SparseCoefficient<i128>]>>();
 
-                    for block in svo_blocks {
-                        let block_idx = block[0].index >> (NUM_SVO_ROUNDS + 1);
-                        let x_in_val = block_idx & ((1 << iter_num_x_in_vars) - 1);
-                        let E_in_val = E_in_evals[x_in_val];
+                    let num_parallel_chunks =
+                        if svo_blocks.len() < rayon::current_num_threads().next_power_of_two() {
+                            1
+                        } else {
+                            rayon::current_num_threads().next_power_of_two()
+                        };
 
-                        svo_helpers::process_svo_block(
-                            block,
-                            &mut tA_sum_for_current_x_out,
-                            E_in_val,
+                    let now = Instant::now();
+                    tA_sum_for_current_x_out = svo_blocks
+                        .par_chunks(svo_blocks.len() / num_parallel_chunks)
+                        .map(|chunk| {
+                            let mut tA_sum_for_current_x_out_chunk =
+                                [F::zero(); NUM_NONTRIVIAL_TERNARY_POINTS];
+                            for block in chunk {
+                                let block_idx = block[0].index >> (NUM_SVO_ROUNDS + 1);
+                                let x_in_val = block_idx & ((1 << iter_num_x_in_vars) - 1);
+                                let E_in_val = E_in_evals[x_in_val];
+
+                                svo_helpers::process_svo_block(
+                                    block,
+                                    &mut tA_sum_for_current_x_out_chunk,
+                                    E_in_val,
+                                );
+                            }
+                            tA_sum_for_current_x_out_chunk
+                        })
+                        .reduce(
+                            || [F::zero(); NUM_NONTRIVIAL_TERNARY_POINTS],
+                            |tA_sum_for_current_x_out_acc, tA_sum_for_current_x_out_chunk| {
+                                let mut updated_tA_sum_for_current_x_out_acc =
+                                    tA_sum_for_current_x_out_acc;
+                                for i in 0..NUM_NONTRIVIAL_TERNARY_POINTS {
+                                    updated_tA_sum_for_current_x_out_acc[i] +=
+                                        tA_sum_for_current_x_out_chunk[i];
+                                }
+                                updated_tA_sum_for_current_x_out_acc
+                            },
                         );
-                    }
+
+                    // for i in 0..NUM_NONTRIVIAL_TERNARY_POINTS {
+                    //     tA_sum_for_current_x_out[i] += tA_sum_for_current_x_out_shard[i];
+                    // }
+
+                    time_to_compute_preprocessing += now.elapsed();
+
+                    // for block in svo_blocks {
+                    //     let block_idx = block[0].index >> (NUM_SVO_ROUNDS + 1);
+                    //     let x_in_val = block_idx & ((1 << iter_num_x_in_vars) - 1);
+                    //     let E_in_val = E_in_evals[x_in_val];
+                    //
+                    //     svo_helpers::process_svo_block(
+                    //         block,
+                    //         &mut tA_sum_for_current_x_out,
+                    //         E_in_val,
+                    //     );
+                    // }
 
                     // All blocks corresponding to x_out_val have been processed.
                     // Distribute the accumulated tA values to the SVO accumulators.

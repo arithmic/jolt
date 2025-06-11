@@ -276,22 +276,26 @@ where
         );
         transcript.append_scalar(&spartan_key.vk_digest);
 
+        let r1cs_proof: UniformSpartanProof<F, ProofTranscript>;
+
         #[cfg(not(test))]
-        let r1cs_proof = UniformSpartanProof::prove::<PCS>(
-            &preprocessing,
-            &constraint_builder,
-            &spartan_key,
-            &trace,
-            &mut opening_accumulator,
-            &mut transcript,
-        )
-        .ok()
-        .unwrap();
+        {
+            r1cs_proof = UniformSpartanProof::prove::<PCS>(
+                &preprocessing,
+                &constraint_builder,
+                &spartan_key,
+                &trace,
+                &mut opening_accumulator,
+                &mut transcript,
+            )
+            .ok()
+            .unwrap();
+        }
 
         #[cfg(test)]
         {
             let shard_len = std::cmp::min(2048, trace_length) as usize;
-            let r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
+            r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
                 &preprocessing,
                 &constraint_builder,
                 &spartan_key,
