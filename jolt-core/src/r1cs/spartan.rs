@@ -12,7 +12,6 @@ use crate::utils::math::Math;
 use crate::utils::streaming::Oracle;
 use crate::utils::thread::drop_in_background_thread;
 use std::marker::PhantomData;
-
 use tracer::instruction::RV32IMCycle;
 use tracing::{span, Level};
 
