@@ -1,4 +1,5 @@
 use crate::field::{JoltField, OptimizedMul};
+use crate::jolt::vm::rv32i_vm::ProofTranscript;
 use crate::jolt::vm::JoltProverPreprocessing;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::poly::multilinear_polynomial::PolynomialEvaluation;
@@ -11,7 +12,6 @@ use crate::utils::math::Math;
 use crate::utils::streaming::Oracle;
 use crate::utils::thread::drop_in_background_thread;
 use std::marker::PhantomData;
-use std::time::Instant;
 use tracer::instruction::RV32IMCycle;
 use tracing::{span, Level};
 
@@ -37,6 +37,7 @@ use crate::poly::split_eq_poly::SplitEqPolynomial;
 use crate::poly::unipoly::CompressedUniPoly;
 use crate::subprotocols::sumcheck::eq_plus_one_shards;
 use rayon::prelude::*;
+use tokio::time::Instant;
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
 pub enum SpartanError {
@@ -410,10 +411,14 @@ where
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
         let input_polys_oracle = R1CSInputsOracle::new(shard_length, trace, preprocessing);
+
+        let now = Instant::now();
         let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
             .par_iter()
             .map(|var| var.generate_witness(trace, preprocessing))
             .collect();
+
+        println!("generate_witness: {:?}", now.elapsed());
 
         let num_rounds_x = key.num_rows_bits();
 
@@ -424,7 +429,6 @@ where
         let (outer_sumcheck_proof, outer_sumcheck_r, outer_sumcheck_claims) =
             SumcheckInstanceProof::prove_spartan_small_value_streaming::<NUM_SVO_ROUNDS>(
                 num_rounds_x,
-                shard_length,
                 constraint_builder.padded_rows_per_step(),
                 &constraint_builder.uniform_builder.constraints,
                 &constraint_builder.offset_equality_constraints,
