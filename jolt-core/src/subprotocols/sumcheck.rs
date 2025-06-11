@@ -2,6 +2,8 @@
 #![allow(clippy::type_complexity)]
 
 use crate::field::{JoltField, OptimizedMul};
+use crate::jolt::vm::rv32i_vm::PCS;
+use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::poly::dense_mlpoly::DensePolynomial;
 use crate::poly::eq_poly::EqPolynomial;
 use crate::poly::multilinear_polynomial::{
@@ -498,16 +500,19 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         )
     }
 
-    pub fn prove_spartan_small_value_streaming<'a, const NUM_SVO_ROUNDS: usize>(
+    pub fn prove_spartan_small_value_streaming<'a, const NUM_SVO_ROUNDS: usize, PCS>(
         num_rounds: usize,
         padded_num_constraints: usize,
         uniform_constraints: &[Constraint],
         cross_step_constraints: &[OffsetEqConstraint],
-        input_polys_oracle: R1CSInputsOracle<'a, F>,
+        input_polys_oracle: R1CSInputsOracle<'a, F, PCS, ProofTranscript>,
         flattened_polys: &[MultilinearPolynomial<F>],
         tau: &[F],
         transcript: &mut ProofTranscript,
-    ) -> (Self, Vec<F>, [F; 3]) {
+    ) -> (Self, Vec<F>, [F; 3])
+    where
+        PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    {
         let trace_shard_len = input_polys_oracle.shard_length;
         assert!(trace_shard_len >= (num_rounds - padded_num_constraints.ilog2() as usize + 1) / 2);
 
@@ -515,22 +520,13 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let mut polys = Vec::new();
         let mut claim = F::zero();
 
-        let mut az_bz_poly_oracle = SpartanInterleavedPolynomialOracle::new(
-            padded_num_constraints,
-            uniform_constraints,
-            cross_step_constraints,
-            tau,
-            input_polys_oracle,
-        );
-
-        // let mut az_bz_poly_oracle = SpartanInterleavedPolynomialOracle::new(
-        //     padded_num_constraints,
-        //     uniform_constraints,
-        //     cross_step_constraints,
-        //     tau,
-        //     trace,
-        //     preprocessing,
-        // );
+        let mut az_bz_poly_oracle =
+            SpartanInterleavedPolynomialOracle::<F, PCS, ProofTranscript>::new(
+                padded_num_constraints,
+                uniform_constraints,
+                cross_step_constraints,
+                input_polys_oracle,
+            );
 
         #[cfg(test)]
         {
@@ -959,9 +955,10 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             })
             .reduce(|| (F::zero(), F::zero()), |a, b| (a.0 + b.0, a.1 + b.1))
     }
-    pub fn shift_sumcheck<'a, Func>(
+
+    pub fn shift_sumcheck<'a, Func, PCS>(
         num_rounds: usize,
-        stream_poly: &mut BindZRyVarOracle<F>,
+        stream_poly: &mut BindZRyVarOracle<F, PCS, ProofTranscript>,
         eq_rx_step: SplitEqPolynomial<F>,
         comb_func: Func,
         shard_length: usize,
@@ -969,6 +966,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
     ) -> (Self, Vec<F>)
     where
         Func: Fn(&[F]) -> F + Sync,
+        PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
         let num_polys = 2;
         let degree = 2;
