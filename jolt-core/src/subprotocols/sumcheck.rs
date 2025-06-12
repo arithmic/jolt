@@ -1001,94 +1001,108 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             eq_eval_idx_s_vec[s][0] = F::one() - val;
             eq_eval_idx_s_vec[s][1] = val;
         }
+        let mut polys = Vec::with_capacity(num_polys);
+        polys.push(stream_poly.next_shard());
+        polys.push(eq_plus_one_shards(
+            0,
+            shard_length,
+            &eq_rx_step,
+            num_x1_bits,
+            x1_bitmask,
+        ));
 
         for round in 0..mid {
             let mask = (1 << round) - 1;
             let mut accumulator = vec![F::zero(); degree + 1];
+
             for shard_idx in 0..num_shards {
                 let base_poly_idx = shard_length * shard_idx;
-                let mut polys = Vec::new();
-                polys.push(stream_poly.next_shard());
-
-                let step = stream_poly.get_step();
-                let step_shard = step - shard_length;
-
-                polys.push(eq_plus_one_shards(
-                    step_shard,
-                    shard_length,
-                    &eq_rx_step,
-                    num_x1_bits,
-                    x1_bitmask,
-                ));
-                let chunk_size = 1 << (round + 1);
-                let no_of_chunks = shard_length / chunk_size;
-                let acc = (0..no_of_chunks)
-                    .into_par_iter()
-                    .map(|chunk_iter| {
-                        let base_chunk_idx = chunk_iter * chunk_size;
-                        let witness_eval = (0..chunk_size)
-                            .map(|idx_in_chunk| {
-                                let idx_in_shard = base_chunk_idx + idx_in_chunk;
-                                let idx_in_poly = base_poly_idx + idx_in_shard;
-                                let bit = (idx_in_poly >> round) & 1;
-                                polys
-                                    .iter()
-                                    .map(|poly| {
-                                        let coeff = poly.get_coeff(idx_in_shard);
-                                        let eval_1 = evals_1[idx_in_poly & mask];
-                                        (0..=degree)
-                                            .map(|s| {
-                                                eval_1
-                                                    * eq_eval_idx_s_vec[s][bit]
-                                                        .mul_01_optimized(coeff)
+                (_, polys) = rayon::join(
+                    || {
+                        let chunk_size = 1 << (round + 1);
+                        let no_of_chunks = shard_length / chunk_size;
+                        let acc = (0..no_of_chunks)
+                            .into_par_iter()
+                            .map(|chunk_iter| {
+                                let base_chunk_idx = chunk_iter * chunk_size;
+                                let witness_eval = (0..chunk_size)
+                                    .map(|idx_in_chunk| {
+                                        let idx_in_shard = base_chunk_idx + idx_in_chunk;
+                                        let idx_in_poly = base_poly_idx + idx_in_shard;
+                                        let bit = (idx_in_poly >> round) & 1;
+                                        polys
+                                            .iter()
+                                            .map(|poly| {
+                                                let coeff = poly.get_coeff(idx_in_shard);
+                                                let eval_1 = evals_1[idx_in_poly & mask];
+                                                (0..=degree)
+                                                    .map(|s| {
+                                                        eval_1
+                                                            * eq_eval_idx_s_vec[s][bit]
+                                                                .mul_01_optimized(coeff)
+                                                    })
+                                                    .collect::<Vec<F>>()
                                             })
-                                            .collect::<Vec<F>>()
+                                            .collect::<Vec<Vec<F>>>()
                                     })
-                                    .collect::<Vec<Vec<F>>>()
+                                    .fold(
+                                        (|| vec![vec![F::zero(); degree + 1]; num_polys])(),
+                                        |mut acc, x| {
+                                            for i in 0..num_polys {
+                                                for j in 0..=degree {
+                                                    acc[i][j] += x[i][j];
+                                                }
+                                            }
+                                            acc
+                                        },
+                                    );
+                                (0..=degree)
+                                    .map(|s| {
+                                        comb_func(
+                                            &(0..num_polys)
+                                                .map(|k| witness_eval[k][s])
+                                                .collect::<Vec<F>>(),
+                                        )
+                                    })
+                                    .collect::<Vec<F>>()
                             })
                             .fold(
-                                (|| vec![vec![F::zero(); degree + 1]; num_polys])(),
+                                || vec![F::zero(); degree + 1],
                                 |mut acc, x| {
-                                    for i in 0..num_polys {
-                                        for j in 0..=degree {
-                                            acc[i][j] += x[i][j];
-                                        }
-                                    }
+                                    acc.iter_mut()
+                                        .zip(x.iter())
+                                        .for_each(|(acc, eval)| *acc += *eval);
+                                    acc
+                                },
+                            )
+                            .reduce(
+                                || vec![F::zero(); degree + 1],
+                                |mut acc, x| {
+                                    acc.iter_mut()
+                                        .zip(x.iter())
+                                        .for_each(|(acc, eval)| *acc += *eval);
                                     acc
                                 },
                             );
-                        (0..=degree)
-                            .map(|s| {
-                                comb_func(
-                                    &(0..num_polys)
-                                        .map(|k| witness_eval[k][s])
-                                        .collect::<Vec<F>>(),
-                                )
-                            })
-                            .collect::<Vec<F>>()
-                    })
-                    .fold(
-                        || vec![F::zero(); degree + 1],
-                        |mut acc, x| {
-                            acc.iter_mut()
-                                .zip(x.iter())
-                                .for_each(|(acc, eval)| *acc += *eval);
-                            acc
-                        },
-                    )
-                    .reduce(
-                        || vec![F::zero(); degree + 1],
-                        |mut acc, x| {
-                            acc.iter_mut()
-                                .zip(x.iter())
-                                .for_each(|(acc, eval)| *acc += *eval);
-                            acc
-                        },
-                    );
-                accumulator
-                    .iter_mut()
-                    .zip(acc.iter())
-                    .for_each(|(acc, eval)| *acc += *eval);
+                        accumulator
+                            .iter_mut()
+                            .zip(acc.iter())
+                            .for_each(|(acc, eval)| *acc += *eval);
+                    },
+                    || {
+                        let mut polys = Vec::with_capacity(num_polys);
+                        let len = stream_poly.get_len();
+                        polys.push(stream_poly.next_shard());
+                        polys.push(eq_plus_one_shards(
+                            (base_poly_idx + shard_length) % len,
+                            shard_length,
+                            &eq_rx_step,
+                            num_x1_bits,
+                            x1_bitmask,
+                        ));
+                        polys
+                    },
+                );
             }
 
             let univariate_poly = UniPoly::from_evals(&accumulator);
@@ -1100,55 +1114,61 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             compressed_polys.push(compressed_poly);
 
             update_evals(&mut evals_1, r_i, 1 << round);
-
-            stream_poly.reset();
         }
+        // stream_poly.reset();
 
         //Bind Polynomials
         let chunk_size = evals_1.len();
         let no_of_chunks = shard_length / chunk_size;
         let mut bind_poly1 = Vec::with_capacity(num_shards * no_of_chunks);
         let mut bind_poly2 = Vec::with_capacity(num_shards * no_of_chunks);
-        for _ in 0..num_shards {
-            let mut polys = Vec::with_capacity(num_polys);
-            polys.push(stream_poly.next_shard());
+        for shard_idx in 0..num_shards {
+            (_, polys) = rayon::join(
+                || {
+                    (0..no_of_chunks).for_each(|chunk_iter| {
+                        let start_idx = chunk_iter * chunk_size;
+                        let end_idx = start_idx + chunk_size;
+                        let (dot1, dot2) = into_optimal_iter!(start_idx..end_idx)
+                            .zip(optimal_iter!(evals_1))
+                            .map(|(i, eval)| (polys[0].get_coeff(i), polys[1].get_coeff(i), eval))
+                            .fold(
+                                || (F::zero(), F::zero()),
+                                |(acc1, acc2), (coeff1, coeff2, eval)| {
+                                    (acc1 + coeff1 * eval, acc2 + coeff2 * eval)
+                                },
+                            )
+                            .reduce(
+                                || (F::zero(), F::zero()),
+                                |(acc1, acc2), (sum1, sum2)| (acc1 + sum1, acc2 + sum2),
+                            );
 
-            let step = stream_poly.get_step();
-            let step_shard = step - shard_length;
-
-            polys.push(eq_plus_one_shards(
-                step_shard,
-                shard_length,
-                &eq_rx_step,
-                num_x1_bits,
-                x1_bitmask,
-            ));
-
-            (0..no_of_chunks).for_each(|chunk_iter| {
-                let start_idx = chunk_iter * chunk_size;
-                let end_idx = start_idx + chunk_size;
-                let (dot1, dot2) = into_optimal_iter!(start_idx..end_idx)
-                    .zip(optimal_iter!(evals_1))
-                    .map(|(i, eval)| (polys[0].get_coeff(i), polys[1].get_coeff(i), eval))
-                    .fold(
-                        || (F::zero(), F::zero()),
-                        |(acc1, acc2), (coeff1, coeff2, eval)| {
-                            (acc1 + coeff1 * eval, acc2 + coeff2 * eval)
-                        },
-                    )
-                    .reduce(
-                        || (F::zero(), F::zero()),
-                        |(acc1, acc2), (sum1, sum2)| (acc1 + sum1, acc2 + sum2),
-                    );
-
-                bind_poly1.push(dot1);
-                bind_poly2.push(dot2);
-            });
+                        bind_poly1.push(dot1);
+                        bind_poly2.push(dot2);
+                    });
+                },
+                || {
+                    let mut polys = Vec::with_capacity(num_polys);
+                    if shard_idx != num_shards - 1 {
+                        let len = stream_poly.get_len();
+                        polys.push(stream_poly.next_shard());
+                        polys.push(eq_plus_one_shards(
+                            ((shard_idx + 1) * shard_length) % len,
+                            shard_length,
+                            &eq_rx_step,
+                            num_x1_bits,
+                            x1_bitmask,
+                        ));
+                    }
+                    polys
+                },
+            );
         }
+
         let mut bind_polys = vec![
             MultilinearPolynomial::from(bind_poly1),
             MultilinearPolynomial::from(bind_poly2),
         ];
+
         let second_half_claim = (0..1 << (num_rounds - mid))
             .into_par_iter()
             .map(|i| {

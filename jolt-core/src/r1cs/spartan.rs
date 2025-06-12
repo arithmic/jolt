@@ -742,13 +742,12 @@ where
         let x1_bitmask = (1 << (num_x1_bits)) - 1;
 
         let shift_sumcheck_claim: F = (0..num_shards)
-            .map(|_| {
-                let mut polys = Vec::with_capacity(2);
-                polys.push(bindZ_oracle.next_shard());
-                let step = bindZ_oracle.get_step();
-                let step_shard = step - shard_length;
+            .map(|j| {
+                let mut polys_shard = Vec::with_capacity(2);
+                polys_shard.push(bindZ_oracle.next_shard());
+                let step_shard = j * shard_length;
 
-                polys.push(eq_plus_one_shards(
+                polys_shard.push(eq_plus_one_shards(
                     step_shard,
                     shard_length,
                     &eq_rx_step,
@@ -759,7 +758,8 @@ where
                 (0..shard_length)
                     .into_par_iter()
                     .map(|j| {
-                        let params: Vec<F> = polys.iter().map(|poly| poly.get_coeff(j)).collect();
+                        let params: Vec<F> =
+                            polys_shard.iter().map(|poly| poly.get_coeff(j)).collect();
                         comb_func(&params)
                     })
                     .sum::<F>()
@@ -971,7 +971,7 @@ pub struct BindZRyVarOracle<'a, F: JoltField> {
     pub step: usize,
     pub shard_length: usize,
     pub trace: &'a [RV32IMCycle],
-    pub func: Box<dyn (Fn(&[RV32IMCycle]) -> MultilinearPolynomial<F>) + 'a>,
+    pub func: Box<dyn (Fn(&[RV32IMCycle]) -> MultilinearPolynomial<F>) + Send + Sync + 'a>,
 }
 
 impl<'a, F: JoltField> BindZRyVarOracle<'a, F> {
@@ -1020,19 +1020,23 @@ impl<F: JoltField> Oracle for BindZRyVarOracle<'_, F> {
     fn next_shard(&mut self) -> Self::Shard {
         let shard = (self.func)(&self.trace[self.step..self.step + self.shard_length]);
         self.step += self.shard_length;
+        self.step %= self.trace.len();
         assert_eq!(self.shard_length, shard.len(), "Incorrect shard length");
+
+        //Make sure that the shard length is more than equal to the square root of trace length.
         let log2_trace_len = self.get_len().log_2();
         let shard_length = 1 << (log2_trace_len - (log2_trace_len / 2));
-        assert!(self.shard_length >= shard_length, "Incorrect shard length");
+        assert!(
+            self.shard_length >= shard_length,
+            "expected shard length {} is less than square root of trace length {}",
+            self.shard_length,
+            shard_length
+        );
         shard
     }
 
     fn reset(&mut self) {
-        if self.step == self.trace.len() {
-            self.step = 0;
-        } else {
-            panic!("Oracle can not be reset as trace hasn't been consumed completely");
-        }
+        self.step = 0;
     }
 
     fn get_len(&self) -> usize {
