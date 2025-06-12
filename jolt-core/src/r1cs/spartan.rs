@@ -80,7 +80,7 @@ pub struct R1CSInputsOracle<'a, F: JoltField> {
     pub shard_length: usize,
     pub step: usize,
     pub trace: &'a [RV32IMCycle],
-    pub func: Box<dyn (Fn(&[RV32IMCycle]) -> Vec<MultilinearPolynomial<F>>) + 'a>,
+    pub func: Box<dyn (Fn(&[RV32IMCycle]) -> Vec<MultilinearPolynomial<F>>) + Send + Sync + 'a>,
 }
 
 impl<'a, F: JoltField> R1CSInputsOracle<'a, F> {

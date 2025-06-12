@@ -27,7 +27,6 @@ use tracer::JoltDevice;
 use crate::msm::icicle;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::utils::errors::ProofVerifyError;
-use crate::utils::math::Math;
 use crate::utils::thread::drop_in_background_thread;
 use crate::utils::transcript::{AppendToTranscript, Transcript};
 
@@ -295,6 +294,7 @@ where
 
         #[cfg(test)]
         {
+            use crate::utils::math::Math;
             let shard_len = std::cmp::min(
                 trace.len(),
                 std::cmp::max(1 << (trace.len().log_2() - trace.len().log_2() / 2), 1024),

@@ -1182,6 +1182,8 @@ pub struct SpartanInterleavedPolynomialOracle<'a, const NUM_SVO_ROUNDS: usize, F
                 Vec<MultilinearPolynomial<F>>,
                 Vec<MultilinearPolynomial<F>>,
             ) -> Vec<SparseCoefficient<i128>>)
+            + Send
+            + Sync
             + 'a,
     >,
 
