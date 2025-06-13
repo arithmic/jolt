@@ -183,6 +183,8 @@ where
     where
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
+        let start_time = Instant::now();
+
         let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
             .par_iter()
             .map(|var| var.generate_witness(trace, preprocessing))
@@ -193,6 +195,9 @@ where
         /* Sumcheck 1: Outer sumcheck */
 
         let tau: Vec<F> = transcript.challenge_vector(num_rounds_x);
+
+        println!("\n ======== prove_spartan_small_value ====== started ");
+        let prove_spartan_small_value = Instant::now();
         let (outer_sumcheck_proof, outer_sumcheck_r, outer_sumcheck_claims) =
             SumcheckInstanceProof::prove_spartan_small_value::<NUM_SVO_ROUNDS>(
                 num_rounds_x,
@@ -203,6 +208,11 @@ where
                 &tau,
                 transcript,
             );
+
+        println!("prove_spartan_small_value time: {:?}", prove_spartan_small_value.elapsed());
+
+        println!("======== prove_spartan_small_value ====== ended \n");
+
         let outer_sumcheck_r: Vec<F> = outer_sumcheck_r.into_iter().rev().collect();
 
         ProofTranscript::append_scalars(transcript, &outer_sumcheck_claims);
@@ -282,6 +292,7 @@ where
             poly_evals[0] * poly_evals[1]
         };
 
+        let mut inner_sumcheck_proof_time = Instant::now();
         let (inner_sumcheck_proof, inner_sumcheck_r, _claims_inner) =
             SumcheckInstanceProof::prove_arbitrary(
                 &claim_inner_joint,
@@ -293,6 +304,7 @@ where
                 transcript,
             );
 
+        println!("inner_sumcheck_proof time: {:?}", inner_sumcheck_proof_time.elapsed());
         drop_in_background_thread(polys);
 
         /*  Sumcheck 3: Shift sumcheck
@@ -340,6 +352,9 @@ where
             })
             .reduce(|| F::zero(), |acc, x| acc + x);
 
+        let mut shift_sumcheck_proof_time = Instant::now();
+        println!("\n ======== prove_spartan_shift_sumcheck ====== started ");
+
         let (shift_sumcheck_proof, shift_sumcheck_r, _shift_sumcheck_claims) =
             SumcheckInstanceProof::prove_arbitrary(
                 &shift_sumcheck_claim,
@@ -350,6 +365,10 @@ where
                 BindingOrder::HighToLow,
                 transcript,
             );
+        println!("shift_sumcheck_proof_time time: {:?}", shift_sumcheck_proof_time.elapsed());
+
+        println!("\n ======== prove_spartan_shift_sumcheck ====== finished ");
+
 
         drop_in_background_thread(shift_sumcheck_polys);
 
@@ -385,6 +404,10 @@ where
             outer_sumcheck_claims[1],
             outer_sumcheck_claims[2],
         );
+
+        println!("spartan prove() function time: {:?}", start_time.elapsed());
+
+
         Ok(UniformSpartanProof {
             outer_sumcheck_proof,
             outer_sumcheck_claims,
@@ -410,6 +433,8 @@ where
     where
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
+        let start_time_prove_streaming = Instant::now();
+
         let input_polys_oracle = R1CSInputsOracle::new(shard_length, trace, preprocessing);
 
         let now = Instant::now();
@@ -426,6 +451,9 @@ where
 
         let tau: Vec<F> = transcript.challenge_vector(num_rounds_x);
 
+        let prove_streaming_spartan_small_value = Instant::now();
+
+        println!("\n ======== prove_spartan_small_value_streaming ====== started ");
         let (outer_sumcheck_proof, outer_sumcheck_r, outer_sumcheck_claims) =
             SumcheckInstanceProof::prove_spartan_small_value_streaming::<NUM_SVO_ROUNDS>(
                 num_rounds_x,
@@ -437,6 +465,10 @@ where
                 &tau,
                 transcript,
             );
+        println!("prove_streaming_spartan_small_value: {:?}", prove_streaming_spartan_small_value.elapsed());
+
+        println!("======== prove_spartan_small_value_streaming ====== ended \n");
+
         let outer_sumcheck_r: Vec<F> = outer_sumcheck_r.into_iter().rev().collect();
 
         ProofTranscript::append_scalars(transcript, &outer_sumcheck_claims);
@@ -710,6 +742,9 @@ where
             assert_eq!(poly_evals.len(), 2);
             poly_evals[0] * poly_evals[1]
         };
+        let mut inner_sumcheck_proof_time = Instant::now();
+
+        let mut inner_sumcheck_proof_time_streaming = Instant::now();
 
         let (inner_sumcheck_proof, inner_sumcheck_r, _claims_inner) =
             SumcheckInstanceProof::prove_arbitrary(
@@ -721,6 +756,7 @@ where
                 BindingOrder::HighToLow,
                 transcript,
             );
+        println!("inner_sumcheck_proof_time_streaming time: {:?}", inner_sumcheck_proof_time_streaming.elapsed());
 
         drop_in_background_thread(polys);
 
@@ -767,7 +803,9 @@ where
             .sum();
 
         bindZ_oracle.reset();
-        let start_time = Instant::now();
+        println!("\n ======== prove_spartan_shift_sumcheck_streaming ====== started ");
+
+        let shift_sumcheck_proof_time_stremaing = Instant::now();
         let (shift_sumcheck_proof, shift_sumcheck_r) = SumcheckInstanceProof::shift_sumcheck(
             num_rounds_shift_sumcheck,
             &mut bindZ_oracle,
@@ -776,7 +814,10 @@ where
             shard_length,
             transcript,
         );
-        println!("shift_sumcheck_proof time: {:?}", start_time.elapsed());
+        println!("shift_sumcheck_proof_streaming time: {:?}", shift_sumcheck_proof_time_stremaing.elapsed());
+
+        println!("\n ======== prove_spartan_shift_sumcheck_streaming ====== finished ");
+
         let shift_sumcheck_r: Vec<F> = shift_sumcheck_r.iter().rev().copied().collect();
 
         // Inner sumcheck evaluations: evaluate z on rx_step
@@ -818,6 +859,10 @@ where
             outer_sumcheck_claims[1],
             outer_sumcheck_claims[2],
         );
+
+        println!("spartan prove_streaming() function time: {:?}", start_time_prove_streaming.elapsed());
+
+
         Ok(UniformSpartanProof {
             outer_sumcheck_proof,
             outer_sumcheck_claims,

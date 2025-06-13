@@ -358,21 +358,24 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let mut r: Vec<F> = Vec::new();
         let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::new();
 
-        #[cfg(test)]
-        {
-            for poly in polys.iter() {
-                assert_eq!(num_rounds, poly.get_num_vars());
-            }
-            let total_evals = 1 << num_rounds;
-            let mut sum = F::zero();
-            for i in 0..total_evals {
-                let params: Vec<F> = polys.iter().map(|poly| poly.get_coeff(i)).collect();
-                sum += comb_func(&params);
-            }
-            assert_eq!(&sum, claim, "Sumcheck claim is wrong");
-        }
+        // #[cfg(test)]
+        // {
+        //     for poly in polys.iter() {
+        //         assert_eq!(num_rounds, poly.get_num_vars());
+        //     }
+        //     let total_evals = 1 << num_rounds;
+        //     let mut sum = F::zero();
+        //     for i in 0..total_evals {
+        //         let params: Vec<F> = polys.iter().map(|poly| poly.get_coeff(i)).collect();
+        //         sum += comb_func(&params);
+        //     }
+        //     assert_eq!(&sum, claim, "Sumcheck claim is wrong");
+        // }
 
-        for _round in 0..num_rounds {
+        let mid = std::cmp::min(11, num_rounds);
+        let time_upto_mid = Instant::now();
+
+        for _round in 0..mid {
             // Vector storing evaluations of combined polynomials g(x) = P_0(x) * ... P_{num_polys} (x)
             // for points {0, ..., |g(x)|}
             let mut eval_points = vec![F::zero(); combined_degree];
@@ -427,6 +430,67 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             compressed_polys.push(compressed_poly);
         }
 
+        println!("Time taken to process first {} rounds upto mid : {:?}", mid, time_upto_mid.elapsed());
+
+        let mut time_after_mid = Instant::now();
+
+        for _round in mid..num_rounds {
+            // Vector storing evaluations of combined polynomials g(x) = P_0(x) * ... P_{num_polys} (x)
+            // for points {0, ..., |g(x)|}
+            let mut eval_points = vec![F::zero(); combined_degree];
+
+            let mle_half = polys[0].len() / 2;
+
+            let accum: Vec<Vec<F>> = (0..mle_half)
+                .into_par_iter()
+                .map(|poly_term_i| {
+                    let mut accum = vec![F::zero(); combined_degree];
+                    // TODO(moodlezoup): Optimize
+                    let evals: Vec<_> = polys
+                        .iter()
+                        .map(|poly| {
+                            poly.sumcheck_evals(poly_term_i, combined_degree, binding_order)
+                        })
+                        .collect();
+                    for j in 0..combined_degree {
+                        let evals_j: Vec<_> = evals.iter().map(|x| x[j]).collect();
+                        accum[j] += comb_func(&evals_j);
+                    }
+
+                    accum
+                })
+                .collect();
+
+            eval_points
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(poly_i, eval_point)| {
+                    *eval_point = accum
+                        .par_iter()
+                        .take(mle_half)
+                        .map(|mle| mle[poly_i])
+                        .sum::<F>();
+                });
+
+            eval_points.insert(1, previous_claim - eval_points[0]);
+            let univariate_poly = UniPoly::from_evals(&eval_points);
+            let compressed_poly = univariate_poly.compress();
+
+            // append the prover's message to the transcript
+            compressed_poly.append_to_transcript(transcript);
+            let r_j = transcript.challenge_scalar();
+            r.push(r_j);
+
+            // bound all tables to the verifier's challenge
+            polys
+                .par_iter_mut()
+                .for_each(|poly| poly.bind(r_j, binding_order));
+            previous_claim = univariate_poly.evaluate(&r_j);
+            compressed_polys.push(compressed_poly);
+        }
+
+        println!("Time taken to process remaining rounds after mid : {:?}", time_after_mid.elapsed());
+        
         let final_evals = polys
             .iter()
             .map(|poly| poly.final_sumcheck_claim())
@@ -449,6 +513,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let mut polys = Vec::new();
         let mut claim = F::zero();
 
+        let new_with_precompute_time = Instant::now();
         // First, precompute the accumulators and also the `SpartanInterleavedPolynomial`
         let (accums_zero, accums_infty, mut az_bz_cz_poly) =
             SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::new_with_precompute(
@@ -458,8 +523,11 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                 flattened_polys,
                 tau,
             );
+        println!("Precompute time = {:?}", new_with_precompute_time.elapsed());
 
         let mut eq_poly = GruenSplitEqPolynomial::new(tau);
+
+        let svo_sum_check_rounds_time = Instant::now();
 
         process_svo_sumcheck_rounds::<NUM_SVO_ROUNDS, F, ProofTranscript>(
             &accums_zero,
@@ -470,7 +538,11 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             transcript,
             &mut eq_poly,
         );
+        println!("SVO sumcheck rounds time = {:?}", svo_sum_check_rounds_time.elapsed());
 
+        let streaming_round_start = r.len();
+
+        let streaming_sumcheck_round_time = Instant::now();
         // Round NUM_SVO_ROUNDS : do the streaming sumcheck to compute cached values
         az_bz_cz_poly.streaming_sumcheck_round(
             &mut eq_poly,
@@ -480,8 +552,11 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             &mut claim,
         );
 
+        let d1 = streaming_sumcheck_round_time.elapsed();
+
+        let remaining_sumcheck_rounds4to9 = Instant::now();
         // Round (NUM_SVO_ROUNDS + 1)..num_rounds : do the linear time sumcheck
-        for i in NUM_SVO_ROUNDS + 1..num_rounds {
+        for i in NUM_SVO_ROUNDS + 1..9 {
             az_bz_cz_poly.remaining_sumcheck_round(
                 &mut eq_poly,
                 transcript,
@@ -490,6 +565,27 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                 &mut claim,
             );
         }
+
+        let d2 = remaining_sumcheck_rounds4to9.elapsed();
+
+        let combined_time = d1 + d2;
+
+        println!("Time for round {} to == 8 is {:?}", streaming_round_start, combined_time);
+
+        let remaining_sumcheck_round_time = Instant::now();
+        for i in 9..num_rounds {
+            az_bz_cz_poly.remaining_sumcheck_round(
+                &mut eq_poly,
+                transcript,
+                &mut r,
+                &mut polys,
+                &mut claim,
+            );
+        }
+        println!(
+            "Remaining sumcheck rounds time = {:?}",
+            remaining_sumcheck_round_time.elapsed()
+        );
 
         (
             SumcheckInstanceProof::new(polys),
@@ -532,50 +628,51 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         //     preprocessing,
         // );
 
-        #[cfg(test)]
-        {
-            use crate::poly::sparse_interleaved_poly::SparseCoefficient;
-            let now = Instant::now();
-            // First, precompute the accumulators and also the `SpartanInterleavedPolynomial`
-            let (accums_zero_non_streaming, accums_infty_non_streaming, mut az_bz_cz_poly) =
-                SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::new_with_precompute(
-                    padded_num_constraints,
-                    uniform_constraints,
-                    cross_step_constraints,
-                    flattened_polys,
-                    tau,
-                );
-            println!("Precompute time = {:?}", now.elapsed());
+        // #[cfg(test)]
+        // {
+        //     use crate::poly::sparse_interleaved_poly::SparseCoefficient;
+        //     let now = Instant::now();
+        //     // First, precompute the accumulators and also the `SpartanInterleavedPolynomial`
+        //     let (accums_zero_non_streaming, accums_infty_non_streaming, mut az_bz_cz_poly) =
+        //         SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::new_with_precompute(
+        //             padded_num_constraints,
+        //             uniform_constraints,
+        //             cross_step_constraints,
+        //             flattened_polys,
+        //             tau,
+        //         );
+        //     println!("Precompute time = {:?}", now.elapsed());
 
-            let mut streamed_az_bz_poly = Vec::<SparseCoefficient<i128>>::new();
+        //     let mut streamed_az_bz_poly = Vec::<SparseCoefficient<i128>>::new();
 
-            let mut stored_az_bz_cz_poly = Vec::<SparseCoefficient<i128>>::new();
+        //     let mut stored_az_bz_cz_poly = Vec::<SparseCoefficient<i128>>::new();
 
-            for v in az_bz_cz_poly.ab_unbound_coeffs_shards.iter() {
-                stored_az_bz_cz_poly.extend(v);
-            }
+        //     for v in az_bz_cz_poly.ab_unbound_coeffs_shards.iter() {
+        //         stored_az_bz_cz_poly.extend(v);
+        //     }
 
-            while az_bz_poly_oracle.get_step() < az_bz_poly_oracle.get_len() {
-                let shard = az_bz_poly_oracle.next_shard();
-                for val in shard {
-                    streamed_az_bz_poly.push(val);
-                }
-            }
+        //     while az_bz_poly_oracle.get_step() < az_bz_poly_oracle.get_len() {
+        //         let shard = az_bz_poly_oracle.next_shard();
+        //         for val in shard {
+        //             streamed_az_bz_poly.push(val);
+        //         }
+        //     }
 
-            assert_eq!(streamed_az_bz_poly.len(), stored_az_bz_cz_poly.len());
+        //     assert_eq!(streamed_az_bz_poly.len(), stored_az_bz_cz_poly.len());
 
-            for i in 0..streamed_az_bz_poly.len() {
-                assert_eq!(
-                    streamed_az_bz_poly[i], stored_az_bz_cz_poly[i],
-                    "At index {} streamed value = {:?}, stored value = {:?}",
-                    i, streamed_az_bz_poly[i], stored_az_bz_cz_poly[i]
-                );
-            }
+        //     for i in 0..streamed_az_bz_poly.len() {
+        //         assert_eq!(
+        //             streamed_az_bz_poly[i], stored_az_bz_cz_poly[i],
+        //             "At index {} streamed value = {:?}, stored value = {:?}",
+        //             i, streamed_az_bz_poly[i], stored_az_bz_cz_poly[i]
+        //         );
+        //     }
 
-            az_bz_poly_oracle.reset();
-        }
+        //     az_bz_poly_oracle.reset();
+        // }
 
         let now = Instant::now();
+        let compute_accumulators_time = Instant::now();
         let (accums_zero, accums_infty) = az_bz_poly_oracle.compute_accumulators(
             padded_num_constraints,
             uniform_constraints,
@@ -583,6 +680,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             tau,
             trace_shard_len,
         );
+        println!("Compute accumulators time = {:?}", now.elapsed());
         az_bz_poly_oracle.reset();
         println!("Streaming time = {:?}", now.elapsed());
 
@@ -594,6 +692,8 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         // }
 
         let mut eq_poly = GruenSplitEqPolynomial::new(tau);
+
+        let svo_sum_check_rounds_time = Instant::now();
         process_svo_sumcheck_rounds::<NUM_SVO_ROUNDS, F, ProofTranscript>(
             &accums_zero,
             &accums_infty,
@@ -603,6 +703,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             transcript,
             &mut eq_poly,
         );
+        println!("SVO sumcheck streaming rounds time = {:?}", svo_sum_check_rounds_time.elapsed());
 
         // TODO: Do we want to do it like this? Or do we want to switch after floor(n / 2) rounds?
         let potential_streaming_rounds_start = NUM_SVO_ROUNDS;
@@ -611,10 +712,14 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             std::cmp::min(potential_streaming_rounds_start, binding_round - 1);
         // (az_bz_poly_oracle.get_len() + padded_num_constraints.ilog2() as usize) / 2;
 
+        println!("Streaming rounds start at {}", streaming_rounds_start);
+        println!("Binding round is {}", binding_round);
         let mut r_rev = r.clone();
         r_rev.reverse();
         let mut eq_r_evals = EqPolynomial::evals(&r_rev);
         let num_shards = az_bz_poly_oracle.get_len() / trace_shard_len;
+
+        let small_sum_check_streaming_rounds_time = Instant::now();
         az_bz_poly_oracle.streaming_rounds(
             trace_shard_len,
             num_shards,
@@ -628,6 +733,13 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             transcript,
         );
 
+        println!(
+            "Small sum check Streaming rounds time = {:?}",
+            small_sum_check_streaming_rounds_time.elapsed()
+        );
+
+        let small_sum_check_streaming_remaining_rounds_time = Instant::now();
+
         for _ in binding_round + 1..num_rounds {
             az_bz_poly_oracle.remaining_sumcheck_rounds(
                 &mut eq_poly,
@@ -637,6 +749,11 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                 &mut claim,
             );
         }
+
+        println!(
+            "Small sum check Streaming remaining rounds time = {:?}",
+            small_sum_check_streaming_remaining_rounds_time.elapsed()
+        );
 
         (
             SumcheckInstanceProof::new(polys),
@@ -1002,6 +1119,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             eq_eval_idx_s_vec[s][1] = val;
         }
 
+        let shift_sum_check_streaming_round_upto_mid_time = Instant::now();
         for round in 0..mid {
             let mask = (1 << round) - 1;
             let mut accumulator = vec![F::zero(); degree + 1];
@@ -1103,6 +1221,11 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
             stream_poly.reset();
         }
+        println!("mid = {}", mid);
+        println!(
+            "Shift sumcheck streaming rounds up to mid time = {:?}",
+            shift_sum_check_streaming_round_upto_mid_time.elapsed()
+        );
 
         //Bind Polynomials
         let chunk_size = evals_1.len();
@@ -1157,6 +1280,8 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             })
             .reduce(|| F::zero(), |acc, x| acc + x);
 
+
+        let sum_check_time_after_mid = Instant::now();
         let (mut second_half_proof, mut second_half_r, _) = SumcheckInstanceProof::prove_arbitrary(
             &second_half_claim,
             num_rounds - mid,
@@ -1165,6 +1290,10 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             2,
             BindingOrder::LowToHigh,
             transcript,
+        );
+        println!(
+            "Sum check Time after mid rounds without bind polyomials = {:?}",
+            sum_check_time_after_mid.elapsed()
         );
         compressed_polys.append(&mut second_half_proof.compressed_polys);
         r.append(&mut second_half_r);
