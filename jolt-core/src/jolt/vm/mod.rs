@@ -27,6 +27,7 @@ use tracer::JoltDevice;
 use crate::msm::icicle;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::utils::errors::ProofVerifyError;
+use crate::utils::math::Math;
 use crate::utils::thread::drop_in_background_thread;
 use crate::utils::transcript::{AppendToTranscript, Transcript};
 
@@ -278,35 +279,60 @@ where
 
         let r1cs_proof: UniformSpartanProof<F, ProofTranscript>;
 
-        #[cfg(not(test))]
-        {
-            r1cs_proof = UniformSpartanProof::prove::<PCS>(
-                &preprocessing,
-                &constraint_builder,
-                &spartan_key,
-                &trace,
-                &mut opening_accumulator,
-                &mut transcript,
-            )
-            .ok()
-            .unwrap();
-        }
+        let _r1cs_proof = UniformSpartanProof::prove::<PCS>(
+            &preprocessing,
+            &constraint_builder,
+            &spartan_key,
+            &trace,
+            &mut opening_accumulator,
+            &mut transcript,
+        )
+        .ok()
+        .unwrap();
 
-        #[cfg(test)]
-        {
-            let shard_len = std::cmp::min(2048, trace_length.next_power_of_two()) as usize;
-            r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
-                &preprocessing,
-                &constraint_builder,
-                &spartan_key,
-                &trace,
-                shard_len,
-                &mut opening_accumulator,
-                &mut transcript,
-            )
-            .ok()
-            .unwrap();
-        }
+        // let shard_len = std::cmp::min(1 << 15, trace_length.next_power_of_two()) as usize;
+        let shard_len = 1 << ((padded_trace_length.log_2() + 1) / 2);
+        r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
+            &preprocessing,
+            &constraint_builder,
+            &spartan_key,
+            &trace,
+            shard_len,
+            &mut opening_accumulator,
+            &mut transcript,
+        )
+        .ok()
+        .unwrap();
+
+        // #[cfg(not(test))]
+        // {
+        //     r1cs_proof = UniformSpartanProof::prove::<PCS>(
+        //         &preprocessing,
+        //         &constraint_builder,
+        //         &spartan_key,
+        //         &trace,
+        //         &mut opening_accumulator,
+        //         &mut transcript,
+        //     )
+        //     .ok()
+        //     .unwrap();
+        // }
+        //
+        // #[cfg(test)]
+        // {
+        //     let shard_len = std::cmp::min(2048, trace_length.next_power_of_two()) as usize;
+        //     r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
+        //         &preprocessing,
+        //         &constraint_builder,
+        //         &spartan_key,
+        //         &trace,
+        //         shard_len,
+        //         &mut opening_accumulator,
+        //         &mut transcript,
+        //     )
+        //     .ok()
+        //     .unwrap();
+        // }
 
         let instruction_proof = LookupsProof::prove(
             &preprocessing.shared.generators,
