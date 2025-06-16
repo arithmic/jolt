@@ -297,7 +297,10 @@ where
             use crate::utils::math::Math;
             let shard_len = std::cmp::min(
                 trace.len(),
-                std::cmp::max(1 << (trace.len().log_2() - trace.len().log_2() / 2), 1024),
+                std::cmp::max(
+                    1 << (trace.len().log_2() - trace.len().log_2() / 2),
+                    1 << 20,
+                ),
             );
             r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
                 &preprocessing,

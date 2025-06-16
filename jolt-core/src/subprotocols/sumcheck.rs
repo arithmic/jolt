@@ -975,10 +975,11 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let mut r: Vec<F> = Vec::with_capacity(num_rounds);
         let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::with_capacity(num_rounds);
 
-        let mid = num_rounds - num_rounds / 2;
+        let log2_shard = shard_length.log_2();
+        let split_at = num_rounds - log2_shard + 1;
 
-        let mut evals_1 = vec![F::zero(); 1 << mid];
-        let mut evals_2 = vec![F::zero(); 1 << (num_rounds - mid)];
+        let mut evals_1 = vec![F::zero(); (1 << split_at)];
+        let mut evals_2 = vec![F::zero(); 1 << (num_rounds - split_at)];
         evals_1[0] = F::one();
         evals_2[0] = F::one();
 
@@ -1011,7 +1012,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             x1_bitmask,
         ));
 
-        for round in 0..mid {
+        for round in 0..split_at {
             let mask = (1 << round) - 1;
             let mut accumulator = vec![F::zero(); degree + 1];
 
@@ -1115,7 +1116,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
             update_evals(&mut evals_1, r_i, 1 << round);
         }
-        // stream_poly.reset();
 
         //Bind Polynomials
         let chunk_size = evals_1.len();
@@ -1169,7 +1169,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             MultilinearPolynomial::from(bind_poly2),
         ];
 
-        let second_half_claim = (0..1 << (num_rounds - mid))
+        let second_half_claim = (0..1 << (num_rounds - split_at))
             .into_par_iter()
             .map(|i| {
                 let params: Vec<F> = bind_polys.iter().map(|poly| poly.get_coeff(i)).collect();
@@ -1179,7 +1179,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
         let (mut second_half_proof, mut second_half_r, _) = SumcheckInstanceProof::prove_arbitrary(
             &second_half_claim,
-            num_rounds - mid,
+            num_rounds - split_at,
             &mut bind_polys,
             comb_func,
             2,
