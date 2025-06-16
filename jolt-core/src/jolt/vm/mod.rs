@@ -292,9 +292,13 @@ where
         .ok()
         .unwrap();
 
-        // let shard_len = std::cmp::min(1 << 15, trace_length.next_power_of_two()) as usize;
-        // let shard_len = 1 << ((padded_trace_length.log_2() + 1) / 2);
-        let shard_len = 1 << 20;
+        let shard_len = std::cmp::min(
+            trace.len(),
+            std::cmp::max(
+                1 << (trace.len().log_2() - trace.len().log_2() / 2),
+                1 << 20,
+            ),
+        );
         r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
             &preprocessing,
             &constraint_builder,
@@ -306,36 +310,6 @@ where
         )
         .ok()
         .unwrap();
-
-        // #[cfg(not(test))]
-        // {
-        //     r1cs_proof = UniformSpartanProof::prove::<PCS>(
-        //         &preprocessing,
-        //         &constraint_builder,
-        //         &spartan_key,
-        //         &trace,
-        //         &mut opening_accumulator,
-        //         &mut transcript,
-        //     )
-        //     .ok()
-        //     .unwrap();
-        // }
-        //
-        // #[cfg(test)]
-        // {
-        //     let shard_len = std::cmp::min(2048, trace_length.next_power_of_two()) as usize;
-        //     r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
-        //         &preprocessing,
-        //         &constraint_builder,
-        //         &spartan_key,
-        //         &trace,
-        //         shard_len,
-        //         &mut opening_accumulator,
-        //         &mut transcript,
-        //     )
-        //     .ok()
-        //     .unwrap();
-        // }
 
         let instruction_proof = LookupsProof::prove(
             &preprocessing.shared.generators,

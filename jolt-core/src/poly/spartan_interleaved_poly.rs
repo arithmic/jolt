@@ -3,12 +3,11 @@ use super::{
     sparse_interleaved_poly::SparseCoefficient, split_eq_poly::GruenSplitEqPolynomial,
     unipoly::CompressedUniPoly,
 };
+
 use crate::jolt::vm::JoltProverPreprocessing;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
-use crate::poly::unipoly::UniPoly;
 use crate::r1cs::builder::shard_last_step_eval_offset_lc;
 use crate::r1cs::inputs::ALL_R1CS_INPUTS;
-use crate::r1cs::spartan::R1CSInputsOracle;
 use crate::subprotocols::sumcheck::process_eq_sumcheck_round;
 use crate::utils::streaming::Oracle;
 use crate::{
@@ -21,8 +20,8 @@ use crate::{
     },
 };
 use ark_ff::Zero;
-use ark_std::iterable::Iterable;
 use rayon::prelude::*;
+
 use rayon::ThreadPoolBuilder;
 use std::ops::Mul;
 use std::time::{Duration, Instant};
@@ -1654,7 +1653,6 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
                     let mut tA_sum_for_current_x_out = [F::zero(); NUM_NONTRIVIAL_TERNARY_POINTS];
                     let mut current_x_out_svo_zero = [F::zero(); NUM_ACCUMS_EVAL_ZERO];
                     let mut current_x_out_svo_infty = [F::zero(); NUM_ACCUMS_EVAL_INFTY];
-
                     let svo_blocks = x_out_val_block
                         .chunk_by(|a, b| {
                             (a.index >> (NUM_SVO_ROUNDS + 1)) == (b.index >> (NUM_SVO_ROUNDS + 1))
@@ -2054,7 +2052,6 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
                             // TODO: Refactor. Put this in a sepearte funciton or closure.
                             let num_x_in_vars = eq_poly.E_in_current_len().log_2();
                             // let num_x_out_vars = eq_poly.E_out_current_len().log_2();
-
                             let now = Instant::now();
                             let blocks = shard
                                 .chunk_by(|c1, c2| {
@@ -2694,11 +2691,6 @@ impl<'a, F: JoltField> Oracle for SpartanInterleavedPolynomialOracle<'a, NUM_SVO
 
     fn reset(&mut self) {
         self.step = 0;
-        // if self.step == self.trace.len() {
-        //     self.step = 0;
-        // } else {
-        //     panic!("Oracle can not be reset as trace hasn't been consumed completely");
-        // }
     }
 
     fn get_len(&self) -> usize {
