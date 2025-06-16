@@ -277,6 +277,8 @@ where
         );
         transcript.append_scalar(&spartan_key.vk_digest);
 
+        let mut transcript_1 = transcript.clone();
+
         let r1cs_proof: UniformSpartanProof<F, ProofTranscript>;
 
         let _r1cs_proof = UniformSpartanProof::prove::<PCS>(
@@ -285,13 +287,14 @@ where
             &spartan_key,
             &trace,
             &mut opening_accumulator,
-            &mut transcript,
+            &mut transcript_1,
         )
         .ok()
         .unwrap();
 
         // let shard_len = std::cmp::min(1 << 15, trace_length.next_power_of_two()) as usize;
-        let shard_len = 1 << ((padded_trace_length.log_2() + 1) / 2);
+        // let shard_len = 1 << ((padded_trace_length.log_2() + 1) / 2);
+        let shard_len = 1 << 20;
         r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
             &preprocessing,
             &constraint_builder,
