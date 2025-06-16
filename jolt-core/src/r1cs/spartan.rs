@@ -410,15 +410,9 @@ where
     where
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
-        let input_polys_oracle = R1CSInputsOracle::new(shard_length, trace, preprocessing);
-
-        let now = Instant::now();
-        let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
-            .par_iter()
-            .map(|var| var.generate_witness(trace, preprocessing))
-            .collect();
-
-        println!("generate_witness: {:?}", now.elapsed());
+        // We require that shard length be at least 2^{ceil{trace length / 2}}.
+        assert!(shard_length >= 1 << (trace.len().log_2() - trace.len().log_2() / 2));
+        assert!(shard_length.is_power_of_two());
 
         let num_rounds_x = key.num_rows_bits();
 
@@ -427,13 +421,14 @@ where
         let tau: Vec<F> = transcript.challenge_vector(num_rounds_x);
 
         let (outer_sumcheck_proof, outer_sumcheck_r, outer_sumcheck_claims) =
-            SumcheckInstanceProof::prove_spartan_small_value_streaming::<NUM_SVO_ROUNDS>(
+            SumcheckInstanceProof::prove_spartan_small_value_streaming::<NUM_SVO_ROUNDS, PCS>(
                 num_rounds_x,
                 constraint_builder.padded_rows_per_step(),
                 &constraint_builder.uniform_builder.constraints,
                 &constraint_builder.offset_equality_constraints,
-                input_polys_oracle,
-                &input_polys,
+                trace,
+                preprocessing,
+                shard_length,
                 &tau,
                 transcript,
             );

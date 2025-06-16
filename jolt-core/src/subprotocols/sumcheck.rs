@@ -24,10 +24,15 @@ use crate::utils::thread::drop_in_background_thread;
 use crate::utils::transcript::{AppendToTranscript, Transcript};
 use crate::{into_optimal_iter, optimal_iter};
 
+use crate::jolt::vm::JoltProverPreprocessing;
+use crate::poly::commitment::commitment_scheme::CommitmentScheme;
+use crate::poly::sparse_interleaved_poly::SparseCoefficient;
 use ark_serialize::*;
 use rayon::prelude::*;
 use std::marker::PhantomData;
+use std::time::Duration;
 use tokio::time::Instant;
+use tracer::instruction::RV32IMCycle;
 
 pub trait Bindable<F: JoltField>: Sync {
     fn bind(&mut self, r: F);
@@ -471,6 +476,8 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             &mut eq_poly,
         );
 
+        let mut non_streaming_time = Duration::ZERO;
+        let now = Instant::now();
         // Round NUM_SVO_ROUNDS : do the streaming sumcheck to compute cached values
         az_bz_cz_poly.streaming_sumcheck_round(
             &mut eq_poly,
@@ -489,7 +496,16 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                 &mut polys,
                 &mut claim,
             );
+            if i == 8 {
+                non_streaming_time += now.elapsed();
+            }
         }
+
+        // let binding_round = num_rounds - 20;
+        println!(
+            "Non streaming time for rounds 3 to binding rounds = {:?}",
+            non_streaming_time
+        );
 
         (
             SumcheckInstanceProof::new(polys),
@@ -498,19 +514,20 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         )
     }
 
-    pub fn prove_spartan_small_value_streaming<'a, const NUM_SVO_ROUNDS: usize>(
+    pub fn prove_spartan_small_value_streaming<'a, const NUM_SVO_ROUNDS: usize, PCS>(
         num_rounds: usize,
         padded_num_constraints: usize,
         uniform_constraints: &[Constraint],
         cross_step_constraints: &[OffsetEqConstraint],
-        input_polys_oracle: R1CSInputsOracle<'a, F>,
-        flattened_polys: &[MultilinearPolynomial<F>],
+        trace: &[RV32IMCycle],
+        preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
+        trace_shard_len: usize,
         tau: &[F],
         transcript: &mut ProofTranscript,
-    ) -> (Self, Vec<F>, [F; 3]) {
-        let trace_shard_len = input_polys_oracle.shard_length;
-        assert!(trace_shard_len >= (num_rounds - padded_num_constraints.ilog2() as usize + 1) / 2);
-
+    ) -> (Self, Vec<F>, [F; 3])
+    where
+        PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    {
         let mut r = Vec::new();
         let mut polys = Vec::new();
         let mut claim = F::zero();
@@ -520,60 +537,10 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             uniform_constraints,
             cross_step_constraints,
             tau,
-            input_polys_oracle,
+            trace,
+            trace_shard_len,
+            preprocessing,
         );
-
-        // let mut az_bz_poly_oracle = SpartanInterleavedPolynomialOracle::new(
-        //     padded_num_constraints,
-        //     uniform_constraints,
-        //     cross_step_constraints,
-        //     tau,
-        //     trace,
-        //     preprocessing,
-        // );
-
-        #[cfg(test)]
-        {
-            use crate::poly::sparse_interleaved_poly::SparseCoefficient;
-            let now = Instant::now();
-            // First, precompute the accumulators and also the `SpartanInterleavedPolynomial`
-            let (accums_zero_non_streaming, accums_infty_non_streaming, mut az_bz_cz_poly) =
-                SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::new_with_precompute(
-                    padded_num_constraints,
-                    uniform_constraints,
-                    cross_step_constraints,
-                    flattened_polys,
-                    tau,
-                );
-            println!("Precompute time = {:?}", now.elapsed());
-
-            let mut streamed_az_bz_poly = Vec::<SparseCoefficient<i128>>::new();
-
-            let mut stored_az_bz_cz_poly = Vec::<SparseCoefficient<i128>>::new();
-
-            for v in az_bz_cz_poly.ab_unbound_coeffs_shards.iter() {
-                stored_az_bz_cz_poly.extend(v);
-            }
-
-            while az_bz_poly_oracle.get_step() < az_bz_poly_oracle.get_len() {
-                let shard = az_bz_poly_oracle.next_shard();
-                for val in shard {
-                    streamed_az_bz_poly.push(val);
-                }
-            }
-
-            assert_eq!(streamed_az_bz_poly.len(), stored_az_bz_cz_poly.len());
-
-            for i in 0..streamed_az_bz_poly.len() {
-                assert_eq!(
-                    streamed_az_bz_poly[i], stored_az_bz_cz_poly[i],
-                    "At index {} streamed value = {:?}, stored value = {:?}",
-                    i, streamed_az_bz_poly[i], stored_az_bz_cz_poly[i]
-                );
-            }
-
-            az_bz_poly_oracle.reset();
-        }
 
         let now = Instant::now();
         let (accums_zero, accums_infty) = az_bz_poly_oracle.compute_accumulators(
@@ -584,14 +551,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             trace_shard_len,
         );
         az_bz_poly_oracle.reset();
-        println!("Streaming time = {:?}", now.elapsed());
-
-        // #[cfg(test)]
-        // {
-        //     assert_eq!(accums_zero, accums_zero_non_streaming);
-        //     assert_eq!(accums_infty, accums_infty_non_streaming);
-        //     println!("Streaming accumulators are equal to non-streaming accumulators");
-        // }
+        println!("Streaming SVO time = {:?}", now.elapsed());
 
         let mut eq_poly = GruenSplitEqPolynomial::new(tau);
         process_svo_sumcheck_rounds::<NUM_SVO_ROUNDS, F, ProofTranscript>(
@@ -604,12 +564,13 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             &mut eq_poly,
         );
 
-        // TODO: Do we want to do it like this? Or do we want to switch after floor(n / 2) rounds?
         let potential_streaming_rounds_start = NUM_SVO_ROUNDS;
-        let binding_round = (trace_shard_len.log_2() + padded_num_constraints.log_2() + 1) / 2;
+        let binding_round = num_rounds - trace_shard_len.log_2();
+        // let binding_round = (trace_shard_len.log_2() + padded_num_constraints.log_2()) / 2;
         let streaming_rounds_start =
             std::cmp::min(potential_streaming_rounds_start, binding_round - 1);
-        // (az_bz_poly_oracle.get_len() + padded_num_constraints.ilog2() as usize) / 2;
+
+        println!("Binding round = {}", binding_round);
 
         let mut r_rev = r.clone();
         r_rev.reverse();
@@ -644,146 +605,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             az_bz_poly_oracle.final_sumcheck_evals(),
         )
     }
-
-    // pub fn prove_spartan_small_value_streaming<'a, const NUM_SVO_ROUNDS: usize>(
-    //     num_rounds: usize,
-    //     trace_shard_len: usize, // This is the shard length of the trace. So size of each az, bz shard <= 128 * shard len.
-    //     padded_num_constraints: usize,
-    //     uniform_constraints: &[Constraint],
-    //     cross_step_constraints: &[OffsetEqConstraint],
-    //     flattened_polys_oracle: R1CSInputsOracle<'a, F>,
-    //     flattened_polys: &[MultilinearPolynomial<F>],
-    //     tau: &[F],
-    //     transcript: &mut ProofTranscript,
-    // ) -> (Self, Vec<F>, [F; 3]) {
-    //     assert!(trace_shard_len >= (num_rounds - padded_num_constraints.ilog2() as usize + 1) / 2);
-    //
-    //     let mut r = Vec::new();
-    //     let mut polys = Vec::new();
-    //     let mut claim = F::zero();
-    //
-    //     let mut az_bz_poly_oracle = SpartanInterleavedPolynomialOracle::new(
-    //         padded_num_constraints,
-    //         uniform_constraints,
-    //         cross_step_constraints,
-    //         tau,
-    //         flattened_polys_oracle,
-    //     );
-    //
-    //     #[cfg(test)]
-    //     {
-    //         let now = Instant::now();
-    //         // First, precompute the accumulators and also the `SpartanInterleavedPolynomial`
-    //         let (accums_zero_non_streaming, accums_infty_non_streaming, mut az_bz_cz_poly) =
-    //             SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::new_with_precompute(
-    //                 padded_num_constraints,
-    //                 uniform_constraints,
-    //                 cross_step_constraints,
-    //                 flattened_polys,
-    //                 tau,
-    //             );
-    //         println!("Precompute time = {:?}", now.elapsed());
-    //     }
-    //
-    //     // #[cfg(test)]
-    //     // {
-    //     //     let mut streamed_az_bz_poly = Vec::<SparseCoefficient<i128>>::new();
-    //     //
-    //     //     let mut stored_az_bz_cz_poly = Vec::<SparseCoefficient<i128>>::new();
-    //     //
-    //     //     for v in az_bz_cz_poly.ab_unbound_coeffs_shards.iter() {
-    //     //         stored_az_bz_cz_poly.extend(v);
-    //     //     }
-    //     //
-    //     //     while az_bz_poly_oracle.get_step() < az_bz_poly_oracle.get_len() {
-    //     //         let shard = az_bz_poly_oracle.next_shard(trace_shard_len);
-    //     //         for val in shard {
-    //     //             streamed_az_bz_poly.push(val);
-    //     //         }
-    //     //     }
-    //     //
-    //     //     assert_eq!(streamed_az_bz_poly.len(), stored_az_bz_cz_poly.len());
-    //     //
-    //     //     for i in 0..streamed_az_bz_poly.len() {
-    //     //         assert_eq!(
-    //     //             streamed_az_bz_poly[i], stored_az_bz_cz_poly[i],
-    //     //             "At index {} streamed value = {:?}, stored value = {:?}",
-    //     //             i, streamed_az_bz_poly[i], stored_az_bz_cz_poly[i]
-    //     //         );
-    //     //     }
-    //     //
-    //     //     az_bz_poly_oracle.reset();
-    //     // }
-    //
-    //     let now = Instant::now();
-    //     let (accums_zero, accums_infty) = az_bz_poly_oracle.compute_accumulators(
-    //         padded_num_constraints,
-    //         uniform_constraints,
-    //         cross_step_constraints,
-    //         tau,
-    //         trace_shard_len,
-    //     );
-    //     az_bz_poly_oracle.reset();
-    //     println!("Streaming time = {:?}", now.elapsed());
-    //
-    //     // #[cfg(test)]
-    //     // {
-    //     //     assert_eq!(accums_zero, accums_zero_non_streaming);
-    //     //     assert_eq!(accums_infty, accums_infty_non_streaming);
-    //     //     println!("Streaming accumulators are equal to non-streaming accumulators");
-    //     // }
-    //
-    //     let mut eq_poly = GruenSplitEqPolynomial::new(tau);
-    //     process_svo_sumcheck_rounds::<NUM_SVO_ROUNDS, F, ProofTranscript>(
-    //         &accums_zero,
-    //         &accums_infty,
-    //         &mut r,
-    //         &mut polys,
-    //         &mut claim,
-    //         transcript,
-    //         &mut eq_poly,
-    //     );
-    //
-    //     // TODO: Do we want to do it like this? Or do we want to switch after floor(n / 2) rounds?
-    //     let potential_streaming_rounds_start = NUM_SVO_ROUNDS;
-    //     let binding_round = (trace_shard_len.log_2() + padded_num_constraints.log_2() + 1) / 2;
-    //     let streaming_rounds_start =
-    //         std::cmp::min(potential_streaming_rounds_start, binding_round - 1);
-    //     // (az_bz_poly_oracle.get_len() + padded_num_constraints.ilog2() as usize) / 2;
-    //
-    //     let mut r_rev = r.clone();
-    //     r_rev.reverse();
-    //     let mut eq_r_evals = EqPolynomial::evals(&r_rev);
-    //     let num_shards = az_bz_poly_oracle.get_len() / trace_shard_len;
-    //     az_bz_poly_oracle.streaming_rounds(
-    //         trace_shard_len,
-    //         num_shards,
-    //         streaming_rounds_start,
-    //         binding_round,
-    //         &mut eq_poly,
-    //         &mut r,
-    //         &mut eq_r_evals,
-    //         &mut polys,
-    //         &mut claim,
-    //         transcript,
-    //     );
-    //
-    //     for _ in binding_round + 1..num_rounds {
-    //         az_bz_poly_oracle.remaining_sumcheck_rounds(
-    //             &mut eq_poly,
-    //             transcript,
-    //             &mut r,
-    //             &mut polys,
-    //             &mut claim,
-    //         );
-    //     }
-    //
-    //     (
-    //         SumcheckInstanceProof::new(polys),
-    //         r,
-    //         az_bz_poly_oracle.final_sumcheck_evals(),
-    //     )
-    // }
 
     #[tracing::instrument(skip_all)]
     // A specialized sumcheck implementation with the 0th round unrolled from the rest of the
@@ -978,7 +799,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let log2_shard = shard_length.log_2();
         let split_at = num_rounds - log2_shard + 1;
 
-        let mut evals_1 = vec![F::zero(); (1 << split_at)];
+        let mut evals_1 = vec![F::zero(); 1 << split_at];
         let mut evals_2 = vec![F::zero(); 1 << (num_rounds - split_at)];
         evals_1[0] = F::one();
         evals_2[0] = F::one();
@@ -995,7 +816,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
         let mut eq_eval_idx_s_vec = vec![vec![F::one(); 2]; degree + 1];
         let num_x1_bits = eq_rx_step.E1_len.log_2();
-        let x1_bitmask = (1 << (num_x1_bits)) - 1;
+        let x1_bitmask = (1 << num_x1_bits) - 1;
 
         for s in 0..=degree {
             let val = F::from_u64(s as u64);
@@ -1141,7 +962,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                                 || (F::zero(), F::zero()),
                                 |(acc1, acc2), (sum1, sum2)| (acc1 + sum1, acc2 + sum2),
                             );
-
                         bind_poly1.push(dot1);
                         bind_poly2.push(dot2);
                     });
