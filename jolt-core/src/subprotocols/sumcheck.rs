@@ -346,7 +346,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
     /// Returns (SumcheckInstanceProof, r_eval_point, final_evals)
     /// - `r_eval_point`: Final random point of evaluation
     /// - `final_evals`: Each of the polys evaluated at `r_eval_point`
-    #[tracing::instrument(skip_all, name = "Sumcheck.prove")]
+    #[tracing::instrument(skip_all, name = "prove_arbitrary")]
     pub fn prove_arbitrary<Func>(
         claim: &F,
         num_rounds: usize,
@@ -514,6 +514,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         )
     }
 
+    #[tracing::instrument(skip_all, name = "prove_spartan_small_value_streaming")]
     pub fn prove_spartan_small_value_streaming<'a, const NUM_SVO_ROUNDS: usize, PCS>(
         num_rounds: usize,
         padded_num_constraints: usize,
@@ -780,9 +781,13 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             })
             .reduce(|| (F::zero(), F::zero()), |a, b| (a.0 + b.0, a.1 + b.1))
     }
-    pub fn shift_sumcheck<'a, Func>(
+
+
+
+    #[tracing::instrument(skip_all, name = "shift_sumcheck")]
+    pub fn shift_sumcheck<'a, Func, PCS>(
         num_rounds: usize,
-        stream_poly: &mut BindZRyVarOracle<F>,
+        stream_poly: &mut BindZRyVarOracle<F, PCS, ProofTranscript>,
         eq_rx_step: SplitEqPolynomial<F>,
         comb_func: Func,
         shard_length: usize,
@@ -790,6 +795,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
     ) -> (Self, Vec<F>)
     where
         Func: Fn(&[F]) -> F + Sync,
+        PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
         let num_polys = 2;
         let degree = 2;

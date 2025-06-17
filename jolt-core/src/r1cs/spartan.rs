@@ -76,42 +76,54 @@ pub enum SpartanError {
 
 /// An oracle to stream all witness polynomials of the R1CS instance.
 /// This oracle is used by the shift sum-check of the Spartan prover.
-pub struct R1CSInputsOracle<'a, F: JoltField> {
+pub struct R1CSInputsOracle<'a, F: JoltField, PCS, ProofTranscript>
+where
+    PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    ProofTranscript: Transcript,
+{
     pub shard_length: usize,
     pub step: usize,
     pub trace: &'a [RV32IMCycle],
-    pub func: Box<dyn (Fn(&[RV32IMCycle]) -> Vec<MultilinearPolynomial<F>>) + Send + Sync + 'a>,
+    pub preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
 }
 
-impl<'a, F: JoltField> R1CSInputsOracle<'a, F> {
-    pub fn new<PCS, ProofTranscript>(
+impl<'a, F: JoltField, PCS, ProofTranscript> R1CSInputsOracle<'a, F, PCS, ProofTranscript>
+where
+    PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    ProofTranscript: Transcript,
+{
+    pub fn new(
         shard_length: usize,
         trace: &'a [RV32IMCycle],
         preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
-    ) -> Self
-    where
-        PCS: CommitmentScheme<ProofTranscript, Field = F>,
-        ProofTranscript: Transcript,
-    {
-        let func = Box::new(|trace_shard: &[RV32IMCycle]| {
-            ALL_R1CS_INPUTS
-                .par_iter()
-                .map(|var| var.generate_witness(trace_shard, preprocessing))
-                .collect()
-        });
-        R1CSInputsOracle {
+    ) -> Self {
+        Self {
             shard_length,
             step: 0,
             trace,
-            func,
+            preprocessing,
         }
+    }
+
+    pub fn compute_evals(&self, trace_shard: &[RV32IMCycle]) -> Vec<MultilinearPolynomial<F>> {
+        ALL_R1CS_INPUTS
+            .par_iter()
+            .map(|var| var.generate_witness(trace_shard, self.preprocessing))
+            .collect()
     }
 }
 
-impl<F: JoltField> Oracle for R1CSInputsOracle<'_, F> {
+
+impl<'a, F: JoltField, PCS, ProofTranscript> Oracle
+    for R1CSInputsOracle<'a, F, PCS, ProofTranscript>
+where
+    PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    ProofTranscript: Transcript,
+{
     type Shard = Vec<MultilinearPolynomial<F>>;
     fn next_shard(&mut self) -> Self::Shard {
-        let shard = (self.func)(&self.trace[self.step..self.step + self.shard_length]);
+        let shard = self.compute_evals(&self.trace[self.step..self.step + self.shard_length]);
+
         self.step += self.shard_length;
         shard
     }
@@ -129,7 +141,7 @@ impl<F: JoltField> Oracle for R1CSInputsOracle<'_, F> {
     }
     fn peek(&self) -> Option<Vec<MultilinearPolynomial<F>>> {
         if self.step < self.trace.len() {
-            Some((self.func)(&self.trace[self.step..self.step + 1]))
+            Some(self.compute_evals(&self.trace[self.step..self.step + 1]))
         } else {
             None
         }
@@ -962,58 +974,72 @@ where
     }
 }
 
-pub struct BindZRyVarOracle<'a, F: JoltField> {
+pub struct BindZRyVarOracle<
+    'a,
+    F: JoltField,
+    PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    ProofTranscript: Transcript,
+> {
     pub step: usize,
     pub shard_length: usize,
     pub trace: &'a [RV32IMCycle],
-    pub func: Box<dyn (Fn(&[RV32IMCycle]) -> MultilinearPolynomial<F>) + Send + Sync + 'a>,
+    pub preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
+    pub eq_ry_var: &'a [F],
 }
 
-impl<'a, F: JoltField> BindZRyVarOracle<'a, F> {
-    pub fn new<PCS, ProofTranscript>(
+impl<
+        'a,
+        F: JoltField,
+        PCS: CommitmentScheme<ProofTranscript, Field = F>,
+        ProofTranscript: Transcript,
+    > BindZRyVarOracle<'a, F, PCS, ProofTranscript> {
+
+    pub fn new(
         trace: &'a [RV32IMCycle],
         shard_length: usize,
         preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
         eq_ry_var: &'a [F],
-    ) -> Self
-    where
-        PCS: CommitmentScheme<ProofTranscript, Field = F>,
-        ProofTranscript: Transcript,
-    {
-        let func = move |trace_shard: &[RV32IMCycle]| {
-            let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
-                .par_iter()
-                .map(|var| var.generate_witness(trace_shard, preprocessing))
-                .collect();
-            let shard_length = trace_shard.len();
-            let sum_vec: Vec<F> = (0..shard_length)
-                .into_par_iter()
-                .map(|t| {
-                    input_polys
-                        .iter()
-                        .enumerate()
-                        .fold(F::zero(), |sum, (i, poly)| {
-                            sum + poly.scale_coeff(t, eq_ry_var[i], eq_ry_var[i])
-                        })
-                })
-                .collect();
-            MultilinearPolynomial::from(sum_vec)
-        };
-
-        BindZRyVarOracle {
-            shard_length,
+    ) -> Self {
+        Self {
             step: 0,
+            shard_length,
             trace,
-            func: Box::new(func),
+            preprocessing,
+            eq_ry_var,
         }
     }
-}
 
-impl<F: JoltField> Oracle for BindZRyVarOracle<'_, F> {
+    fn compute_evals(&self, shard: &[RV32IMCycle]) -> MultilinearPolynomial<F> {
+        let input_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
+            .par_iter()
+            .map(|var| var.generate_witness(shard, self.preprocessing))
+            .collect();
+
+        let shard_length = shard.len();
+        let sum_vec: Vec<F> = (0..shard_length)
+            .into_par_iter()
+            .map(|t| {
+                input_polys
+                    .iter()
+                    .enumerate()
+                    .fold(F::zero(), |sum, (i, poly)| {
+                        sum + poly.scale_coeff(t, self.eq_ry_var[i], self.eq_ry_var[i])
+                    })
+            })
+            .collect();
+
+        MultilinearPolynomial::from(sum_vec)
+    }
+}
+impl<'a, F: JoltField, PCS, ProofTranscript> Oracle
+    for BindZRyVarOracle<'a, F, PCS, ProofTranscript>
+where
+    PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    ProofTranscript: Transcript,{
     type Shard = MultilinearPolynomial<F>;
 
     fn next_shard(&mut self) -> Self::Shard {
-        let shard = (self.func)(&self.trace[self.step..self.step + self.shard_length]);
+        let shard = self.compute_evals(&self.trace[self.step..self.step + self.shard_length]);
         self.step += self.shard_length;
         self.step %= self.trace.len();
         assert_eq!(self.shard_length, shard.len(), "Incorrect shard length");
