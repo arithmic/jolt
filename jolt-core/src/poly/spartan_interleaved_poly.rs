@@ -96,10 +96,10 @@ impl<const NUM_SVO_ROUNDS: usize, F: JoltField> SpartanInterleavedPolynomial<NUM
     /// - Eval at infty: acc_3(infty, v_1, v_2), where v_1, v_2 \in {0, 1, infty}
     ///
     /// Total = 19 accumulators
-    #[tracing::instrument(
-        skip_all,
-        name = "NewSpartanInterleavedPolynomial::new_with_precompute"
-    )]
+    // #[tracing::instrument(
+    //     skip_all,
+    //     name = "NewSpartanInterleavedPolynomial::new_with_precompute"
+    // )]
     pub fn new_with_precompute(
         padded_num_constraints: usize,
         uniform_constraints: &[Constraint],
@@ -897,10 +897,10 @@ impl<const NUM_SVO_ROUNDS: usize, F: JoltField> SpartanInterleavedPolynomial<NUM
     ///
     /// We then process this to form `s_i(X) = l_i(X) * t_i(X)`, append `s_i.compress()` to the transcript,
     /// derive next challenge `r_i`, then bind both `eq_poly` and `bound_coeffs` with `r_i`.
-    #[tracing::instrument(
-        skip_all,
-        name = "NewSpartanInterleavedPolynomial::remaining_sumcheck_round"
-    )]
+    // #[tracing::instrument(
+    //     skip_all,
+    //     name = "NewSpartanInterleavedPolynomial::remaining_sumcheck_round"
+    // )]
     pub fn remaining_sumcheck_round<ProofTranscript: Transcript>(
         &mut self,
         eq_poly: &mut GruenSplitEqPolynomial<F>,
@@ -1177,24 +1177,29 @@ impl<const NUM_SVO_ROUNDS: usize, F: JoltField> SpartanInterleavedPolynomial<NUM
     }
 }
 
-pub struct SpartanInterleavedPolynomialOracle<'a, const NUM_SVO_ROUNDS: usize, F: JoltField> {
+pub struct SpartanInterleavedPolynomialOracle<'a, const NUM_SVO_ROUNDS: usize, F: JoltField,PCS, ProofTranscript>
+where
+    PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    ProofTranscript: Transcript, {
     pub step: usize,
     pub trace: &'a [RV32IMCycle],
     pub shard_length: usize,
-    pub func: Box<
-        dyn (Fn(usize, &[RV32IMCycle], Option<&[RV32IMCycle]>) -> Vec<SparseCoefficient<i128>>)
-            + Send
-            + Sync
-            + 'a,
-    >,
-
+    pub padded_num_constraints: usize,
+    pub uniform_constraints: &'a [Constraint],
+    pub cross_step_constraints: &'a [OffsetEqConstraint],
+    pub preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
     pub bound_coeffs: Vec<SparseCoefficient<F>>,
-
     binding_scratch_space: Vec<SparseCoefficient<F>>,
+
 }
 
-impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F> {
-    pub fn new<PCS, ProofTranscript>(
+impl<'a, F: JoltField, PCS, ProofTranscript>
+    SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS,F, PCS, ProofTranscript>
+where
+    PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    ProofTranscript: Transcript,{
+
+    pub fn new(
         padded_num_constraints: usize,
         uniform_constraints: &'a [Constraint],
         cross_step_constraints: &'a [OffsetEqConstraint],
@@ -1207,169 +1212,165 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
         ProofTranscript: Transcript,
     {
-        let total_num_steps = trace.len();
-
-        let func = Box::new(
-            move |shard_idx: usize,
-                  trace_shard: &[RV32IMCycle],
-                  trace_peek: Option<&[RV32IMCycle]>| {
-                let shard_length = trace_shard.len();
-                let input_polys_shard: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
-                    .par_iter()
-                    .map(|var| var.generate_witness(trace_shard, preprocessing))
-                    .collect();
-                let input_polys_peek: Vec<MultilinearPolynomial<F>> = if trace_peek.is_some() {
-                    ALL_R1CS_INPUTS
-                        .par_iter()
-                        .map(|var| var.generate_witness(trace_peek.unwrap(), preprocessing))
-                        .collect()
-                } else {
-                    Default::default()
-                };
-
-                let num_chunks = std::cmp::min(
-                    shard_length,
-                    rayon::current_num_threads().next_power_of_two() * 8,
-                );
-                let chunk_size = shard_length / num_chunks;
-
-                let az_bz_coeffs: Vec<SparseCoefficient<i128>> = (0..num_chunks)
-                    .into_par_iter()
-                    .flat_map_iter(|chunk_index| {
-                        let mut local_az_bz_coeffs =
-                            Vec::with_capacity(2 * chunk_size * padded_num_constraints);
-
-                        for step_index in chunk_size * chunk_index..chunk_size * (chunk_index + 1) {
-                            // Process the uniform constraints
-                            for (constraint_index, constraint) in
-                                uniform_constraints.iter().enumerate()
-                            {
-                                let global_index = 2
-                                    * ((step_index + shard_idx * shard_length)
-                                        * padded_num_constraints
-                                        + constraint_index);
-
-                                // Az
-                                let mut az_coeff = 0;
-                                if !constraint.a.terms().is_empty() {
-                                    az_coeff =
-                                        constraint.a.evaluate_row(&input_polys_shard, step_index);
-                                    if !az_coeff.is_zero() {
-                                        local_az_bz_coeffs.push((global_index, az_coeff).into());
-                                    }
-                                }
-                                // Bz
-                                let mut bz_coeff = 0;
-                                if !constraint.b.terms().is_empty() {
-                                    bz_coeff =
-                                        constraint.b.evaluate_row(&input_polys_shard, step_index);
-                                    if !bz_coeff.is_zero() {
-                                        local_az_bz_coeffs
-                                            .push((global_index + 1, bz_coeff).into());
-                                    }
-                                }
-                            }
-
-                            // Process the cross-step constraints
-                            let next_step_index =
-                                if step_index + shard_idx * shard_length + 1 < total_num_steps {
-                                    Some(step_index + 1)
-                                } else {
-                                    None
-                                };
-
-                            for (constraint_index, constraint) in
-                                cross_step_constraints.iter().enumerate()
-                            {
-                                let global_index = 2
-                                    * ((step_index + shard_idx * shard_length)
-                                        * padded_num_constraints
-                                        + uniform_constraints.len()
-                                        + constraint_index);
-
-                                if next_step_index.is_none()
-                                    || (next_step_index.is_some()
-                                        && next_step_index.unwrap() < shard_length)
-                                {
-                                    // Az
-                                    let eq_a_eval = eval_offset_lc(
-                                        &constraint.a,
-                                        &input_polys_shard,
-                                        step_index,
-                                        next_step_index,
-                                    );
-                                    let eq_b_eval = eval_offset_lc(
-                                        &constraint.b,
-                                        &input_polys_shard,
-                                        step_index,
-                                        next_step_index,
-                                    );
-                                    let az_coeff = eq_a_eval - eq_b_eval;
-                                    if !az_coeff.is_zero() {
-                                        local_az_bz_coeffs.push((global_index, az_coeff).into());
-                                    } else {
-                                        let bz_coeff = eval_offset_lc(
-                                            &constraint.cond,
-                                            &input_polys_shard,
-                                            step_index,
-                                            next_step_index,
-                                        );
-                                        if !bz_coeff.is_zero() {
-                                            local_az_bz_coeffs
-                                                .push((global_index + 1, bz_coeff).into());
-                                        }
-                                    }
-                                } else {
-                                    let eq_a_eval = shard_last_step_eval_offset_lc(
-                                        &constraint.a,
-                                        &input_polys_shard,
-                                        &input_polys_peek,
-                                        step_index,
-                                        next_step_index,
-                                    );
-                                    let eq_b_eval = shard_last_step_eval_offset_lc(
-                                        &constraint.b,
-                                        &input_polys_shard,
-                                        &input_polys_peek,
-                                        step_index,
-                                        next_step_index,
-                                    );
-
-                                    let az_coeff = eq_a_eval - eq_b_eval;
-                                    if !az_coeff.is_zero() {
-                                        local_az_bz_coeffs.push((global_index, az_coeff).into());
-                                    } else {
-                                        let bz_coeff = shard_last_step_eval_offset_lc(
-                                            &constraint.cond,
-                                            &input_polys_shard,
-                                            &input_polys_peek,
-                                            step_index,
-                                            next_step_index,
-                                        );
-                                        if !bz_coeff.is_zero() {
-                                            local_az_bz_coeffs
-                                                .push((global_index + 1, bz_coeff).into());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        local_az_bz_coeffs
-                    })
-                    .collect();
-
-                az_bz_coeffs
-            },
-        );
-
         SpartanInterleavedPolynomialOracle {
             step: 0,
             trace,
             shard_length,
-            func,
+            uniform_constraints,
+            cross_step_constraints,
+            padded_num_constraints,
             bound_coeffs: vec![],
             binding_scratch_space: vec![],
+            preprocessing,
         }
+    }
+
+    pub fn compute_evals(
+        &self,
+        shard_idx: usize,
+        trace_shard: &[RV32IMCycle],
+        trace_peek: Option<&[RV32IMCycle]>,
+    ) -> Vec<SparseCoefficient<i128>>
+    where
+        PCS: CommitmentScheme<ProofTranscript, Field = F>,
+        ProofTranscript: Transcript,
+    {
+        let total_num_steps = self.trace.len();
+        let shard_length = trace_shard.len();
+
+        let input_polys_shard: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
+            .par_iter()
+            .map(|var| var.generate_witness(trace_shard, self.preprocessing))
+            .collect();
+
+        let input_polys_peek: Vec<MultilinearPolynomial<F>> = if let Some(peek) = trace_peek {
+            ALL_R1CS_INPUTS
+                .par_iter()
+                .map(|var| var.generate_witness(peek, self.preprocessing))
+                .collect()
+        } else {
+            Default::default()
+        };
+
+        let num_chunks = std::cmp::min(
+            shard_length,
+            rayon::current_num_threads().next_power_of_two() * 8,
+        );
+        let chunk_size = shard_length / num_chunks;
+
+        (0..num_chunks)
+            .into_par_iter()
+            .flat_map_iter(|chunk_index| {
+                let mut local_az_bz_coeffs =
+                    Vec::with_capacity(2 * chunk_size * self.padded_num_constraints);
+
+                for step_index in chunk_size * chunk_index..chunk_size * (chunk_index + 1) {
+                    // Uniform constraints
+                    for (constraint_index, constraint) in self.uniform_constraints.iter().enumerate() {
+                        let global_index = 2
+                            * ((step_index + shard_idx * shard_length) * self.padded_num_constraints
+                                + constraint_index);
+
+                        let az_coeff = constraint
+                            .a
+                            .evaluate_row(&input_polys_shard, step_index);
+                        if !az_coeff.is_zero() {
+                            local_az_bz_coeffs.push((global_index, az_coeff).into());
+                        }
+
+                        let bz_coeff = constraint
+                            .b
+                            .evaluate_row(&input_polys_shard, step_index);
+                        if !bz_coeff.is_zero() {
+                            local_az_bz_coeffs.push((global_index + 1, bz_coeff).into());
+                        }
+                    }
+
+                    // Cross-step constraints
+                    let next_step_index = if step_index + shard_idx * shard_length + 1 < total_num_steps {
+                        Some(step_index + 1)
+                    } else {
+                        None
+                    };
+
+                    for (constraint_index, constraint) in self.cross_step_constraints.iter().enumerate() {
+                        let global_index = 2
+                            * ((step_index + shard_idx * shard_length) * self.padded_num_constraints
+                                + self.uniform_constraints.len()
+                                + constraint_index);
+
+                        let (az_coeff, bz_coeff) = if next_step_index.is_some()
+                            && next_step_index.unwrap() < shard_length
+                        {
+                            let eq_a_eval = eval_offset_lc(
+                                &constraint.a,
+                                &input_polys_shard,
+                                step_index,
+                                next_step_index,
+                            );
+                            let eq_b_eval = eval_offset_lc(
+                                &constraint.b,
+                                &input_polys_shard,
+                                step_index,
+                                next_step_index,
+                            );
+                            let diff = eq_a_eval - eq_b_eval;
+                            if !diff.is_zero() {
+                                (Some((global_index, diff)), None)
+                            } else {
+                                let cond = eval_offset_lc(
+                                    &constraint.cond,
+                                    &input_polys_shard,
+                                    step_index,
+                                    next_step_index,
+                                );
+                                (None, Some((global_index + 1, cond)))
+                            }
+                        } else {
+                            let eq_a_eval = shard_last_step_eval_offset_lc(
+                                &constraint.a,
+                                &input_polys_shard,
+                                &input_polys_peek,
+                                step_index,
+                                next_step_index,
+                            );
+                            let eq_b_eval = shard_last_step_eval_offset_lc(
+                                &constraint.b,
+                                &input_polys_shard,
+                                &input_polys_peek,
+                                step_index,
+                                next_step_index,
+                            );
+                            let diff = eq_a_eval - eq_b_eval;
+                            if !diff.is_zero() {
+                                (Some((global_index, diff)), None)
+                            } else {
+                                let cond = shard_last_step_eval_offset_lc(
+                                    &constraint.cond,
+                                    &input_polys_shard,
+                                    &input_polys_peek,
+                                    step_index,
+                                    next_step_index,
+                                );
+                                (None, Some((global_index + 1, cond)))
+                            }
+                        };
+
+                        if let Some((idx, val)) = az_coeff {
+                            if !val.is_zero() {
+                                local_az_bz_coeffs.push((idx, val).into());
+                            }
+                        }
+                        if let Some((idx, val)) = bz_coeff {
+                            if !val.is_zero() {
+                                local_az_bz_coeffs.push((idx, val).into());
+                            }
+                        }
+                    }
+                }
+                local_az_bz_coeffs
+            })
+            .collect()
     }
 
     pub fn compute_accumulators(
@@ -1740,7 +1741,7 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
     }
 
     // TODO: Implement Dao-Thaler optimisation.
-    pub fn streaming_rounds<ProofTranscript: Transcript>(
+    pub fn streaming_rounds(
         &mut self,
         trace_shard_len: usize,
         num_shards: usize,
@@ -2400,7 +2401,7 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
         );
     }
 
-    pub fn remaining_sumcheck_rounds<ProofTranscript: Transcript>(
+    pub fn remaining_sumcheck_rounds(
         &mut self,
         eq_poly: &mut GruenSplitEqPolynomial<F>,
         transcript: &mut ProofTranscript,
@@ -2673,7 +2674,11 @@ impl<'a, F: JoltField> SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F>
     }
 }
 
-impl<'a, F: JoltField> Oracle for SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F> {
+impl<'a, F: JoltField, PCS, ProofTranscript> Oracle
+    for SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F, PCS, ProofTranscript>
+where
+    PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    ProofTranscript: Transcript,{
     type Shard = Vec<SparseCoefficient<i128>>;
 
     fn next_shard(&mut self) -> Self::Shard {
@@ -2686,7 +2691,7 @@ impl<'a, F: JoltField> Oracle for SpartanInterleavedPolynomialOracle<'a, NUM_SVO
             None
         };
 
-        (self.func)(shard_idx, trace_shard, trace_peek)
+       self.compute_evals(shard_idx, trace_shard, trace_peek)
     }
 
     fn reset(&mut self) {
