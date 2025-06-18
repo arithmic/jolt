@@ -33,6 +33,7 @@ pub enum BenchType {
     Sha2,
     Sha3,
     Sha2Chain,
+    Sha3Chain,
     Shout,
     SparseDenseShout,
     Twist,
@@ -50,6 +51,9 @@ pub fn benchmarks(
             BenchType::Sha2Chain => {
                 sha2chain::<Fr, Zeromorph<Bn254, KeccakTranscript>, KeccakTranscript>()
             }
+              BenchType::Sha3Chain => {
+                sha3chain::<Fr, Zeromorph<Bn254, KeccakTranscript>, KeccakTranscript>()
+            }
             BenchType::Fibonacci => {
                 fibonacci::<Fr, Zeromorph<Bn254, KeccakTranscript>, KeccakTranscript>()
             }
@@ -63,6 +67,9 @@ pub fn benchmarks(
             BenchType::Sha3 => sha3::<Fr, HyperKZG<Bn254, KeccakTranscript>, KeccakTranscript>(),
             BenchType::Sha2Chain => {
                 sha2chain::<Fr, HyperKZG<Bn254, KeccakTranscript>, KeccakTranscript>()
+            }
+            BenchType::Sha3Chain => {
+                sha3chain::<Fr, HyperKZG<Bn254, KeccakTranscript>, KeccakTranscript>()
             }
             BenchType::Fibonacci => {
                 fibonacci::<Fr, HyperKZG<Bn254, KeccakTranscript>, KeccakTranscript>()
@@ -382,6 +389,72 @@ where
             "Verification failed with error: {:?}",
             verification_result.err()
         );
+    };
+
+    tasks.push((
+        tracing::info_span!("Example_E2E"),
+        Box::new(task) as Box<dyn FnOnce()>,
+    ));
+
+    tasks
+}
+
+
+
+
+fn sha3chain<F, PCS, ProofTranscript>() -> Vec<(tracing::Span, Box<dyn FnOnce()>)>
+where
+    F: JoltField,
+    PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    ProofTranscript: Transcript,
+{
+    let mut tasks = Vec::new();
+    let mut program = host::Program::new("sha3-chain-guest");
+
+    let mut inputs = vec![];
+    inputs.append(&mut postcard::to_stdvec(&[5u8; 32]).unwrap());
+    
+    inputs.append(&mut postcard::to_stdvec(&2048u32).unwrap());
+
+    let task = move || {
+        let (io_device, trace) = program.trace(&inputs);
+        let (bytecode, memory_init) = program.decode();
+
+        let preprocessing: crate::jolt::vm::JoltProverPreprocessing<
+            Fr,
+            HyperKZG<Bn254, KeccakTranscript>,
+            KeccakTranscript,
+        > = RV32IJoltVM::prover_preprocess(
+            bytecode.clone(),
+            io_device.memory_layout.clone(),
+            memory_init,
+            1 << 20,
+            1 << 20,
+            1 << 20,
+        );
+
+        let (jolt_proof, jolt_commitments, debug_info) = <RV32IJoltVM as Jolt<
+            32,
+            Fr,
+            HyperKZG<Bn254, KeccakTranscript>,
+            KeccakTranscript,
+        >>::prove(
+            io_device, trace, preprocessing.clone()
+        );
+
+        let verification_result = RV32IJoltVM::verify(
+            preprocessing.shared,
+            jolt_proof,
+            jolt_commitments,
+            debug_info,
+        );
+
+        assert!(
+            verification_result.is_ok(),
+            "Verification failed with error: {:?}",
+            verification_result.err()
+        );
+       
     };
 
     tasks.push((

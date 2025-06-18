@@ -239,59 +239,65 @@ mod tests {
 
     #[test]
     fn sha3_chain_e2e_hyperkzg() {
-        let (chrome_layer, _guard) = ChromeLayerBuilder::new()
-            .file("trace.json")
-            .include_args(true)
-            .build();
+        for idx in 11..16 {
+            let num_iters: u32 = 1 << idx;
+            println!("Running sha3-chain with {} iterations", num_iters);
+            let trace_file = format!("trace_{}.json", num_iters);
+            let (chrome_layer, _guard) = ChromeLayerBuilder::new()
+                .file(&trace_file)
+                .include_args(true)
+                .build();
 
-        let subscriber = Registry::default().with(chrome_layer);
-        tracing::subscriber::set_global_default(subscriber).unwrap();
+            let subscriber = Registry::default().with(chrome_layer);
 
-        let guard = SHA3_FILE_LOCK.lock().unwrap();
-        let mut program = host::Program::new("sha3-chain-guest");
-        let (bytecode, memory_init) = program.decode();
-        let mut input_vec = vec![5u8; 32];
-        input_vec.push(32);
-        let inputs = postcard::to_stdvec(&input_vec).unwrap();
-        let (io_device, trace) = program.trace(&inputs);
-        drop(guard);
+            tracing::subscriber::with_default(subscriber, || {
+    
+                let guard = SHA3_FILE_LOCK.lock().unwrap();
+                let mut program = host::Program::new("sha3-chain-guest");
+                let (bytecode, memory_init) = program.decode();
 
-        let preprocessing: crate::jolt::vm::JoltProverPreprocessing<
-            Fr,
-            HyperKZG<Bn254, KeccakTranscript>,
-            KeccakTranscript,
-        > = RV32IJoltVM::prover_preprocess(
-            bytecode.clone(),
-            io_device.memory_layout.clone(),
-            memory_init,
-            1 << 20,
-            1 << 20,
-            1 << 20,
-        );
+                let mut inputs = vec![];
+                inputs.append(&mut postcard::to_stdvec(&[5u8; 32]).unwrap());
+                inputs.append(&mut postcard::to_stdvec(&num_iters).unwrap());
 
-        let (jolt_proof, jolt_commitments, debug_info) = <RV32IJoltVM as Jolt<
-            32,
-            Fr,
-            HyperKZG<Bn254, KeccakTranscript>,
-            KeccakTranscript,
-        >>::prove(
-            io_device, trace, preprocessing.clone()
-        );
+                let (io_device, trace) = program.trace(&inputs);
+                drop(guard);
 
-        let verification_result = RV32IJoltVM::verify(
-            preprocessing.shared,
-            jolt_proof,
-            jolt_commitments,
-            debug_info,
-        );
+                let preprocessing: crate::jolt::vm::JoltProverPreprocessing<
+                    Fr,
+                    HyperKZG<Bn254, KeccakTranscript>,
+                    KeccakTranscript,
+                > = RV32IJoltVM::prover_preprocess(
+                    bytecode.clone(),
+                    io_device.memory_layout.clone(),
+                    memory_init,
+                    1 << 20,
+                    1 << 20,
+                    1 << 20,
+                );
 
-        assert!(
-            verification_result.is_ok(),
-            "Verification failed with error: {:?}",
-            verification_result.err()
-        );
-       
+                let (jolt_proof, jolt_commitments, debug_info) =
+                    <RV32IJoltVM as Jolt<
+                        32,
+                        Fr,
+                        HyperKZG<Bn254, KeccakTranscript>,
+                        KeccakTranscript,
+                    >>::prove(io_device, trace, preprocessing.clone());
 
+                let verification_result = RV32IJoltVM::verify(
+                    preprocessing.shared,
+                    jolt_proof,
+                    jolt_commitments,
+                    debug_info,
+                );
+
+                assert!(
+                    verification_result.is_ok(),
+                    "Verification failed with error: {:?}",
+                    verification_result.err()
+                );
+            });
+        }
     }
 
     #[test]
