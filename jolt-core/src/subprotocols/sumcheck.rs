@@ -12,7 +12,7 @@ use crate::poly::spartan_interleaved_poly::{
 };
 use crate::poly::split_eq_poly::{GruenSplitEqPolynomial, SplitEqPolynomial};
 use crate::poly::unipoly::{CompressedUniPoly, UniPoly};
-use crate::r1cs::builder::{Constraint, OffsetEqConstraint};
+use crate::r1cs::builder::Constraint;
 use crate::r1cs::spartan::{BindZRyVarOracle, R1CSInputsOracle};
 use crate::utils::errors::ProofVerifyError;
 use crate::utils::math::Math;
@@ -445,7 +445,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         num_rounds: usize,
         padded_num_constraints: usize,
         uniform_constraints: &[Constraint],
-        cross_step_constraints: &[OffsetEqConstraint],
         flattened_polys: &[MultilinearPolynomial<F>],
         tau: &[F],
         transcript: &mut ProofTranscript,
@@ -459,7 +458,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::new_with_precompute(
                 padded_num_constraints,
                 uniform_constraints,
-                cross_step_constraints,
                 flattened_polys,
                 tau,
             );
@@ -781,8 +779,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             })
             .reduce(|| (F::zero(), F::zero()), |a, b| (a.0 + b.0, a.1 + b.1))
     }
-
-
 
     #[tracing::instrument(skip_all, name = "shift_sumcheck")]
     pub fn shift_sumcheck<'a, Func, PCS>(

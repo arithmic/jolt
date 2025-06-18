@@ -3,11 +3,8 @@ use super::{
     sparse_interleaved_poly::SparseCoefficient, split_eq_poly::GruenSplitEqPolynomial,
     unipoly::CompressedUniPoly,
 };
-
-use crate::jolt::vm::JoltProverPreprocessing;
-use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::r1cs::builder::shard_last_step_eval_offset_lc;
-use crate::r1cs::inputs::ALL_R1CS_INPUTS;
+use crate::r1cs::spartan::R1CSInputsOracle;
 use crate::subprotocols::sumcheck::process_eq_sumcheck_round;
 use crate::utils::streaming::Oracle;
 use crate::{
@@ -22,6 +19,9 @@ use crate::{
 use ark_ff::Zero;
 use rayon::prelude::*;
 
+use crate::jolt::vm::JoltProverPreprocessing;
+use crate::poly::commitment::commitment_scheme::CommitmentScheme;
+use crate::r1cs::inputs::ALL_R1CS_INPUTS;
 use rayon::ThreadPoolBuilder;
 use std::ops::Mul;
 use std::time::{Duration, Instant};
@@ -283,6 +283,7 @@ impl<const NUM_SVO_ROUNDS: usize, F: JoltField> SpartanInterleavedPolynomial<NUM
 
                                 let global_r1cs_idx =
                                     2 *
+
                                         (current_step_idx * padded_num_constraints +
                                             original_uniform_idx_in_step);
 
@@ -354,13 +355,13 @@ impl<const NUM_SVO_ROUNDS: usize, F: JoltField> SpartanInterleavedPolynomial<NUM
                                 &constraint.a,
                                 flattened_polynomials,
                                 current_step_idx,
-                                next_step_index_opt,
+                                next_step_index_opt
                             );
                             let eq_b_eval = eval_offset_lc(
                                 &constraint.b,
                                 flattened_polynomials,
                                 current_step_idx,
-                                next_step_index_opt,
+                                next_step_index_opt
                             );
                             let az = eq_a_eval - eq_b_eval;
                             if !az.is_zero() {
@@ -372,7 +373,7 @@ impl<const NUM_SVO_ROUNDS: usize, F: JoltField> SpartanInterleavedPolynomial<NUM
                                     &constraint.cond,
                                     flattened_polynomials,
                                     current_step_idx,
-                                    next_step_index_opt,
+                                    next_step_index_opt
                                 );
                                 if !bz.is_zero() {
                                     binary_bz_block[block_idx] = bz;
@@ -391,7 +392,7 @@ impl<const NUM_SVO_ROUNDS: usize, F: JoltField> SpartanInterleavedPolynomial<NUM
                             &binary_az_block,
                             &binary_bz_block,
                             E_in_val_phase2, // Use E_in_val specific to this phase/block
-                            &mut tA_sum_for_current_x_out,
+                            &mut tA_sum_for_current_x_out
                         );
                     } // End x_in_step_val loop
 
@@ -1177,10 +1178,16 @@ impl<const NUM_SVO_ROUNDS: usize, F: JoltField> SpartanInterleavedPolynomial<NUM
     }
 }
 
-pub struct SpartanInterleavedPolynomialOracle<'a, const NUM_SVO_ROUNDS: usize, F: JoltField,PCS, ProofTranscript>
-where
+pub struct SpartanInterleavedPolynomialOracle<
+    'a,
+    const NUM_SVO_ROUNDS: usize,
+    F: JoltField,
+    PCS,
+    ProofTranscript,
+> where
     PCS: CommitmentScheme<ProofTranscript, Field = F>,
-    ProofTranscript: Transcript, {
+    ProofTranscript: Transcript,
+{
     pub step: usize,
     pub trace: &'a [RV32IMCycle],
     pub shard_length: usize,
@@ -1190,15 +1197,14 @@ where
     pub preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
     pub bound_coeffs: Vec<SparseCoefficient<F>>,
     binding_scratch_space: Vec<SparseCoefficient<F>>,
-
 }
 
 impl<'a, F: JoltField, PCS, ProofTranscript>
-    SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS,F, PCS, ProofTranscript>
+    SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F, PCS, ProofTranscript>
 where
     PCS: CommitmentScheme<ProofTranscript, Field = F>,
-    ProofTranscript: Transcript,{
-
+    ProofTranscript: Transcript,
+{
     pub fn new(
         padded_num_constraints: usize,
         uniform_constraints: &'a [Constraint],
@@ -1266,36 +1272,39 @@ where
 
                 for step_index in chunk_size * chunk_index..chunk_size * (chunk_index + 1) {
                     // Uniform constraints
-                    for (constraint_index, constraint) in self.uniform_constraints.iter().enumerate() {
+                    for (constraint_index, constraint) in
+                        self.uniform_constraints.iter().enumerate()
+                    {
                         let global_index = 2
-                            * ((step_index + shard_idx * shard_length) * self.padded_num_constraints
+                            * ((step_index + shard_idx * shard_length)
+                                * self.padded_num_constraints
                                 + constraint_index);
 
-                        let az_coeff = constraint
-                            .a
-                            .evaluate_row(&input_polys_shard, step_index);
+                        let az_coeff = constraint.a.evaluate_row(&input_polys_shard, step_index);
                         if !az_coeff.is_zero() {
                             local_az_bz_coeffs.push((global_index, az_coeff).into());
                         }
 
-                        let bz_coeff = constraint
-                            .b
-                            .evaluate_row(&input_polys_shard, step_index);
+                        let bz_coeff = constraint.b.evaluate_row(&input_polys_shard, step_index);
                         if !bz_coeff.is_zero() {
                             local_az_bz_coeffs.push((global_index + 1, bz_coeff).into());
                         }
                     }
 
                     // Cross-step constraints
-                    let next_step_index = if step_index + shard_idx * shard_length + 1 < total_num_steps {
-                        Some(step_index + 1)
-                    } else {
-                        None
-                    };
+                    let next_step_index =
+                        if step_index + shard_idx * shard_length + 1 < total_num_steps {
+                            Some(step_index + 1)
+                        } else {
+                            None
+                        };
 
-                    for (constraint_index, constraint) in self.cross_step_constraints.iter().enumerate() {
+                    for (constraint_index, constraint) in
+                        self.cross_step_constraints.iter().enumerate()
+                    {
                         let global_index = 2
-                            * ((step_index + shard_idx * shard_length) * self.padded_num_constraints
+                            * ((step_index + shard_idx * shard_length)
+                                * self.padded_num_constraints
                                 + self.uniform_constraints.len()
                                 + constraint_index);
 
@@ -2678,7 +2687,8 @@ impl<'a, F: JoltField, PCS, ProofTranscript> Oracle
     for SpartanInterleavedPolynomialOracle<'a, NUM_SVO_ROUNDS, F, PCS, ProofTranscript>
 where
     PCS: CommitmentScheme<ProofTranscript, Field = F>,
-    ProofTranscript: Transcript,{
+    ProofTranscript: Transcript,
+{
     type Shard = Vec<SparseCoefficient<i128>>;
 
     fn next_shard(&mut self) -> Self::Shard {
@@ -2691,7 +2701,7 @@ where
             None
         };
 
-       self.compute_evals(shard_idx, trace_shard, trace_peek)
+        self.compute_evals(shard_idx, trace_shard, trace_peek)
     }
 
     fn reset(&mut self) {
