@@ -250,9 +250,8 @@ mod tests {
         let guard = SHA3_FILE_LOCK.lock().unwrap();
         let mut program = host::Program::new("sha3-chain-guest");
         let (bytecode, memory_init) = program.decode();
-        let mut input_vec = vec![5u8; 32];
-        input_vec.push(32);
-        let inputs = postcard::to_stdvec(&input_vec).unwrap();
+        let mut inputs = postcard::to_stdvec(&[5u8; 32]).unwrap();
+        inputs.append(&mut postcard::to_stdvec(&2048u32).unwrap());
         let (io_device, trace) = program.trace(&inputs);
         drop(guard);
 
@@ -290,8 +289,6 @@ mod tests {
             "Verification failed with error: {:?}",
             verification_result.err()
         );
-       
-
     }
 
     #[test]

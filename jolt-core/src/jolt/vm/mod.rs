@@ -284,38 +284,84 @@ where
 
         let mut transcript_1 = transcript.clone();
 
-        let r1cs_proof: UniformSpartanProof<F, ProofTranscript>;
+        // let r1cs_proof: UniformSpartanProof<F, ProofTranscript>;
 
-        let _r1cs_proof = UniformSpartanProof::prove::<PCS>(
+        let r1cs_proof = UniformSpartanProof::prove::<PCS>(
             &preprocessing,
             &constraint_builder,
             &spartan_key,
             &trace,
             &mut opening_accumulator,
-            &mut transcript_1,
+            &mut transcript,
         )
         .ok()
         .unwrap();
 
         let shard_len = std::cmp::min(
-            trace.len(),
+            padded_trace_length,
             std::cmp::max(
-                1 << (trace.len().log_2() - trace.len().log_2() / 2),
+                1 << (padded_trace_length.log_2() - padded_trace_length.log_2() / 2),
                 1 << 20,
             ),
         );
 
-        r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
+        println!("Shard length: {shard_len}");
+
+        let (
+            streamed_outer_sumcheck_proof,
+            streamed_outer_sumcheck_r,
+            streamed_outer_sumcheck_claims,
+        ) = UniformSpartanProof::prove_streaming::<PCS>(
             &preprocessing,
             &constraint_builder,
             &spartan_key,
             &trace,
             shard_len,
             &mut opening_accumulator,
-            &mut transcript,
-        )
-        .ok()
-        .unwrap();
+            &mut transcript_1,
+        );
+
+        assert_eq!(
+            streamed_outer_sumcheck_proof.compressed_polys.len(),
+            r1cs_proof.outer_sumcheck_proof.compressed_polys.len(),
+            "Compressed polys len do not match."
+        );
+        for i in 0..streamed_outer_sumcheck_proof.compressed_polys.len() {
+            assert_eq!(
+                streamed_outer_sumcheck_proof.compressed_polys[i].coeffs_except_linear_term,
+                r1cs_proof.outer_sumcheck_proof.compressed_polys[i].coeffs_except_linear_term,
+                "Compressed polys at index {i} do not match."
+            );
+        }
+
+        assert_eq!(
+            streamed_outer_sumcheck_claims[0],
+            r1cs_proof.outer_sumcheck_claims.0
+        );
+
+        assert_eq!(
+            streamed_outer_sumcheck_claims[1],
+            r1cs_proof.outer_sumcheck_claims.1
+        );
+
+        assert_eq!(
+            streamed_outer_sumcheck_claims[2],
+            r1cs_proof.outer_sumcheck_claims.2
+        );
+
+        println!("The streamed and non-streamed outer sum-check proofs are equal.");
+
+        // let _r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
+        //     &preprocessing,
+        //     &constraint_builder,
+        //     &spartan_key,
+        //     &trace,
+        //     shard_len,
+        //     &mut opening_accumulator,
+        //     &mut transcript,
+        // )
+        // .ok()
+        // .unwrap();
 
         let instruction_proof = LookupsProof::prove(
             &preprocessing.shared.generators,
