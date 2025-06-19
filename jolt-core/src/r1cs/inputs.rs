@@ -621,13 +621,19 @@ where
         self.step = (self.step + self.shard_length) % self.trace.len();
         shard
     }
-
     fn reset(&mut self) {
         self.step = 0;
     }
 
     fn get_len(&self) -> usize {
         self.trace.len()
+    }
+
+    fn peek(&self) -> Option<Self::Shard> {
+        Some(self.compute_shard(
+            &self.trace[self.step..self.step + 1],
+            Some(&self.trace[self.step + 1]),
+        ))
     }
 
     fn get_step(&self) -> usize {
