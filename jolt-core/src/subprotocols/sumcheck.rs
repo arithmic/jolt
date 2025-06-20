@@ -26,10 +26,8 @@ use crate::{into_optimal_iter, optimal_iter};
 
 use crate::jolt::vm::JoltProverPreprocessing;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
-use crate::poly::sparse_interleaved_poly::SparseCoefficient;
-use crate::r1cs::inputs::{R1CSInputsOracle, ALL_R1CS_INPUTS};
+use crate::r1cs::inputs::R1CSInputsOracle;
 use ark_serialize::*;
-use ark_std::iterable::Iterable;
 use rayon::prelude::*;
 use std::marker::PhantomData;
 use std::time::Duration;
@@ -621,7 +619,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let mut eq_r_evals = EqPolynomial::evals(&r_rev);
         let num_shards = az_bz_poly_oracle.get_len() / shard_len;
         az_bz_poly_oracle.streaming_rounds(
-            shard_len,
             num_shards,
             streaming_rounds_start,
             binding_round,
@@ -826,7 +823,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
     }
 
     #[tracing::instrument(skip_all, name = "shift_sumcheck")]
-    pub fn shift_sumcheck<'a, Func, PCS>(
+    pub fn shift_sumcheck<Func, PCS>(
         num_rounds: usize,
         stream_poly: &mut ShiftSumCheckOracle<F, PCS, ProofTranscript>,
         comb_func: Func,

@@ -629,13 +629,6 @@ where
         self.trace.len()
     }
 
-    fn peek(&self) -> Option<Self::Shard> {
-        Some(self.compute_shard(
-            &self.trace[self.step..self.step + 1],
-            Some(&self.trace[self.step + 1]),
-        ))
-    }
-
     fn get_step(&self) -> usize {
         self.step
     }

@@ -2,7 +2,6 @@ use crate::utils::{compute_dotproduct, math::Math};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, SerializationError, Valid, Validate,
 };
-use ark_std::iterable::Iterable;
 use rayon::prelude::*;
 use strum_macros::EnumIter;
 

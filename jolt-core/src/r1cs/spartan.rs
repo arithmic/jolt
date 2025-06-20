@@ -1,5 +1,4 @@
-use crate::field::{JoltField, OptimizedMul};
-use crate::jolt::vm::rv32i_vm::ProofTranscript;
+use crate::field::JoltField;
 use crate::jolt::vm::JoltProverPreprocessing;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::poly::multilinear_polynomial::{
@@ -34,13 +33,10 @@ use crate::{
 
 use super::builder::CombinedUniformBuilder;
 
-use crate::jolt::instruction::{CircuitFlags, InstructionFlags, LookupQuery};
-use crate::poly::compact_polynomial::SmallScalar;
+use crate::jolt::instruction::LookupQuery;
 use crate::poly::split_eq_poly::SplitEqPolynomial;
-use crate::poly::unipoly::CompressedUniPoly;
 use crate::subprotocols::sumcheck::eq_plus_one_shards;
 use rayon::prelude::*;
-use tokio::time::Instant;
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
 pub enum SpartanError {
@@ -413,7 +409,6 @@ where
 
         let mut input_polys_oracle = R1CSInputsOracle::new(shard_length, trace, preprocessing);
         let num_shards = trace.len() / shard_length;
-        let num_polys = input_polys_oracle.peek().unwrap().len();
 
         let mut bind_z_stream = vec![F::zero(); num_vars_uniform];
 
@@ -421,94 +416,106 @@ where
         let num_x1_bits = eq_rx_step.E1_len.log_2();
         let x1_bitmask = (1 << (num_x1_bits)) - 1;
 
+        let mut shards = input_polys_oracle.next_shard();
+        let num_polys = shards.len();
+
         for shard_idx in 0..num_shards {
             let base_poly_idx = shard_idx * shard_length;
-            let polynomials = input_polys_oracle.next_shard();
-            polynomials
-                .par_iter()
-                .zip(bind_z_stream.par_iter_mut().take(num_polys))
-                .for_each(|(poly, bind_z_eval)| {
-                    match poly {
-                        MultilinearPolynomial::LargeScalars(poly) => {
-                            process_large_scalar_polys(
-                                &poly.Z,
-                                bind_z_eval,
-                                &eq_rx_step,
-                                base_poly_idx,
-                                x1_bitmask,
-                                num_x1_bits,
-                                shard_length,
-                            );
-                        }
+            (_, shards) = rayon::join(
+                || {
+                    shards
+                        .par_iter()
+                        .zip(bind_z_stream.par_iter_mut().take(num_polys))
+                        .for_each(|(poly, bind_z_eval)| {
+                            match poly {
+                                MultilinearPolynomial::LargeScalars(poly) => {
+                                    process_large_scalar_polys(
+                                        &poly.Z,
+                                        bind_z_eval,
+                                        &eq_rx_step,
+                                        base_poly_idx,
+                                        x1_bitmask,
+                                        num_x1_bits,
+                                        shard_length,
+                                    );
+                                }
 
-                        MultilinearPolynomial::U8Scalars(poly) => {
-                            process_small_scalar_polys(
-                                &poly.coeffs,
-                                bind_z_eval,
-                                &eq_rx_step,
-                                base_poly_idx,
-                                x1_bitmask,
-                                num_x1_bits,
-                                shard_length,
-                            );
-                        }
+                                MultilinearPolynomial::U8Scalars(poly) => {
+                                    process_small_scalar_polys(
+                                        &poly.coeffs,
+                                        bind_z_eval,
+                                        &eq_rx_step,
+                                        base_poly_idx,
+                                        x1_bitmask,
+                                        num_x1_bits,
+                                        shard_length,
+                                    );
+                                }
 
-                        MultilinearPolynomial::U16Scalars(poly) => {
-                            process_small_scalar_polys(
-                                &poly.coeffs,
-                                bind_z_eval,
-                                &eq_rx_step,
-                                base_poly_idx,
-                                x1_bitmask,
-                                num_x1_bits,
-                                shard_length,
-                            );
-                        }
+                                MultilinearPolynomial::U16Scalars(poly) => {
+                                    process_small_scalar_polys(
+                                        &poly.coeffs,
+                                        bind_z_eval,
+                                        &eq_rx_step,
+                                        base_poly_idx,
+                                        x1_bitmask,
+                                        num_x1_bits,
+                                        shard_length,
+                                    );
+                                }
 
-                        MultilinearPolynomial::U32Scalars(poly) => {
-                            process_small_scalar_polys(
-                                &poly.coeffs,
-                                bind_z_eval,
-                                &eq_rx_step,
-                                base_poly_idx,
-                                x1_bitmask,
-                                num_x1_bits,
-                                shard_length,
-                            );
-                        }
+                                MultilinearPolynomial::U32Scalars(poly) => {
+                                    process_small_scalar_polys(
+                                        &poly.coeffs,
+                                        bind_z_eval,
+                                        &eq_rx_step,
+                                        base_poly_idx,
+                                        x1_bitmask,
+                                        num_x1_bits,
+                                        shard_length,
+                                    );
+                                }
 
-                        MultilinearPolynomial::U64Scalars(poly) => {
-                            process_small_scalar_polys(
-                                &poly.coeffs,
-                                bind_z_eval,
-                                &eq_rx_step,
-                                base_poly_idx,
-                                x1_bitmask,
-                                num_x1_bits,
-                                shard_length,
-                            );
-                        }
+                                MultilinearPolynomial::U64Scalars(poly) => {
+                                    process_small_scalar_polys(
+                                        &poly.coeffs,
+                                        bind_z_eval,
+                                        &eq_rx_step,
+                                        base_poly_idx,
+                                        x1_bitmask,
+                                        num_x1_bits,
+                                        shard_length,
+                                    );
+                                }
 
-                        MultilinearPolynomial::I64Scalars(poly) => {
-                            process_small_scalar_polys(
-                                &poly.coeffs,
-                                bind_z_eval,
-                                &eq_rx_step,
-                                base_poly_idx,
-                                x1_bitmask,
-                                num_x1_bits,
-                                shard_length,
-                            );
-                        }
+                                MultilinearPolynomial::I64Scalars(poly) => {
+                                    process_small_scalar_polys(
+                                        &poly.coeffs,
+                                        bind_z_eval,
+                                        &eq_rx_step,
+                                        base_poly_idx,
+                                        x1_bitmask,
+                                        num_x1_bits,
+                                        shard_length,
+                                    );
+                                }
+                            };
+                        });
+                },
+                || {
+                    let mut shard = Vec::with_capacity(num_polys);
+                    if shard_idx != num_shards - 1 {
+                        shard = input_polys_oracle.next_shard()
                     };
-                });
+                    shard
+                },
+            );
         }
 
         // Set the constant value at the appropriate position
         if key.uniform_r1cs.num_vars < num_vars_uniform {
             bind_z_stream[key.uniform_r1cs.num_vars] = F::one();
         }
-        input_polys_oracle.reset();
 
         drop(_guard);
         drop(span);
@@ -527,7 +534,7 @@ where
             assert_eq!(poly_evals.len(), 2);
             poly_evals[0] * poly_evals[1]
         };
-        let (inner_sumcheck_proof, inner_sumcheck_r, _claims_inner) =
+        let (inner_sumcheck_proof, _inner_sumcheck_r, _claims_inner) =
             SumcheckInstanceProof::prove_arbitrary(
                 &claim_inner_joint,
                 num_rounds_inner_sumcheck,
@@ -548,7 +555,6 @@ where
             num_shards,
             shard_length,
         );
-        input_polys_oracle.reset();
 
         /*  Sumcheck 3: Batched sumcheck for NextUnexpandedPC and NextPC verification
             Proves: NextUnexpandedPC(r_cycle) + r * NextPC(r_cycle) =
@@ -834,6 +840,7 @@ impl<
         vec![unexpanded_pc_coeff.into(), pc_coeff.into()]
     }
 }
+
 impl<'a, F: JoltField, PCS, ProofTranscript> Oracle
     for ShiftSumCheckOracle<'a, F, PCS, ProofTranscript>
 where
@@ -868,10 +875,6 @@ where
             shard_length
         );
         shard
-    }
-
-    fn reset(&mut self) {
-        self.step = 0;
     }
 
     fn get_len(&self) -> usize {
