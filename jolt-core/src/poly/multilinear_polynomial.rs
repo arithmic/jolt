@@ -859,21 +859,18 @@ pub(crate) fn process_small_scalar_polys<F, T>(
     let chunk_size = e1.len();
     let no_of_chunks = shard_length / chunk_size;
 
-    *final_eval += (0..no_of_chunks)
-        .map(|chunk_iter| {
-            let start_idx = chunk_iter * chunk_size;
-            let end_idx = start_idx + chunk_size;
-            let x2 = (base_poly_idx + (end_idx - 1)) >> num_x1_bits;
-            (start_idx..end_idx)
-                .map(|i| {
-                    let poly_idx = base_poly_idx + i;
-                    let x1 = poly_idx & x1_bitmask;
-                    coeffs[i].field_mul(e1[x1])
-                })
-                .fold(F::zero(), |acc, x| acc + x)
-                * e2[x2]
-        })
-        .fold(F::zero(), |acc, x| acc + x);
+    *final_eval += (0..no_of_chunks).fold(F::zero(), |mut acc, chunk_iter| {
+        let start_idx = chunk_iter * chunk_size;
+        let end_idx = start_idx + chunk_size;
+        let x2 = (base_poly_idx + (end_idx - 1)) >> num_x1_bits;
+        acc += (start_idx..end_idx).fold(F::zero(), |mut acc, i| {
+            let poly_idx = base_poly_idx + i;
+            let x1 = poly_idx & x1_bitmask;
+            acc += coeffs[i].field_mul(e1[x1]);
+            acc
+        }) * e2[x2];
+        acc
+    });
 }
 
 #[inline(always)]
@@ -893,21 +890,18 @@ pub(crate) fn process_large_scalar_polys<F>(
     let chunk_size = e1.len();
     let no_of_chunks = shard_length / chunk_size;
 
-    *final_eval += (0..no_of_chunks)
-        .map(|chunk_iter| {
-            let start_idx = chunk_iter * chunk_size;
-            let end_idx = start_idx + chunk_size;
-            let x2 = (base_poly_idx + (end_idx - 1)) >> num_x1_bits;
-            (start_idx..end_idx)
-                .map(|i| {
-                    let poly_idx = base_poly_idx + i;
-                    let x1 = poly_idx & x1_bitmask;
-                    coeffs[i].mul_01_optimized(e1[x1])
-                })
-                .fold(F::zero(), |acc, x| acc + x)
-                * e2[x2]
-        })
-        .fold(F::zero(), |acc, x| acc + x);
+    *final_eval += (0..no_of_chunks).fold(F::zero(), |mut acc, chunk_iter| {
+        let start_idx = chunk_iter * chunk_size;
+        let end_idx = start_idx + chunk_size;
+        let x2 = (base_poly_idx + (end_idx - 1)) >> num_x1_bits;
+        acc += (start_idx..end_idx).fold(F::zero(), |mut acc, i| {
+            let poly_idx = base_poly_idx + i;
+            let x1 = poly_idx & x1_bitmask;
+            acc += coeffs[i].mul_01_optimized(e1[x1]);
+            acc
+        }) * e2[x2];
+        acc
+    });
 }
 #[cfg(test)]
 mod tests {
