@@ -2,10 +2,7 @@
 #![allow(dead_code)]
 
 use crate::field::JoltField;
-use crate::poly::multilinear_polynomial::MultilinearPolynomial;
-use crate::poly::opening_proof::{
-    ProverOpeningAccumulator, ReducedOpeningProof, VerifierOpeningAccumulator,
-};
+use crate::poly::opening_proof::{ProverOpeningAccumulator, VerifierOpeningAccumulator};
 use crate::r1cs::constraints::R1CSConstraints;
 use crate::r1cs::spartan::UniformSpartanProof;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -14,13 +11,11 @@ use common::jolt_device::MemoryLayout;
 use instruction_lookups::LookupsProof;
 use ram::{RAMPreprocessing, RAMTwistProof};
 use registers::RegistersTwistProof;
-use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{Read, Write},
     path::Path,
 };
-use strum::EnumCount;
 use tracer::instruction::{RV32IMCycle, RV32IMInstruction};
 use tracer::JoltDevice;
 
@@ -28,8 +23,7 @@ use crate::msm::icicle;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 use crate::utils::errors::ProofVerifyError;
 use crate::utils::math::Math;
-use crate::utils::thread::drop_in_background_thread;
-use crate::utils::transcript::{AppendToTranscript, Transcript};
+use crate::utils::transcript::Transcript;
 
 #[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct JoltVerifierPreprocessing<F, PCS, ProofTranscript>
@@ -248,7 +242,18 @@ where
 
         // TODO(JP): Drop padding on number of steps
         let padded_trace_length = trace_length.next_power_of_two();
-        trace.resize(padded_trace_length, RV32IMCycle::NoOp);
+        let padding = padded_trace_length - trace_length;
+        let last_address = trace.last().unwrap().instruction().normalize().address;
+        if padding != 0 {
+            // Pad with NoOps (with sequential addresses) followed by a final JALR
+            trace.extend((0..padding - 1).map(|i| RV32IMCycle::NoOp(last_address + 4 * i)));
+            // Final JALR sets NextUnexpandedPC = 0
+            trace.push(RV32IMCycle::last_jalr(last_address + 4 * (padding - 1)));
+        } else {
+            // Replace last JAL with JALR to set NextUnexpandedPC = 0
+            assert!(matches!(trace.last().unwrap(), RV32IMCycle::JAL(_)));
+            *trace.last_mut().unwrap() = RV32IMCycle::last_jalr(last_address);
+        }
 
         let mut transcript = ProofTranscript::new(b"Jolt transcript");
         let mut opening_accumulator: ProverOpeningAccumulator<F, ProofTranscript> =
@@ -277,29 +282,26 @@ where
         );
         transcript.append_scalar(&spartan_key.vk_digest);
 
-        let mut transcript_1 = transcript.clone();
-
-        let r1cs_proof: UniformSpartanProof<F, ProofTranscript>;
-
-        let _r1cs_proof = UniformSpartanProof::prove::<PCS>(
-            &preprocessing,
-            &constraint_builder,
-            &spartan_key,
-            &trace,
-            &mut opening_accumulator,
-            &mut transcript_1,
-        )
-        .ok()
-        .unwrap();
+        // let r1cs_proof = UniformSpartanProof::prove::<PCS>(
+        //     &preprocessing,
+        //     &constraint_builder,
+        //     &spartan_key,
+        //     &trace,
+        //     &mut opening_accumulator,
+        //     &mut transcript,
+        // )
+        // .ok()
+        // .unwrap();
 
         let shard_len = std::cmp::min(
-            trace.len(),
+            padded_trace_length,
             std::cmp::max(
-                1 << (trace.len().log_2() - trace.len().log_2() / 2),
-                1 << 20,
+                1 << (padded_trace_length.log_2() - padded_trace_length.log_2() / 2),
+                1 << 10,
             ),
         );
-        r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
+
+        let r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
             &preprocessing,
             &constraint_builder,
             &spartan_key,
@@ -357,9 +359,97 @@ where
         (jolt_proof, program_io, debug_info)
     }
 
+    #[tracing::instrument(skip_all, name = "Jolt::prove_new")]
+    fn prove_new(
+        program_io: JoltDevice,
+        mut trace: Vec<RV32IMCycle>,
+        mut preprocessing: JoltProverPreprocessing<F, PCS, ProofTranscript>,
+    ) {
+        icicle::icicle_init();
+        let trace_length = trace.len();
+        println!("Trace length: {trace_length}");
+
+        F::initialize_lookup_tables(std::mem::take(&mut preprocessing.field));
+
+        // TODO(moodlezoup): Truncate generators
+
+        // TODO(JP): Drop padding on number of steps
+        let padded_trace_length = trace_length.next_power_of_two();
+        let padding = padded_trace_length - trace_length;
+        let last_address = trace.last().unwrap().instruction().normalize().address;
+        if padding != 0 {
+            // Pad with NoOps (with sequential addresses) followed by a final JALR
+            trace.extend((0..padding - 1).map(|i| RV32IMCycle::NoOp(last_address + 4 * i)));
+            // Final JALR sets NextUnexpandedPC = 0
+            trace.push(RV32IMCycle::last_jalr(last_address + 4 * (padding - 1)));
+        } else {
+            // Replace last JAL with JALR to set NextUnexpandedPC = 0
+            assert!(matches!(trace.last().unwrap(), RV32IMCycle::JAL(_)));
+            *trace.last_mut().unwrap() = RV32IMCycle::last_jalr(last_address);
+        }
+
+        let mut transcript = ProofTranscript::new(b"Jolt transcript");
+        let mut opening_accumulator: ProverOpeningAccumulator<F, ProofTranscript> =
+            ProverOpeningAccumulator::new();
+
+        Self::fiat_shamir_preamble(
+            &mut transcript,
+            &program_io,
+            &program_io.memory_layout,
+            trace_length,
+        );
+
+        // jolt_commitments
+        //     .read_write_values()
+        //     .iter()
+        //     .for_each(|value| value.append_to_transcript(&mut transcript));
+        // jolt_commitments
+        //     .init_final_values()
+        //     .iter()
+        //     .for_each(|value| value.append_to_transcript(&mut transcript));
+
+        let constraint_builder = Self::Constraints::construct_constraints(padded_trace_length);
+        let spartan_key = UniformSpartanProof::<F, ProofTranscript>::setup(
+            &constraint_builder,
+            padded_trace_length,
+        );
+        transcript.append_scalar(&spartan_key.vk_digest);
+
+        // let r1cs_proof = UniformSpartanProof::prove::<PCS>(
+        //     &preprocessing,
+        //     &constraint_builder,
+        //     &spartan_key,
+        //     &trace,
+        //     &mut opening_accumulator,
+        //     &mut transcript,
+        // )
+        // .ok()
+        // .unwrap();
+
+        let shard_len = std::cmp::min(
+            padded_trace_length,
+            std::cmp::max(
+                1 << (padded_trace_length.log_2() - padded_trace_length.log_2() / 2),
+                1 << 10,
+            ),
+        );
+
+        let r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
+            &preprocessing,
+            &constraint_builder,
+            &spartan_key,
+            &trace,
+            shard_len,
+            &mut opening_accumulator,
+            &mut transcript,
+        )
+        .ok()
+        .unwrap();
+    }
+
     #[tracing::instrument(skip_all)]
     fn verify(
-        mut preprocessing: JoltVerifierPreprocessing<F, PCS, ProofTranscript>,
+        preprocessing: JoltVerifierPreprocessing<F, PCS, ProofTranscript>,
         proof: JoltProof<WORD_SIZE, F, PCS, ProofTranscript>,
         // commitments: JoltCommitments<PCS, ProofTranscript>,
         program_io: JoltDevice,

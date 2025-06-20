@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+#![allow(clippy::extra_unused_type_parameters)]
+
 use crate::field::JoltField;
 use crate::host;
 use crate::jolt::lookup_table::LookupTables;
@@ -51,7 +54,7 @@ pub fn benchmarks(
             BenchType::Sha2Chain => {
                 sha2chain::<Fr, Zeromorph<Bn254, KeccakTranscript>, KeccakTranscript>()
             }
-              BenchType::Sha3Chain => {
+            BenchType::Sha3Chain => {
                 sha3chain::<Fr, Zeromorph<Bn254, KeccakTranscript>, KeccakTranscript>()
             }
             BenchType::Fibonacci => {
@@ -399,9 +402,6 @@ where
     tasks
 }
 
-
-
-
 fn sha3chain<F, PCS, ProofTranscript>() -> Vec<(tracing::Span, Box<dyn FnOnce()>)>
 where
     F: JoltField,
@@ -413,7 +413,7 @@ where
 
     let mut inputs = vec![];
     inputs.append(&mut postcard::to_stdvec(&[5u8; 32]).unwrap());
-    
+
     inputs.append(&mut postcard::to_stdvec(&2048u32).unwrap());
 
     let task = move || {
@@ -454,7 +454,6 @@ where
             "Verification failed with error: {:?}",
             verification_result.err()
         );
-       
     };
 
     tasks.push((

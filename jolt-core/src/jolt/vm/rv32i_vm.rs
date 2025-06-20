@@ -88,6 +88,7 @@ mod tests {
     use crate::host;
     use crate::jolt::vm::rv32i_vm::{Jolt, RV32IJoltVM};
     use crate::jolt::vm::JoltProverPreprocessing;
+
     use crate::poly::commitment::commitment_scheme::CommitmentScheme;
     use crate::poly::commitment::hyperkzg::HyperKZG;
     use crate::poly::commitment::mock::MockCommitScheme;
@@ -149,6 +150,14 @@ mod tests {
 
     #[test]
     fn fib_e2e_hyperkzg() {
+        let (chrome_layer, guard) = ChromeLayerBuilder::new()
+            .file("trace.json")
+            .include_args(true)
+            .build();
+
+        let subscriber = Registry::default().with(chrome_layer);
+        tracing::subscriber::set_global_default(subscriber).unwrap();
+
         let (chrome_layer, guard) = ChromeLayerBuilder::new()
             .file("trace.json")
             .include_args(true)
@@ -251,7 +260,6 @@ mod tests {
             let subscriber = Registry::default().with(chrome_layer);
 
             tracing::subscriber::with_default(subscriber, || {
-    
                 let guard = SHA3_FILE_LOCK.lock().unwrap();
                 let mut program = host::Program::new("sha3-chain-guest");
                 let (bytecode, memory_init) = program.decode();
@@ -297,6 +305,57 @@ mod tests {
                     verification_result.err()
                 );
             });
+        }
+    }
+
+    #[test]
+    fn test_prove_streaming() {
+        for idx in 11..12 {
+            let num_iters: u32 = 1 << idx;
+            println!(
+                "Running sha3_chain_e2e_hyperkzg with {} iterations",
+                num_iters
+            );
+            let trace_file = format!("trace_{}.json", num_iters);
+            let (chrome_layer, _guard) = ChromeLayerBuilder::new()
+                .file(&trace_file)
+                .include_args(true)
+                .build();
+
+            let subscriber = Registry::default().with(chrome_layer);
+
+            tracing::subscriber::with_default(subscriber, || {
+                let guard = SHA3_FILE_LOCK.lock().unwrap();
+                let mut program = host::Program::new("sha3-chain-guest");
+                let (bytecode, memory_init) = program.decode();
+
+                let mut inputs = vec![];
+                inputs.append(&mut postcard::to_stdvec(&[5u8; 32]).unwrap());
+                inputs.append(&mut postcard::to_stdvec(&num_iters).unwrap());
+
+                let (io_device, trace) = program.trace(&inputs);
+                drop(guard);
+                let preprocessing: crate::jolt::vm::JoltProverPreprocessing<
+                    Fr,
+                    HyperKZG<Bn254, KeccakTranscript>,
+                    KeccakTranscript,
+                > = RV32IJoltVM::prover_preprocess(
+                    bytecode.clone(),
+                    io_device.memory_layout.clone(),
+                    memory_init,
+                    1 << 20,
+                    1 << 20,
+                    1 << 20,
+                );
+
+                <RV32IJoltVM as Jolt<
+                    32,
+                    Fr,
+                    HyperKZG<Bn254, KeccakTranscript>,
+                    KeccakTranscript,
+                >>::prove_new(io_device, trace, preprocessing.clone());
+            });
+            println!("-----------------------------------------------------------");
         }
     }
 

@@ -12,8 +12,8 @@ use crate::poly::spartan_interleaved_poly::{
 };
 use crate::poly::split_eq_poly::{GruenSplitEqPolynomial, SplitEqPolynomial};
 use crate::poly::unipoly::{CompressedUniPoly, UniPoly};
-use crate::r1cs::builder::{Constraint, OffsetEqConstraint};
-use crate::r1cs::spartan::{BindZRyVarOracle, R1CSInputsOracle};
+use crate::r1cs::builder::Constraint;
+use crate::r1cs::spartan::ShiftSumCheckOracle;
 use crate::utils::errors::ProofVerifyError;
 use crate::utils::math::Math;
 use crate::utils::mul_0_optimized;
@@ -26,7 +26,7 @@ use crate::{into_optimal_iter, optimal_iter};
 
 use crate::jolt::vm::JoltProverPreprocessing;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
-use crate::poly::sparse_interleaved_poly::SparseCoefficient;
+use crate::r1cs::inputs::R1CSInputsOracle;
 use ark_serialize::*;
 use rayon::prelude::*;
 use std::marker::PhantomData;
@@ -347,6 +347,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
     /// - `r_eval_point`: Final random point of evaluation
     /// - `final_evals`: Each of the polys evaluated at `r_eval_point`
     #[tracing::instrument(skip_all, name = "prove_arbitrary")]
+    #[tracing::instrument(skip_all, name = "prove_arbitrary")]
     pub fn prove_arbitrary<Func>(
         claim: &F,
         num_rounds: usize,
@@ -445,7 +446,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         num_rounds: usize,
         padded_num_constraints: usize,
         uniform_constraints: &[Constraint],
-        cross_step_constraints: &[OffsetEqConstraint],
         flattened_polys: &[MultilinearPolynomial<F>],
         tau: &[F],
         transcript: &mut ProofTranscript,
@@ -459,7 +459,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::new_with_precompute(
                 padded_num_constraints,
                 uniform_constraints,
-                cross_step_constraints,
                 flattened_polys,
                 tau,
             );
@@ -519,10 +518,9 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         num_rounds: usize,
         padded_num_constraints: usize,
         uniform_constraints: &[Constraint],
-        cross_step_constraints: &[OffsetEqConstraint],
         trace: &[RV32IMCycle],
         preprocessing: &'a JoltProverPreprocessing<F, PCS, ProofTranscript>,
-        trace_shard_len: usize,
+        shard_len: usize,
         tau: &[F],
         transcript: &mut ProofTranscript,
     ) -> (Self, Vec<F>, [F; 3])
@@ -533,26 +531,66 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let mut polys = Vec::new();
         let mut claim = F::zero();
 
+        let input_polys_oracle = R1CSInputsOracle::new(shard_len, trace, preprocessing);
+
         let mut az_bz_poly_oracle = SpartanInterleavedPolynomialOracle::new(
             padded_num_constraints,
             uniform_constraints,
-            cross_step_constraints,
-            tau,
-            trace,
-            trace_shard_len,
-            preprocessing,
+            input_polys_oracle,
         );
 
-        let now = Instant::now();
+        // #[cfg(test)]
+        // {
+        //     let flattened_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
+        //         .par_iter()
+        //         .map(|var| var.generate_witness(trace, preprocessing))
+        //         .collect();
+        //
+        //     // First, precompute the accumulators and also the `SpartanInterleavedPolynomial`
+        //     let (accums_zero_non_streaming, accums_infty_non_streaming, mut az_bz_cz_poly) =
+        //         SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::new_with_precompute(
+        //             padded_num_constraints,
+        //             uniform_constraints,
+        //             &flattened_polys,
+        //             tau,
+        //         );
+        //
+        //     let mut streamed_az_bz_poly = Vec::<SparseCoefficient<i128>>::new();
+        //
+        //     let mut stored_az_bz_cz_poly = Vec::<SparseCoefficient<i128>>::new();
+        //
+        //     for v in az_bz_cz_poly.ab_unbound_coeffs_shards.iter() {
+        //         stored_az_bz_cz_poly.extend(v);
+        //     }
+        //
+        //     let num_shards = az_bz_poly_oracle.get_len() / shard_len;
+        //
+        //     for i in 0..num_shards {
+        //         let shard = az_bz_poly_oracle.next_shard();
+        //         for val in shard {
+        //             streamed_az_bz_poly.push(val);
+        //         }
+        //     }
+        //
+        //     for i in 0..streamed_az_bz_poly.len() {
+        //         assert_eq!(
+        //             streamed_az_bz_poly[i], stored_az_bz_cz_poly[i],
+        //             "At index {} streamed value = {:?}, stored value = {:?}",
+        //             i, streamed_az_bz_poly[i], stored_az_bz_cz_poly[i]
+        //         );
+        //     }
+        //     az_bz_poly_oracle.reset();
+        //
+        //     println!("The Az and Bz streamed are correct");
+        // }
+
         let (accums_zero, accums_infty) = az_bz_poly_oracle.compute_accumulators(
             padded_num_constraints,
             uniform_constraints,
-            cross_step_constraints,
             tau,
-            trace_shard_len,
+            shard_len,
         );
         az_bz_poly_oracle.reset();
-        println!("Streaming SVO time = {:?}", now.elapsed());
 
         let mut eq_poly = GruenSplitEqPolynomial::new(tau);
         process_svo_sumcheck_rounds::<NUM_SVO_ROUNDS, F, ProofTranscript>(
@@ -565,20 +603,23 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             &mut eq_poly,
         );
 
-        let potential_streaming_rounds_start = NUM_SVO_ROUNDS;
-        let binding_round = num_rounds - trace_shard_len.log_2();
-        // let binding_round = (trace_shard_len.log_2() + padded_num_constraints.log_2()) / 2;
-        let streaming_rounds_start =
-            std::cmp::min(potential_streaming_rounds_start, binding_round - 1);
+        let streaming_rounds_start = NUM_SVO_ROUNDS;
+        let binding_round = if num_rounds > shard_len.log_2() - padded_num_constraints.log_2() {
+            std::cmp::max(
+                streaming_rounds_start,
+                num_rounds - shard_len.log_2() - padded_num_constraints.log_2(),
+            )
+        } else {
+            streaming_rounds_start
+        };
 
         println!("Binding round = {}", binding_round);
 
         let mut r_rev = r.clone();
         r_rev.reverse();
         let mut eq_r_evals = EqPolynomial::evals(&r_rev);
-        let num_shards = az_bz_poly_oracle.get_len() / trace_shard_len;
+        let num_shards = az_bz_poly_oracle.get_len() / shard_len;
         az_bz_poly_oracle.streaming_rounds(
-            trace_shard_len,
             num_shards,
             streaming_rounds_start,
             binding_round,
@@ -782,23 +823,19 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             .reduce(|| (F::zero(), F::zero()), |a, b| (a.0 + b.0, a.1 + b.1))
     }
 
-
-
     #[tracing::instrument(skip_all, name = "shift_sumcheck")]
-    pub fn shift_sumcheck<'a, Func, PCS>(
+    pub fn shift_sumcheck<Func, PCS>(
         num_rounds: usize,
-        stream_poly: &mut BindZRyVarOracle<F, PCS, ProofTranscript>,
-        eq_rx_step: SplitEqPolynomial<F>,
+        stream_poly: &mut ShiftSumCheckOracle<F, PCS, ProofTranscript>,
         comb_func: Func,
         shard_length: usize,
         transcript: &mut ProofTranscript,
-    ) -> (Self, Vec<F>)
+        degree: usize,
+    ) -> (Self, Vec<F>, Vec<F>)
     where
         Func: Fn(&[F]) -> F + Sync,
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
     {
-        let num_polys = 2;
-        let degree = 2;
         let mut r: Vec<F> = Vec::with_capacity(num_rounds);
         let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::with_capacity(num_rounds);
 
@@ -821,24 +858,14 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         };
 
         let mut eq_eval_idx_s_vec = vec![vec![F::one(); 2]; degree + 1];
-        let num_x1_bits = eq_rx_step.E1_len.log_2();
-        let x1_bitmask = (1 << num_x1_bits) - 1;
-
         for s in 0..=degree {
             let val = F::from_u64(s as u64);
             eq_eval_idx_s_vec[s][0] = F::one() - val;
             eq_eval_idx_s_vec[s][1] = val;
         }
-        let mut polys = Vec::with_capacity(num_polys);
-        polys.push(stream_poly.next_shard());
-        polys.push(eq_plus_one_shards(
-            0,
-            shard_length,
-            &eq_rx_step,
-            num_x1_bits,
-            x1_bitmask,
-        ));
 
+        let mut polys = stream_poly.next_shard();
+        let num_polys = polys.len();
         for round in 0..split_at {
             let mask = (1 << round) - 1;
             let mut accumulator = vec![F::zero(); degree + 1];
@@ -917,19 +944,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                             .zip(acc.iter())
                             .for_each(|(acc, eval)| *acc += *eval);
                     },
-                    || {
-                        let mut polys = Vec::with_capacity(num_polys);
-                        let len = stream_poly.get_len();
-                        polys.push(stream_poly.next_shard());
-                        polys.push(eq_plus_one_shards(
-                            (base_poly_idx + shard_length) % len,
-                            shard_length,
-                            &eq_rx_step,
-                            num_x1_bits,
-                            x1_bitmask,
-                        ));
-                        polys
-                    },
+                    || stream_poly.next_shard(),
                 );
             }
 
@@ -947,54 +962,60 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         //Bind Polynomials
         let chunk_size = evals_1.len();
         let no_of_chunks = shard_length / chunk_size;
-        let mut bind_poly1 = Vec::with_capacity(num_shards * no_of_chunks);
-        let mut bind_poly2 = Vec::with_capacity(num_shards * no_of_chunks);
+        let mut bind_shards = vec![Vec::with_capacity(num_shards * no_of_chunks); num_polys];
         for shard_idx in 0..num_shards {
             (_, polys) = rayon::join(
                 || {
                     (0..no_of_chunks).for_each(|chunk_iter| {
                         let start_idx = chunk_iter * chunk_size;
                         let end_idx = start_idx + chunk_size;
-                        let (dot1, dot2) = into_optimal_iter!(start_idx..end_idx)
+                        let dot_products = into_optimal_iter!(start_idx..end_idx)
                             .zip(optimal_iter!(evals_1))
-                            .map(|(i, eval)| (polys[0].get_coeff(i), polys[1].get_coeff(i), eval))
+                            .map(|(i, eval)| {
+                                (
+                                    polys
+                                        .iter()
+                                        .map(|poly| poly.get_coeff(i))
+                                        .collect::<Vec<F>>(),
+                                    eval,
+                                )
+                            })
                             .fold(
-                                || (F::zero(), F::zero()),
-                                |(acc1, acc2), (coeff1, coeff2, eval)| {
-                                    (acc1 + coeff1 * eval, acc2 + coeff2 * eval)
+                                || vec![F::zero(); num_polys],
+                                |acc, (coeff, eval)| {
+                                    (0..num_polys)
+                                        .map(|idx| acc[idx] + coeff[idx] * eval)
+                                        .collect::<Vec<F>>()
                                 },
                             )
                             .reduce(
-                                || (F::zero(), F::zero()),
-                                |(acc1, acc2), (sum1, sum2)| (acc1 + sum1, acc2 + sum2),
+                                || vec![F::zero(); num_polys],
+                                |acc, sum| {
+                                    (0..num_polys)
+                                        .map(|idx| acc[idx] + sum[idx])
+                                        .collect::<Vec<F>>()
+                                },
                             );
-                        bind_poly1.push(dot1);
-                        bind_poly2.push(dot2);
+                        bind_shards
+                            .iter_mut()
+                            .enumerate()
+                            .for_each(|(idx, poly)| poly.push(dot_products[idx]));
                     });
                 },
                 || {
                     let mut polys = Vec::with_capacity(num_polys);
                     if shard_idx != num_shards - 1 {
-                        let len = stream_poly.get_len();
-                        polys.push(stream_poly.next_shard());
-                        polys.push(eq_plus_one_shards(
-                            ((shard_idx + 1) * shard_length) % len,
-                            shard_length,
-                            &eq_rx_step,
-                            num_x1_bits,
-                            x1_bitmask,
-                        ));
+                        polys = stream_poly.next_shard();
                     }
                     polys
                 },
             );
         }
 
-        let mut bind_polys = vec![
-            MultilinearPolynomial::from(bind_poly1),
-            MultilinearPolynomial::from(bind_poly2),
-        ];
-
+        let mut bind_polys = bind_shards
+            .iter()
+            .map(|poly| MultilinearPolynomial::from(poly.clone()))
+            .collect::<Vec<MultilinearPolynomial<F>>>();
         let second_half_claim = (0..1 << (num_rounds - split_at))
             .into_par_iter()
             .map(|i| {
@@ -1003,21 +1024,27 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             })
             .reduce(|| F::zero(), |acc, x| acc + x);
 
-        let (mut second_half_proof, mut second_half_r, _) = SumcheckInstanceProof::prove_arbitrary(
-            &second_half_claim,
-            num_rounds - split_at,
-            &mut bind_polys,
-            comb_func,
-            2,
-            BindingOrder::LowToHigh,
-            transcript,
-        );
+        let (mut second_half_proof, mut second_half_r, shift_sumcheck_claims) =
+            SumcheckInstanceProof::prove_arbitrary(
+                &second_half_claim,
+                num_rounds - split_at,
+                &mut bind_polys,
+                comb_func,
+                2,
+                BindingOrder::LowToHigh,
+                transcript,
+            );
         compressed_polys.append(&mut second_half_proof.compressed_polys);
         r.append(&mut second_half_r);
 
-        (SumcheckInstanceProof::new(compressed_polys), r)
+        (
+            SumcheckInstanceProof::new(compressed_polys),
+            r,
+            shift_sumcheck_claims,
+        )
     }
 }
+#[inline]
 pub fn eq_plus_one_shards<F: JoltField>(
     step_shard: usize,
     shard_length: usize,
