@@ -19,10 +19,9 @@ use rayon::prelude::*;
 
 use crate::jolt::vm::JoltProverPreprocessing;
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
-use crate::r1cs::inputs::{R1CSInputsOracle, ALL_R1CS_INPUTS};
+use crate::r1cs::inputs::R1CSInputsOracle;
 use ark_std::iterable::Iterable;
 use rayon::ThreadPoolBuilder;
-use std::ops::Mul;
 use std::time::{Duration, Instant};
 use tracer::instruction::RV32IMCycle;
 
@@ -1248,7 +1247,7 @@ where
         assert_eq!(num_non_svo_z_vars, iter_num_x_out_vars + iter_num_x_in_vars);
 
         let num_uniform_r1cs_constraints = uniform_constraints.len();
-        let rem_num_uniform_r1cs_constraints = num_uniform_r1cs_constraints % Y_SVO_SPACE_SIZE;
+        let _rem_num_uniform_r1cs_constraints = num_uniform_r1cs_constraints % Y_SVO_SPACE_SIZE;
 
         // --- Setup: E_in and E_out tables ---
         // Call GruenSplitEqPolynomial::new_for_small_value with the determined variable splits.
@@ -1538,7 +1537,6 @@ where
     // TODO: Implement Dao-Thaler optimisation.
     pub fn streaming_rounds(
         &mut self,
-        trace_shard_len: usize,
         num_shards: usize,
         streaming_rounds_start: usize,
         streaming_rounds_end: usize,
@@ -1844,10 +1842,8 @@ where
                     },
                     || {
                         pool_2.install(|| {
-                            let now = Instant::now();
                             // TODO: Refactor. Put this in a sepearte funciton or closure.
                             let num_x_in_vars = eq_poly.E_in_current_len().log_2();
-                            // let num_x_out_vars = eq_poly.E_out_current_len().log_2();
                             let now = Instant::now();
                             let blocks = shard
                                 .chunk_by(|c1, c2| {
@@ -1881,7 +1877,6 @@ where
 
                                         let x_in_val =
                                             current_block_id & ((1 << num_x_in_vars) - 1);
-                                        // println!("x_in_val = {}", x_in_val);
                                         let x_out_val = current_block_id >> num_x_in_vars;
 
                                         let e_out_val = eq_poly.E_out_current()[x_out_val];
