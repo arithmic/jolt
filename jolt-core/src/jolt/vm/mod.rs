@@ -6,6 +6,7 @@ use crate::poly::opening_proof::{ProverOpeningAccumulator, VerifierOpeningAccumu
 use crate::r1cs::constraints::R1CSConstraints;
 use crate::r1cs::spartan::UniformSpartanProof;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_std::iterable::Iterable;
 use bytecode::{BytecodePreprocessing, BytecodeShoutProof};
 use common::jolt_device::MemoryLayout;
 use instruction_lookups::LookupsProof;
@@ -282,36 +283,63 @@ where
         );
         transcript.append_scalar(&spartan_key.vk_digest);
 
-        // let r1cs_proof = UniformSpartanProof::prove::<PCS>(
-        //     &preprocessing,
-        //     &constraint_builder,
-        //     &spartan_key,
-        //     &trace,
-        //     &mut opening_accumulator,
-        //     &mut transcript,
-        // )
-        // .ok()
-        // .unwrap();
+        let mut transcript_1 = transcript.clone();
+
+        let r1cs_proof = UniformSpartanProof::prove::<PCS>(
+            &preprocessing,
+            &constraint_builder,
+            &spartan_key,
+            &trace,
+            &mut opening_accumulator,
+            &mut transcript,
+        )
+        .ok()
+        .unwrap();
 
         let shard_len = std::cmp::min(
             padded_trace_length,
             std::cmp::max(
                 1 << (padded_trace_length.log_2() - padded_trace_length.log_2() / 2),
-                1 << 15,
+                1 << 20,
             ),
         );
 
-        let r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
+        println!("shard_len: {shard_len}");
+
+        // let shard_len = padded_trace_length;
+
+        let outer_sumcheck_proof = UniformSpartanProof::prove_streaming::<PCS>(
             &preprocessing,
             &constraint_builder,
             &spartan_key,
             &trace,
             shard_len,
             &mut opening_accumulator,
-            &mut transcript,
-        )
-        .ok()
-        .unwrap();
+            &mut transcript_1,
+        );
+        // .ok()
+        // .unwrap();
+
+        #[cfg(test)]
+        {
+            println!(
+                "Streaming sum-check proof has {} polys.",
+                outer_sumcheck_proof.compressed_polys.len()
+            );
+
+            assert_eq!(
+                outer_sumcheck_proof.compressed_polys.len(),
+                r1cs_proof.outer_sumcheck_proof.compressed_polys.len()
+            );
+            for i in 0..r1cs_proof.outer_sumcheck_proof.compressed_polys.len() {
+                assert_eq!(
+                    outer_sumcheck_proof.compressed_polys[i].coeffs_except_linear_term,
+                    r1cs_proof.outer_sumcheck_proof.compressed_polys[i].coeffs_except_linear_term,
+                    "The streaming sum-check errs in round {i}"
+                );
+            }
+            println!("streaming sum-check prover returns the correct proof.");
+        }
 
         let instruction_proof = LookupsProof::prove(
             &preprocessing.shared.generators,
