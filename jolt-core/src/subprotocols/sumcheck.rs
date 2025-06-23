@@ -30,6 +30,7 @@ use crate::poly::sparse_interleaved_poly::SparseCoefficient;
 use crate::r1cs::inputs::{R1CSInputsOracle, ALL_R1CS_INPUTS};
 use ark_serialize::*;
 use rayon::prelude::*;
+use smallvec::{smallvec, SmallVec};
 use std::marker::PhantomData;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -549,7 +550,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             input_polys_oracle,
         );
 
-        // let streaming_time = Instant::now();
         let (accums_zero, accums_infty) = az_bz_poly_oracle.compute_accumulators(
             padded_num_constraints,
             uniform_constraints,
@@ -877,7 +877,8 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             }
         };
 
-        let mut eq_eval_idx_s_vec = vec![vec![F::one(); 2]; degree + 1];
+        let mut eq_eval_idx_s_vec: Vec<SmallVec<[F; 2]>> = vec![smallvec![F::one(); 2]; degree + 1];
+
         for s in 0..=degree {
             let val = F::from_u64(s as u64);
             eq_eval_idx_s_vec[s][0] = F::one() - val;
@@ -889,7 +890,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         for round in 0..split_at {
             let mask = (1 << round) - 1;
             let mut accumulator = vec![F::zero(); degree + 1];
-
             for shard_idx in 0..num_shards {
                 let base_poly_idx = shard_length * shard_idx;
                 (_, polys) = rayon::join(
@@ -898,63 +898,43 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                         let no_of_chunks = shard_length / chunk_size;
                         let acc = (0..no_of_chunks)
                             .into_par_iter()
-                            .map(|chunk_iter| {
-                                let base_chunk_idx = chunk_iter * chunk_size;
-                                let witness_eval = (0..chunk_size)
-                                    .map(|idx_in_chunk| {
-                                        let idx_in_shard = base_chunk_idx + idx_in_chunk;
-                                        let idx_in_poly = base_poly_idx + idx_in_shard;
-                                        let bit = (idx_in_poly >> round) & 1;
-                                        polys
-                                            .iter()
-                                            .map(|poly| {
-                                                let coeff = poly.get_coeff(idx_in_shard);
-                                                let eval_1 = evals_1[idx_in_poly & mask];
-                                                (0..=degree)
-                                                    .map(|s| {
-                                                        eval_1
-                                                            * eq_eval_idx_s_vec[s][bit]
-                                                                .mul_01_optimized(coeff)
-                                                    })
-                                                    .collect::<Vec<F>>()
-                                            })
-                                            .collect::<Vec<Vec<F>>>()
-                                    })
-                                    .fold(
+                            .fold(
+                                || vec![F::zero(); degree + 1],
+                                |mut acc, chunk_iter| {
+                                    let base_chunk_idx = chunk_iter * chunk_size;
+                                    let witness_eval = (0..chunk_size).fold(
                                         (|| vec![vec![F::zero(); degree + 1]; num_polys])(),
-                                        |mut acc, x| {
+                                        |mut acc, idx_in_chunk| {
+                                            let idx_in_shard = base_chunk_idx + idx_in_chunk;
+                                            let idx_in_poly = base_poly_idx + idx_in_shard;
+                                            let bit = (idx_in_poly >> round) & 1;
+                                            let eval_1 = evals_1[idx_in_poly & mask];
                                             for i in 0..num_polys {
                                                 for j in 0..=degree {
-                                                    acc[i][j] += x[i][j];
+                                                    acc[i][j] += polys[i].get_coeff(idx_in_shard)
+                                                        * eval_1.mul_01_optimized(
+                                                            eq_eval_idx_s_vec[j][bit],
+                                                        );
                                                 }
                                             }
                                             acc
                                         },
                                     );
-                                (0..=degree)
-                                    .map(|s| {
-                                        comb_func(
+                                    acc.iter_mut().enumerate().for_each(|(deg_iter, acc)| {
+                                        *acc += comb_func(
                                             &(0..num_polys)
-                                                .map(|k| witness_eval[k][s])
+                                                .map(|poly_iter| witness_eval[poly_iter][deg_iter])
                                                 .collect::<Vec<F>>(),
                                         )
-                                    })
-                                    .collect::<Vec<F>>()
-                            })
-                            .fold(
-                                || vec![F::zero(); degree + 1],
-                                |mut acc, x| {
-                                    acc.iter_mut()
-                                        .zip(x.iter())
-                                        .for_each(|(acc, eval)| *acc += *eval);
+                                    });
                                     acc
                                 },
                             )
                             .reduce(
                                 || vec![F::zero(); degree + 1],
-                                |mut acc, x| {
+                                |mut acc, evals| {
                                     acc.iter_mut()
-                                        .zip(x.iter())
+                                        .zip(evals.iter())
                                         .for_each(|(acc, eval)| *acc += *eval);
                                     acc
                                 },
@@ -991,20 +971,11 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                         let end_idx = start_idx + chunk_size;
                         let dot_products = into_optimal_iter!(start_idx..end_idx)
                             .zip(optimal_iter!(evals_1))
-                            .map(|(i, eval)| {
-                                (
-                                    polys
-                                        .iter()
-                                        .map(|poly| poly.get_coeff(i))
-                                        .collect::<Vec<F>>(),
-                                    eval,
-                                )
-                            })
                             .fold(
                                 || vec![F::zero(); num_polys],
-                                |acc, (coeff, eval)| {
+                                |acc, (coeff_at, eval)| {
                                     (0..num_polys)
-                                        .map(|idx| acc[idx] + coeff[idx] * eval)
+                                        .map(|idx| acc[idx] + polys[idx].get_coeff(coeff_at) * eval)
                                         .collect::<Vec<F>>()
                                 },
                             )
@@ -1033,16 +1004,17 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         }
 
         let mut bind_polys = bind_shards
-            .iter()
-            .map(|poly| MultilinearPolynomial::from(poly.clone()))
+            .into_par_iter()
+            .map(|poly| MultilinearPolynomial::from(poly))
             .collect::<Vec<MultilinearPolynomial<F>>>();
+
         let second_half_claim = (0..1 << (num_rounds - split_at))
             .into_par_iter()
-            .map(|i| {
-                let params: Vec<F> = bind_polys.iter().map(|poly| poly.get_coeff(i)).collect();
+            .map(|iter| {
+                let params: Vec<F> = bind_polys.iter().map(|poly| poly.get_coeff(iter)).collect();
                 comb_func(&params)
             })
-            .reduce(|| F::zero(), |acc, x| acc + x);
+            .reduce(|| F::zero(), |acc, eval| acc + eval);
 
         let (mut second_half_proof, mut second_half_r, shift_sumcheck_claims) =
             SumcheckInstanceProof::prove_arbitrary(

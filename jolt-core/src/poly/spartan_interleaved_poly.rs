@@ -1547,12 +1547,10 @@ where
                             .chunk_by(|u, v| u.index / (2 * block_size) == v.index / (2 * block_size))
                             .for_each(|block| {
                                 let current_block_id = block[0].index / (2 * block_size);
-
                                 let x_in_val =
                                     current_block_id & ((1 << num_x_in_vars) - 1);
                                 // println!("x_in_val = {}", x_in_val);
                                 let x_out_val = current_block_id >> num_x_in_vars;
-
                                 let e_out_val = eq_poly.E_out_current()[x_out_val];
                                 let e_in_val = if eq_poly.E_in_current_len() > 1 {
                                     eq_poly.E_in_current()[x_in_val]
