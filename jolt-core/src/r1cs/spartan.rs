@@ -33,10 +33,10 @@ use crate::{
 
 use super::builder::CombinedUniformBuilder;
 
-use crate::jolt::instruction::LookupQuery;
 use crate::poly::split_eq_poly::SplitEqPolynomial;
 use crate::subprotocols::sumcheck::eq_plus_one_shards;
 use rayon::prelude::*;
+
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
 pub enum SpartanError {

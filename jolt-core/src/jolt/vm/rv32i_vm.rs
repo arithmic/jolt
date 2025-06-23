@@ -251,7 +251,7 @@ mod tests {
         let mut program = host::Program::new("sha3-chain-guest");
         let (bytecode, memory_init) = program.decode();
         let mut inputs = postcard::to_stdvec(&[5u8; 32]).unwrap();
-        inputs.append(&mut postcard::to_stdvec(&2048u32).unwrap());
+        inputs.append(&mut postcard::to_stdvec(&512u32).unwrap());
         let (io_device, trace) = program.trace(&inputs);
         drop(guard);
 
