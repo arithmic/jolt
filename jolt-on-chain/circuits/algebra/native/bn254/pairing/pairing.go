@@ -709,12 +709,20 @@ func (e PairingAPI) Pairing(Q *groups.G2Affine, P *groups.G1Projective) *field_t
 
 func (e PairingAPI) MillerLoopStepIntegrated(
 	Rin *groups.G2Projective, // R[2*i]
-	Q, negQ *groups.G2Affine, // Q and -Q
+	// Q, negQ *groups.G2Affine, // Q and -Q
+	Q *groups.G2Affine, // Q
 	p *groups.G1Affine, // affine P
 	fIn *field_tower.Fp12, // f[3*i]
 	bit frontend.Variable, // {-1, 0, 1}
 	twoInv frontend.Variable,
 ) (Rout groups.G2Projective, f1, f2, f3 field_tower.Fp12) {
+
+	// compute negQ
+	var negQ groups.G2Affine
+	negQ.X = Q.X
+	negQ.Y.A0 = e.api.Neg(Q.Y.A0)
+	negQ.Y.A1 = e.api.Neg(Q.Y.A1)
+
 	// Step 1: LineDouble
 	RmidPtr, ell1Ptr := LineDouble(&e.api, &e.e2, Rin, twoInv)
 	Rmid := *RmidPtr
@@ -726,7 +734,7 @@ func (e PairingAPI) MillerLoopStepIntegrated(
 
 	// Line additions
 	Rout1Ptr, ell2_1Ptr := LineAddition(&e.api, &e.e2, &Rmid, Q)
-	RoutMinus1Ptr, ell2_minus1Ptr := LineAddition(&e.api, &e.e2, &Rmid, negQ)
+	RoutMinus1Ptr, ell2_minus1Ptr := LineAddition(&e.api, &e.e2, &Rmid, &negQ)
 
 	// Select Rout.X
 	RoutX := e.e2.Select(isOne, &Rout1Ptr.X, &Rmid.X)
@@ -796,7 +804,6 @@ type MillerStepCircuit struct {
 	FIn  field_tower.Fp12 `gnark:",public"`
 	P    groups.G1Affine  `gnark:",public"`
 	Q    groups.G2Affine  `gnark:",public"`
-	NegQ groups.G2Affine  `gnark:",public"`
 	Rin  groups.G2Projective
 	Rout groups.G2Projective
 	Bit  frontend.Variable
@@ -806,7 +813,6 @@ type MillerStepCircuit struct {
 	fIn  bn254.E12
 	p    bn254.G1Affine
 	q    bn254.G2Affine
-	negQ bn254.G2Affine
 	rin  G2Projective
 	rout G2Projective
 	bit  int
@@ -818,7 +824,7 @@ func (step_circuit *MillerStepCircuit) Define(api frontend.API) error {
 	twoInv := api.Inverse(frontend.Variable(2))
 
 	_, f1, f2, f3 := pairing.MillerLoopStepIntegrated(
-		&step_circuit.Rin, &step_circuit.Q, &step_circuit.NegQ, &step_circuit.P, &step_circuit.FIn, step_circuit.Bit, twoInv,
+		&step_circuit.Rin, &step_circuit.Q, &step_circuit.P, &step_circuit.FIn, step_circuit.Bit, twoInv,
 	)
 	e12 := field_tower.NewExt12(api)
 	e12.AssertIsEqual(&f1, &step_circuit.FOut[0])
@@ -829,7 +835,7 @@ func (step_circuit *MillerStepCircuit) Define(api frontend.API) error {
 
 func (step_circuit *MillerStepCircuit) Hint() {
 	step_circuit.rout, step_circuit.fOut[0], step_circuit.fOut[1], step_circuit.fOut[2] = MillerLoopStepIntegrated_fn(
-		&step_circuit.rin, &step_circuit.q, &step_circuit.negQ, &step_circuit.p, &step_circuit.fIn, step_circuit.bit)
+		&step_circuit.rin, &step_circuit.q, &step_circuit.p, &step_circuit.fIn, step_circuit.bit)
 }
 
 func (step_circuit *MillerStepCircuit) GenerateWitness(constraints constraint.ConstraintSystem) grumpkin_fr.Vector {
@@ -849,28 +855,23 @@ func (step_circuit *MillerStepCircuit) GenerateWitness(constraints constraint.Co
 
 // Miller Uniform Circuit: Chains 64 steps
 type MillerUniformCircuit struct {
-	P                   groups.G1Affine  `gnark:",public"`
-	Q                   groups.G2Affine  `gnark:",public"`
-	NegQ                groups.G2Affine  `gnark:",public"`
-	FIn                 field_tower.Fp12 `gnark:",public"`
+	P   groups.G1Affine  `gnark:",public"`
+	Q   groups.G2Affine  `gnark:",public"`
+	FIn field_tower.Fp12 `gnark:",public"`
+
 	FOut                field_tower.Fp12
 	Miller_step_circuit *MillerStepCircuit
 
 	// Native
 	p    bn254.G1Affine
 	q    bn254.G2Affine
-	negQ bn254.G2Affine
 	fOut bn254.E12
 }
 
 func (miller_uniform_circuit *MillerUniformCircuit) CreateStepCircuit() constraint.ConstraintSystem {
 	miller_uniform_circuit.Miller_step_circuit = &MillerStepCircuit{
-		P:    miller_uniform_circuit.P,
-		Q:    miller_uniform_circuit.Q,
-		NegQ: miller_uniform_circuit.NegQ,
-		p:    miller_uniform_circuit.p,
-		q:    miller_uniform_circuit.q,
-		negQ: miller_uniform_circuit.negQ,
+		p: miller_uniform_circuit.p,
+		q: miller_uniform_circuit.q,
 	}
 	constraints, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, miller_uniform_circuit.Miller_step_circuit)
 	return constraints
@@ -901,11 +902,6 @@ func (miller_uniform_circuit *MillerUniformCircuit) GenerateWitness(constraints 
 
 		miller_uniform_circuit.Miller_step_circuit.P = groups.AffineFromG1Affine(&miller_uniform_circuit.p)
 		miller_uniform_circuit.Miller_step_circuit.Q = groups.G2AffineFromBNG2Affine(&miller_uniform_circuit.q)
-		miller_uniform_circuit.Miller_step_circuit.NegQ = groups.G2AffineFromBNG2Affine(&miller_uniform_circuit.negQ)
-
-		miller_uniform_circuit.Miller_step_circuit.p = miller_uniform_circuit.p
-		miller_uniform_circuit.Miller_step_circuit.q = miller_uniform_circuit.q
-		miller_uniform_circuit.Miller_step_circuit.negQ = miller_uniform_circuit.negQ
 
 		miller_uniform_circuit.Miller_step_circuit.Bit = bit
 		miller_uniform_circuit.Miller_step_circuit.bit = bit
@@ -924,7 +920,7 @@ func (miller_uniform_circuit *MillerUniformCircuit) GenerateWitness(constraints 
 		rIn = miller_uniform_circuit.Miller_step_circuit.rout
 
 		stepWitness := miller_uniform_circuit.Miller_step_circuit.GenerateWitness(constraints)
-		witness = append(witness, stepWitness...) // <-- accumulate all step results
+		witness = append(witness, stepWitness...)
 
 	}
 	miller_uniform_circuit.fOut = FIn
@@ -1008,16 +1004,14 @@ func (circuit *MillerEllFinalStepCircuit) GenerateWitness(circuits []*MillerEllF
 }
 
 type PairingUniformCircuit struct {
-	P    groups.G1Affine  `gnark:",public"`
-	Q    groups.G2Affine  `gnark:",public"`
-	NegQ groups.G2Affine  `gnark:",public"`
-	Res  field_tower.Fp12 `gnark:",public"`
+	P   groups.G1Affine  `gnark:",public"`
+	Q   groups.G2Affine  `gnark:",public"`
+	Res field_tower.Fp12 `gnark:",public"`
 
 	// Native
-	p    bn254.G1Affine
-	q    bn254.G2Affine
-	negQ bn254.G2Affine
-	res  bn254.E12
+	p   bn254.G1Affine
+	q   bn254.G2Affine
+	res bn254.E12
 
 	Miller_uniform *MillerUniformCircuit
 	Miller_final   *MillerEllFinalStepCircuit
@@ -1026,10 +1020,8 @@ type PairingUniformCircuit struct {
 func (p *PairingUniformCircuit) CreateStepCircuits() []constraint.ConstraintSystem {
 	p.Miller_uniform.P = p.P
 	p.Miller_uniform.Q = p.Q
-	p.Miller_uniform.NegQ = p.NegQ
 	p.Miller_uniform.p = p.p
 	p.Miller_uniform.q = p.q
-	p.Miller_uniform.negQ = p.negQ
 
 	cs1 := p.Miller_uniform.CreateStepCircuit()
 	cs2 := p.Miller_final.Compile()
@@ -1073,7 +1065,6 @@ func (p *PairingUniformCircuit) GenerateWitness(constraints []constraint.Constra
 		witness = append(witness, grumpkin_fr.Element(elem))
 	}
 
-	// ========== Final Consistency Check ==========
 	p.res = p.Miller_final.fOut
 	p.Res = field_tower.FromE12(&p.res)
 

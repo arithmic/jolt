@@ -2,6 +2,9 @@ package uniform
 
 import (
 	"fmt"
+	"math/big"
+	"strconv"
+
 	"github.com/arithmic/gnark/constraint"
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
@@ -9,8 +12,6 @@ import (
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
-	"math/big"
-	"strconv"
 )
 
 func makeFrontendVariable(input []fr.Element) []frontend.Variable {
@@ -20,7 +21,6 @@ func makeFrontendVariable(input []fr.Element) []frontend.Variable {
 	}
 	return res
 }
-
 
 // frontendVariableToFrElement converts a single frontend.Variable to fr.Element
 func frontendVariableToFrElement(v frontend.Variable) (fr.Element, error) {
@@ -69,7 +69,6 @@ func convertFrontendArrayToFrArray(vars []frontend.Variable) ([]fr.Element, erro
 	}
 	return result, nil
 }
-
 
 type GTExpStep struct {
 	AccEval     frontend.Variable
@@ -249,7 +248,7 @@ func (gtExp *GTExp) GenerateWitness(constraints constraint.ConstraintSystem) fr.
 		gtExp.gtExpStep.bit = bit
 
 		gtExp.gtExpStep.Hint()
-    
+
 		gtExp.gtExpStep.Bit = bit
 		witnessStep := gtExp.gtExpStep.GenerateWitness(constraints)
 

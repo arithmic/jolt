@@ -363,11 +363,19 @@ func MillerLoopStep_fn(
 
 func MillerLoopStepIntegrated_fn(
 	Rin *G2Projective, // R[2*i]
-	Q, negQ *bn254.G2Affine, // Q and -Q
+	// Q, negQ *bn254.G2Affine, // Q and -Q
+	Q *bn254.G2Affine, // Q
 	p *bn254.G1Affine, // affine P
 	fIn *bn254.E12, // f[3*i]
 	bit int, // {-1, 0, 1}
 ) (Rout G2Projective, f1, f2, f3 bn254.E12) {
+
+	// compute negQ
+	var negQ bn254.G2Affine
+
+	negQ.X = Q.X
+	negQ.Y.A0.Neg(&Q.Y.A0)
+	negQ.Y.A1.Neg(&Q.Y.A1)
 
 	// Step 1: LineDouble
 	RmidPtr, ell1 := LineDouble_fn(Rin)
@@ -380,7 +388,7 @@ func MillerLoopStepIntegrated_fn(
 		Rout = *RoutPtr
 		ell2 = ell2Ptr
 	} else if bit == -1 {
-		RoutPtr, ell2Ptr := LineAddition_fn(&Rmid, negQ)
+		RoutPtr, ell2Ptr := LineAddition_fn(&Rmid, &negQ)
 		Rout = *RoutPtr
 		ell2 = ell2Ptr
 	} else {

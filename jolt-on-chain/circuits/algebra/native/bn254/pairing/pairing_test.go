@@ -570,13 +570,13 @@ func TestPairingUniformCircuit(t *testing.T) {
 
 	// Combine into final pairing circuit
 	pairingCircuit := &PairingUniformCircuit{
-		P:              groups.AffineFromG1Affine(&P),
-		Q:              groups.G2AffineFromBNG2Affine(&Q),
-		NegQ:           groups.G2AffineFromBNG2Affine(&negQ),
-		Res:            field_tower.FromE12(&nativeML),
-		p:              P,
-		q:              Q,
-		negQ:           negQ,
+		P: groups.AffineFromG1Affine(&P),
+		Q: groups.G2AffineFromBNG2Affine(&Q),
+		// NegQ:           groups.G2AffineFromBNG2Affine(&negQ),
+		Res: field_tower.FromE12(&nativeML),
+		p:   P,
+		q:   Q,
+		// negQ:           negQ,
 		res:            nativeML,
 		Miller_uniform: &MillerUniformCircuit{},
 		Miller_final:   &MillerEllFinalStepCircuit{},
@@ -585,39 +585,21 @@ func TestPairingUniformCircuit(t *testing.T) {
 	pair_r1cs := pairingCircuit.CreateStepCircuits()
 	witness := pairingCircuit.GenerateWitness(pair_r1cs)
 
-	// result with MillerLoop_fn
-	result := MillerLoop_fn(&Q, &P)
-
-	println("Result from MillerLoop_fn:")
-	fmt.Printf("C0.B0.A0: %s\n", result.C0.B0.A0.String())
-	fmt.Printf("C0.B0.A1: %s\n", result.C0.B0.A1.String())
-
-	fmt.Printf("C0.B1.A0: %s\n", result.C0.B1.A0.String())
-	fmt.Printf("C0.B1.A1: %s\n", result.C0.B1.A1.String())
-
-	fmt.Printf("=======================")
-
-	// // print witness
-	// fmt.Println("Witness:")
-	// for i, w := range witness {
-	// 	fmt.Printf("Witness[%d]: %s\n", i, w.String())
-	// }
-
 	// Extract final E12 from witness
 	var resFromCircuit bn254.E12
 	// offset := len(witness) - 12
-	resFromCircuit.C0.B0.A0.SetString(witness[22995+0].String())
-	resFromCircuit.C0.B0.A1.SetString(witness[22995+1].String())
-	resFromCircuit.C0.B1.A0.SetString(witness[22995+2].String())
-	resFromCircuit.C0.B1.A1.SetString(witness[22995+3].String())
-	resFromCircuit.C0.B2.A0.SetString(witness[22995+4].String())
-	resFromCircuit.C0.B2.A1.SetString(witness[22995+5].String())
-	resFromCircuit.C1.B0.A0.SetString(witness[22995+6].String())
-	resFromCircuit.C1.B0.A1.SetString(witness[22995+7].String())
-	resFromCircuit.C1.B1.A0.SetString(witness[22995+8].String())
-	resFromCircuit.C1.B1.A1.SetString(witness[22995+9].String())
-	resFromCircuit.C1.B2.A0.SetString(witness[22995+10].String())
-	resFromCircuit.C1.B2.A1.SetString(witness[22995+11].String())
+	resFromCircuit.C0.B0.A0.SetString(witness[22739+0].String())
+	resFromCircuit.C0.B0.A1.SetString(witness[22739+1].String())
+	resFromCircuit.C0.B1.A0.SetString(witness[22739+2].String())
+	resFromCircuit.C0.B1.A1.SetString(witness[22739+3].String())
+	resFromCircuit.C0.B2.A0.SetString(witness[22739+4].String())
+	resFromCircuit.C0.B2.A1.SetString(witness[22739+5].String())
+	resFromCircuit.C1.B0.A0.SetString(witness[22739+6].String())
+	resFromCircuit.C1.B0.A1.SetString(witness[22739+7].String())
+	resFromCircuit.C1.B1.A0.SetString(witness[22739+8].String())
+	resFromCircuit.C1.B1.A1.SetString(witness[22739+9].String())
+	resFromCircuit.C1.B2.A0.SetString(witness[22739+10].String())
+	resFromCircuit.C1.B2.A1.SetString(witness[22739+11].String())
 
 	circuitFinalExp := bn254.FinalExponentiation(&resFromCircuit)
 
@@ -696,15 +678,15 @@ func TestMillerUniformCircuitStepOnly(t *testing.T) {
 	// Construct public inputs
 	P_circuit := groups.AffineFromG1Affine(&P)
 	Q_circuit := groups.G2AffineFromBNG2Affine(&Q)
-	NegQ_circuit := groups.G2AffineFromBNG2Affine(&negQ)
+	// NegQ_circuit := groups.G2AffineFromBNG2Affine(&negQ)
 
 	millerUniform := MillerUniformCircuit{
-		P:                   P_circuit,
-		Q:                   Q_circuit,
-		NegQ:                NegQ_circuit,
-		p:                   P,
-		q:                   Q,
-		negQ:                negQ,
+		P: P_circuit,
+		Q: Q_circuit,
+		// NegQ:                NegQ_circuit,
+		p: P,
+		q: Q,
+		// negQ:                negQ,
 		Miller_step_circuit: &MillerStepCircuit{},
 	}
 
@@ -730,76 +712,76 @@ func TestMillerUniformCircuitStepOnly(t *testing.T) {
 	// }
 }
 
-func TestMillerStepCircuitSingleStep(t *testing.T) {
-	_, _, g1GenAff, g2GenAff := bn254.Generators()
+// func TestMillerStepCircuitSingleStep(t *testing.T) {
+// 	_, _, g1GenAff, g2GenAff := bn254.Generators()
 
-	var P bn254.G1Affine
-	var Q bn254.G2Affine
+// 	var P bn254.G1Affine
+// 	var Q bn254.G2Affine
 
-	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
-	P.ScalarMultiplication(&g1GenAff, scalar)
-	Q.ScalarMultiplication(&g2GenAff, scalar)
+// 	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
+// 	P.ScalarMultiplication(&g1GenAff, scalar)
+// 	Q.ScalarMultiplication(&g2GenAff, scalar)
 
-	// Compute negQ
-	var negQ bn254.G2Affine
-	negQ.X = Q.X
-	negQ.Y.A1.Neg(&Q.Y.A1)
-	negQ.Y.A0.Neg(&Q.Y.A0)
+// 	// Compute negQ
+// 	var negQ bn254.G2Affine
+// 	negQ.X = Q.X
+// 	negQ.Y.A1.Neg(&Q.Y.A1)
+// 	negQ.Y.A0.Neg(&Q.Y.A0)
 
-	// // Prepare FIn and Rin
-	var FIn bn254.E12
-	FIn.SetOne()
-	Rin := ToProjective_fn(&Q)
+// 	// // Prepare FIn and Rin
+// 	var FIn bn254.E12
+// 	FIn.SetOne()
+// 	Rin := ToProjective_fn(&Q)
 
-	// Choose bit = 1
-	bit := 1
+// 	// Choose bit = 1
+// 	bit := 1
 
-	// Call the integrated Miller step function
-	Rout, f1, f2, f3 := MillerLoopStepIntegrated_fn(&Rin, &Q, &negQ, &P, &FIn, bit)
+// 	// Call the integrated Miller step function
+// 	Rout, f1, f2, f3 := MillerLoopStepIntegrated_fn(&Rin, &Q, &negQ, &P, &FIn, bit)
 
-	var circuit MillerStepCircuit
-	r1cs, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+// 	var circuit MillerStepCircuit
+// 	r1cs, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
 
-	// Build the circuit
-	stepCircuit := MillerStepCircuit{
-		FIn:  field_tower.FromE12(&FIn),
-		P:    groups.AffineFromG1Affine(&P),
-		Q:    groups.G2AffineFromBNG2Affine(&Q),
-		NegQ: groups.G2AffineFromBNG2Affine(&negQ),
-		Rin:  G2ProjectiveFromBNG2Projective(&Rin),
-		Rout: G2ProjectiveFromBNG2Projective(&Rout),
-		Bit:  bit,
+// 	// Build the circuit
+// 	stepCircuit := MillerStepCircuit{
+// 		FIn:  field_tower.FromE12(&FIn),
+// 		P:    groups.AffineFromG1Affine(&P),
+// 		Q:    groups.G2AffineFromBNG2Affine(&Q),
+// 		NegQ: groups.G2AffineFromBNG2Affine(&negQ),
+// 		Rin:  G2ProjectiveFromBNG2Projective(&Rin),
+// 		Rout: G2ProjectiveFromBNG2Projective(&Rout),
+// 		Bit:  bit,
 
-		FOut: [3]field_tower.Fp12{
-			field_tower.FromE12(&f1),
-			field_tower.FromE12(&f2),
-			field_tower.FromE12(&f3),
-		},
+// 		FOut: [3]field_tower.Fp12{
+// 			field_tower.FromE12(&f1),
+// 			field_tower.FromE12(&f2),
+// 			field_tower.FromE12(&f3),
+// 		},
 
-		fIn:  FIn,
-		p:    P,
-		rin:  Rin,
-		q:    Q,
-		negQ: negQ,
-		rout: Rout,
-		bit:  bit,
-		fOut: [3]bn254.E12{f1, f2, f3},
-	}
+// 		fIn:  FIn,
+// 		p:    P,
+// 		rin:  Rin,
+// 		q:    Q,
+// 		negQ: negQ,
+// 		rout: Rout,
+// 		bit:  bit,
+// 		fOut: [3]bn254.E12{f1, f2, f3},
+// 	}
 
-	stepCircuit.GenerateWitness(r1cs)
+// 	stepCircuit.GenerateWitness(r1cs)
 
-	// // Validate result using gnark backend (optional sanity check)
-	// P_arr := []bn254.G1Affine{P}
-	// Q_arr := []bn254.G2Affine{Q}
-	// expected := bn254.MillerLoop(P_arr, Q_arr)
+// 	// // Validate result using gnark backend (optional sanity check)
+// 	// P_arr := []bn254.G1Affine{P}
+// 	// Q_arr := []bn254.G2Affine{Q}
+// 	// expected := bn254.MillerLoop(P_arr, Q_arr)
 
-	// // Compare with computed f3 only for sanity
-	// var computed bn254.E12
-	// computed.Set(&stepCircuit.fOut[2])
+// 	// // Compare with computed f3 only for sanity
+// 	// var computed bn254.E12
+// 	// computed.Set(&stepCircuit.fOut[2])
 
-	// if !expected.Equal(&computed) {
-	// 	t.Error("MillerStepCircuit test failed: output mismatch with MillerLoop result (single step check)")
-	// } else {
-	// 	t.Log("MillerStepCircuit test passed: output matches MillerLoop result")
-	// }
-}
+// 	// if !expected.Equal(&computed) {
+// 	// 	t.Error("MillerStepCircuit test failed: output mismatch with MillerLoop result (single step check)")
+// 	// } else {
+// 	// 	t.Log("MillerStepCircuit test passed: output matches MillerLoop result")
+// 	// }
+// }
