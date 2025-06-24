@@ -2,6 +2,7 @@ extern crate proc_macro;
 
 use core::panic;
 
+use common::rv_trace::MemoryConfig;
 use common::{attributes::parse_attributes, rv_trace::MemoryLayout};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -152,11 +153,14 @@ impl MacroBuilder {
 
                 let verify_closure = move |#(#inputs,)* output, proof: jolt::JoltHyperKZGProof| {
                     let preprocessing = (*preprocessing).clone();
+                    let memory_config = MemoryConfig {
+                        max_input_size: preprocessing.memory_layout.max_input_size,
+                        max_output_size: preprocessing.memory_layout.max_output_size,
+                        stack_size: preprocessing.memory_layout.stack_size,
+                        memory_size: preprocessing.memory_layout.memory_size,
+                    };
+                    let mut io_device = tracer::JoltDevice::new(&memory_config);
 
-                    let mut io_device = tracer::JoltDevice::new(
-                        preprocessing.memory_layout.max_input_size,
-                        preprocessing.memory_layout.max_output_size,
-                    );
                     #(#set_program_args;)*
                     io_device.outputs.append(&mut jolt::postcard::to_stdvec(&output).unwrap());
 
@@ -246,6 +250,12 @@ impl MacroBuilder {
         let attributes = parse_attributes(&self.attr);
         let max_input_size = proc_macro2::Literal::u64_unsuffixed(attributes.max_input_size);
         let max_output_size = proc_macro2::Literal::u64_unsuffixed(attributes.max_output_size);
+        let stack_size = proc_macro2::Literal::u64_unsuffixed(attributes.stack_size);
+        let memory_size = proc_macro2::Literal::u64_unsuffixed(attributes.memory_size);
+        let max_bytecode_size = proc_macro2::Literal::u64_unsuffixed(attributes.max_bytecode_size);
+        let max_trace_length = proc_macro2::Literal::u64_unsuffixed(attributes.max_trace_length);
+        let max_memory_size =
+            proc_macro2::Literal::u64_unsuffixed(attributes.memory_size.next_power_of_two());
         let imports = self.make_imports();
 
         let fn_name = self.get_func_name();
@@ -259,17 +269,22 @@ impl MacroBuilder {
                 #imports
 
                 let (bytecode, memory_init) = program.decode();
-                let memory_layout = MemoryLayout::new(#max_input_size, #max_output_size);
+                let memory_config = MemoryConfig {
+                    max_input_size: #max_input_size,
+                    max_output_size: #max_output_size,
+                    stack_size: #stack_size,
+                    memory_size: #memory_size,
+                };
+                let memory_layout = MemoryLayout::new(&memory_config);
 
-                // TODO(moodlezoup): Feed in size parameters via macro
                 let preprocessing: JoltProverPreprocessing<4, jolt::F, jolt::PCS, jolt::ProofTranscript> =
                     RV32IJoltVM::prover_preprocess(
                         bytecode,
                         memory_layout,
                         memory_init,
-                        1 << 20,
-                        1 << 20,
-                        1 << 24
+                        #max_bytecode_size,
+                        #max_memory_size,
+                        #max_trace_length
                     );
 
                 preprocessing
@@ -281,6 +296,13 @@ impl MacroBuilder {
         let attributes = parse_attributes(&self.attr);
         let max_input_size = proc_macro2::Literal::u64_unsuffixed(attributes.max_input_size);
         let max_output_size = proc_macro2::Literal::u64_unsuffixed(attributes.max_output_size);
+        let stack_size = proc_macro2::Literal::u64_unsuffixed(attributes.stack_size);
+        let memory_size = proc_macro2::Literal::u64_unsuffixed(attributes.memory_size);
+        let max_bytecode_size = proc_macro2::Literal::u64_unsuffixed(attributes.max_bytecode_size);
+        let max_trace_length = proc_macro2::Literal::u64_unsuffixed(attributes.max_trace_length);
+        let max_memory_size =
+            proc_macro2::Literal::u64_unsuffixed(attributes.memory_size.next_power_of_two());
+
         let imports = self.make_imports();
 
         let fn_name = self.get_func_name();
@@ -294,17 +316,22 @@ impl MacroBuilder {
                 #imports
 
                 let (bytecode, memory_init) = program.decode();
-                let memory_layout = MemoryLayout::new(#max_input_size, #max_output_size);
+                let memory_config = MemoryConfig {
+                    max_input_size: #max_input_size,
+                    max_output_size: #max_output_size,
+                    stack_size: #stack_size,
+                    memory_size: #memory_size,
+                };
+                let memory_layout = MemoryLayout::new(&memory_config);
 
-                // TODO(moodlezoup): Feed in size parameters via macro
                 let preprocessing: JoltVerifierPreprocessing<4, jolt::F, jolt::PCS, jolt::ProofTranscript> =
                     RV32IJoltVM::verifier_preprocess(
                         bytecode,
                         memory_layout,
                         memory_init,
-                        1 << 20,
-                        1 << 20,
-                        1 << 24
+                        #max_bytecode_size,
+                        #max_memory_size,
+                        #max_trace_length
                     );
 
                 preprocessing
@@ -346,7 +373,6 @@ impl MacroBuilder {
 
                 let mut input_bytes = vec![];
                 #(#set_program_args;)*
-
                 let (io_device, trace) = program.trace(&input_bytes);
 
                 let (jolt_proof, jolt_commitments, output_io_device, _) = RV32IJoltVM::prove(
@@ -369,8 +395,12 @@ impl MacroBuilder {
 
     fn make_main_func(&self) -> TokenStream2 {
         let attributes = parse_attributes(&self.attr);
-        let memory_layout =
-            MemoryLayout::new(attributes.max_input_size, attributes.max_output_size);
+        let memory_layout = MemoryLayout::new(&MemoryConfig {
+            max_input_size: attributes.max_input_size,
+            max_output_size: attributes.max_output_size,
+            stack_size: attributes.stack_size,
+            memory_size: attributes.memory_size,
+        });
         let input_start = memory_layout.input_start;
         let output_start = memory_layout.output_start;
         let max_input_len = attributes.max_input_size as usize;
@@ -505,6 +535,7 @@ impl MacroBuilder {
                 RV32I,
                 RV32IJoltProof,
                 BytecodeRow,
+                MemoryConfig,
                 MemoryOp,
                 MemoryLayout,
                 MEMORY_OPS_PER_INSTRUCTION,
@@ -633,6 +664,11 @@ impl MacroBuilder {
     fn make_wasm_function(&self) -> TokenStream2 {
         let fn_name = self.get_func_name();
         let verify_wasm_fn_name = Ident::new(&format!("verify_{fn_name}"), fn_name.span());
+        let attributes = parse_attributes(&self.attr);
+        let max_bytecode_size = proc_macro2::Literal::u64_unsuffixed(attributes.max_bytecode_size);
+        let max_trace_length = proc_macro2::Literal::u64_unsuffixed(attributes.max_trace_length);
+        let max_memory_size =
+            proc_macro2::Literal::u64_unsuffixed(attributes.memory_size.next_power_of_two());
 
         quote! {
             #[wasm_bindgen]
@@ -646,9 +682,9 @@ impl MacroBuilder {
                 let preprocessing = RV32IJoltVM::preprocess(
                     decoded_preprocessing_data.bytecode,
                     decoded_preprocessing_data.memory_init,
-                    1 << 20,
-                    1 << 20,
-                    1 << 24,
+                    #max_bytecode_size,
+                    #max_memory_size,
+                    #max_trace_length,
                 );
 
                 let result = RV32IJoltVM::verify(preprocessing, proof.proof, proof.commitments);
