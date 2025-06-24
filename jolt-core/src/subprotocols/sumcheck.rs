@@ -476,8 +476,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             &mut eq_poly,
         );
 
-        let mut non_streaming_time = Duration::ZERO;
-        let now = Instant::now();
         // Round NUM_SVO_ROUNDS : do the streaming sumcheck to compute cached values
         az_bz_cz_poly.streaming_sumcheck_round(
             &mut eq_poly,
@@ -499,7 +497,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         };
 
         // Round (NUM_SVO_ROUNDS + 1)..num_rounds : do the linear time sumcheck
-        for i in NUM_SVO_ROUNDS + 1..num_rounds {
+        for _ in NUM_SVO_ROUNDS + 1..num_rounds {
             az_bz_cz_poly.remaining_sumcheck_round(
                 &mut eq_poly,
                 transcript,
@@ -507,15 +505,7 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
                 &mut polys,
                 &mut claim,
             );
-            if i == binding_round {
-                non_streaming_time += now.elapsed();
-            }
         }
-
-        println!(
-            "Non streaming time for rounds 3 to {binding_round} = {:?}",
-            non_streaming_time
-        );
 
         (
             SumcheckInstanceProof::new(polys),
@@ -556,59 +546,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
             tau,
             shard_len,
         );
-        // println!("Streaming time: {:?}", streaming_time.elapsed());
-
-        #[cfg(test)]
-        {
-            let linear_space_time = Instant::now();
-            let flattened_polys: Vec<MultilinearPolynomial<F>> = ALL_R1CS_INPUTS
-                .par_iter()
-                .map(|var| var.generate_witness(trace, preprocessing))
-                .collect();
-
-            // First, precompute the accumulators and also the `SpartanInterleavedPolynomial`
-            let (accums_zero_linear_space, accums_infty_linear_space, mut az_bz_cz_poly) =
-                SpartanInterleavedPolynomial::<NUM_SVO_ROUNDS, F>::new_with_precompute(
-                    padded_num_constraints,
-                    uniform_constraints,
-                    &flattened_polys,
-                    tau,
-                );
-            println!("Linear space time: {:?}", linear_space_time.elapsed());
-
-            let mut streamed_az_bz_poly = Vec::<SparseCoefficient<i128>>::new();
-
-            let mut stored_az_bz_cz_poly = Vec::<SparseCoefficient<i128>>::new();
-
-            for v in az_bz_cz_poly.ab_unbound_coeffs_shards.iter() {
-                stored_az_bz_cz_poly.extend(v);
-            }
-
-            let num_shards = az_bz_poly_oracle.get_len() / shard_len;
-
-            for i in 0..num_shards {
-                let shard = az_bz_poly_oracle.next_shard();
-                for val in shard {
-                    streamed_az_bz_poly.extend(val);
-                }
-            }
-
-            for i in 0..streamed_az_bz_poly.len() {
-                assert_eq!(
-                    streamed_az_bz_poly[i], stored_az_bz_cz_poly[i],
-                    "At index {} streamed value = {:?}, stored value = {:?}",
-                    i, streamed_az_bz_poly[i], stored_az_bz_cz_poly[i]
-                );
-            }
-            az_bz_poly_oracle.reset();
-
-            println!("The Az and Bz streamed are correct");
-
-            assert_eq!(accums_zero, accums_zero_linear_space);
-            assert_eq!(accums_infty, accums_infty_linear_space);
-
-            println!("The streaming algorithm computed the accumulators correctly.");
-        }
 
         let mut eq_poly = GruenSplitEqPolynomial::new(tau);
         process_svo_sumcheck_rounds::<NUM_SVO_ROUNDS, F, ProofTranscript>(
@@ -630,10 +567,6 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         } else {
             streaming_rounds_start
         };
-
-        // let binding_round = 21;
-
-        println!("Binding round = {}", binding_round);
 
         let mut r_rev = r.clone();
         r_rev.reverse();

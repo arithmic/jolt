@@ -1483,12 +1483,11 @@ where
         transcript: &mut ProofTranscript,
     ) {
         let total_time = Instant::now();
-        let mut partially_bound_coeffs = Vec::<SparseCoefficient<F>>::new();
+        let mut partially_bound_coeffs = Vec::<Vec<SparseCoefficient<F>>>::new();
         let mut time_to_collect = Duration::ZERO;
         let mut time_to_stream_shards = Duration::ZERO;
         let mut time_for_sum_check = Duration::ZERO;
-        let now = Instant::now();
-        time_to_stream_shards += now.elapsed();
+        let mut r_i = F::zero();
 
         // let current_num_threads = rayon::current_num_threads();
 
@@ -1512,10 +1511,6 @@ where
             (self.input_polys_oracle.shard_length / self.num_pieces) * self.padded_num_constraints;
 
         assert!(piece_size.is_power_of_two());
-
-        println!("Num pieces: {}", self.num_pieces);
-        println!("Piece size log: {}", piece_size.ilog2());
-
         let split_index = std::cmp::min(streaming_rounds_end, piece_size.ilog2() as usize - 1);
 
         // TODO: Both for loops have a lot of repeated code. Put all that code in a function.
@@ -1530,6 +1525,7 @@ where
             let mut eval_at_zero = F::zero();
             let mut eval_at_infinity = F::zero();
 
+            assert_eq!(self.get_step(), 0);
             for i in 0..num_shards {
                 let now = Instant::now();
                 let shard = self.next_shard();
@@ -1537,7 +1533,7 @@ where
 
                 let num_x_in_vars = eq_poly.E_in_current_len().log_2();
 
-                let collected_outputs: Vec<(F, F, Vec::<SparseCoefficient<F>>)> = shard.par_iter().map(|piece| {
+                let collected_outputs: Vec<(F, F, Vec<SparseCoefficient<F>>)> = shard.par_iter().map(|piece| {
                         let mut eval_at_zero_current_piece = F::zero();
                         let mut eval_at_infinity_current_piece = F::zero();
                         let mut partially_bound_coeffs_current_piece =
@@ -1735,11 +1731,11 @@ where
                 {
                     eval_at_zero += eval_at_zero_current_piece;
                     eval_at_infinity += eval_at_infinity_current_piece;
-                    partially_bound_coeffs.extend(partially_bound_coeffs_current_piece);
+                    partially_bound_coeffs.push(partially_bound_coeffs_current_piece);
                 }
             }
 
-            let r_i = process_eq_sumcheck_round(
+            r_i = process_eq_sumcheck_round(
                 (eval_at_zero, eval_at_infinity),
                 eq_poly,
                 polys,
@@ -1757,6 +1753,7 @@ where
 
         // Block size larger than the size of a piece.
         for round in (split_index + 1)..=streaming_rounds_end {
+            assert_eq!(self.get_step(), 0);
             println!(
                 "Streaming round {} has larger block size than piece size.",
                 round
@@ -1972,11 +1969,11 @@ where
                 {
                     eval_at_zero += eval_at_zero_current_piece;
                     eval_at_infinity += eval_at_infinity_current_piece;
-                    partially_bound_coeffs.extend(partially_bound_coeffs_current_piece);
+                    partially_bound_coeffs.push(partially_bound_coeffs_current_piece);
                 }
             }
 
-            let r_i = process_eq_sumcheck_round(
+            r_i = process_eq_sumcheck_round(
                 (eval_at_zero, eval_at_infinity),
                 eq_poly,
                 polys,
@@ -1995,86 +1992,146 @@ where
         }
 
         let time_to_bind = Instant::now();
-        let mut binding_output_len = 0;
 
-        for block in partially_bound_coeffs.chunk_by(|c1, c2| c1.index / 6 == c2.index / 6) {
-            binding_output_len += Self::binding_output_length(&block);
-        }
+        // for i in 0..collected_outputs.len() {
+        //     for j in 0..collected_outputs[i].2.len() {
+        //         if collected_outputs[i].2[j].index < 10 {
+        //             println!("Collected output {}: {:?}", i, collected_outputs[i].2);
+        //         }
+        //     }
+        // }
+
+        let num_chunks = rayon::current_num_threads() * 8;
+        let chunk_size = partially_bound_coeffs.len() / num_chunks;
+
+        let binding_output_lengths: Vec<usize> = (0..num_chunks)
+            .into_iter()
+            .map(|chunk_idx| {
+                let start_idx = chunk_idx * chunk_size;
+                let end_idx = if chunk_idx == num_chunks - 1 {
+                    partially_bound_coeffs.len()
+                } else {
+                    start_idx + chunk_size
+                };
+
+                let mut size = 0;
+                for idx in start_idx..end_idx {
+                    partially_bound_coeffs[idx]
+                        .chunk_by(|u, v| u.index / 6 == v.index / 6)
+                        .for_each(|block| size += Self::binding_output_length(block));
+                }
+                size
+            })
+            .collect();
+
+        let binding_output_length = binding_output_lengths.iter().sum();
 
         // Prepare binding_scratch_space
-        if self.binding_scratch_space.capacity() < binding_output_len {
+        if self.binding_scratch_space.capacity() < binding_output_length {
             self.binding_scratch_space
-                .reserve_exact(binding_output_len - self.binding_scratch_space.capacity());
+                .reserve_exact(binding_output_length - self.binding_scratch_space.capacity());
         }
         unsafe {
-            self.binding_scratch_space.set_len(binding_output_len);
+            self.binding_scratch_space.set_len(binding_output_length);
         }
 
-        // TODO: Parallelise this.
-        let mut scratch_space_idx = 0;
-        for block in partially_bound_coeffs.chunk_by(|c1, c2| c1.index / 6 == c2.index / 6) {
-            if block.is_empty() {
-                continue;
-            }
+        // Create mutable slices into binding_scratch_space, one for each task's output
+        let mut output_slices: Vec<&mut [SparseCoefficient<F>]> = Vec::with_capacity(num_chunks);
+        let mut scratch_remainder = self.binding_scratch_space.as_mut_slice();
+        for slice_len in binding_output_lengths {
+            let (first, second) = scratch_remainder.split_at_mut(slice_len);
+            output_slices.push(first);
+            scratch_remainder = second;
+        }
+        assert_eq!(scratch_remainder.len(), 0);
 
-            let new_block_idx = block[0].index / 6;
-            let mut az0 = F::zero();
-            let mut bz0 = F::zero();
-            let mut cz0 = F::zero();
-            let mut az1 = F::zero();
-            let mut bz1 = F::zero();
-            let mut cz1 = F::zero();
+        (0..num_chunks)
+            .into_par_iter()
+            .zip(output_slices.into_par_iter())
+            .for_each(|(chunk_idx, output_slice)| {
+                let start_idx = chunk_idx * chunk_size;
+                let end_idx = if chunk_idx == num_chunks - 1 {
+                    partially_bound_coeffs.len()
+                } else {
+                    start_idx + chunk_size
+                };
 
-            for coeff in block {
-                match coeff.index % 6 {
-                    0 => {
-                        az0 = coeff.value;
+                let mut current_output_idx_in_slice = 0;
+                for chunk_idx in start_idx..end_idx {
+                    let coeffs_to_bind = &partially_bound_coeffs[chunk_idx];
+                    for block in coeffs_to_bind.chunk_by(|sc1, sc2| sc1.index / 6 == sc2.index / 6)
+                    {
+                        if block.is_empty() {
+                            continue;
+                        }
+                        let block_idx_for_6_coeffs = block[0].index / 6;
+
+                        let mut az0 = F::zero();
+                        let mut bz0 = F::zero();
+                        let mut cz0 = F::zero();
+                        let mut az1 = F::zero();
+                        let mut bz1 = F::zero();
+                        let mut cz1 = F::zero();
+
+                        for coeff in block {
+                            match coeff.index % 6 {
+                                0 => {
+                                    az0 = coeff.value;
+                                }
+                                1 => {
+                                    bz0 = coeff.value;
+                                }
+                                2 => {
+                                    cz0 = coeff.value;
+                                }
+                                3 => {
+                                    az1 = coeff.value;
+                                }
+                                4 => {
+                                    bz1 = coeff.value;
+                                }
+                                5 => {
+                                    cz1 = coeff.value;
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+
+                        let new_block_idx = block_idx_for_6_coeffs;
+
+                        let bound_az = az0 + r_i * (az1 - az0);
+                        if !bound_az.is_zero() {
+                            if current_output_idx_in_slice < output_slice.len() {
+                                output_slice[current_output_idx_in_slice] =
+                                    (3 * new_block_idx, bound_az).into();
+                            }
+                            current_output_idx_in_slice += 1;
+                        }
+                        let bound_bz = bz0 + r_i * (bz1 - bz0);
+                        if !bound_bz.is_zero() {
+                            if current_output_idx_in_slice < output_slice.len() {
+                                output_slice[current_output_idx_in_slice] =
+                                    (3 * new_block_idx + 1, bound_bz).into();
+                            }
+                            current_output_idx_in_slice += 1;
+                        }
+                        let bound_cz = cz0 + r_i * (cz1 - cz0);
+                        if !bound_cz.is_zero() {
+                            if current_output_idx_in_slice < output_slice.len() {
+                                output_slice[current_output_idx_in_slice] =
+                                    (3 * new_block_idx + 2, bound_cz).into();
+                            }
+                            current_output_idx_in_slice += 1;
+                        }
                     }
-                    1 => {
-                        bz0 = coeff.value;
-                    }
-                    2 => {
-                        cz0 = coeff.value;
-                    }
-                    3 => {
-                        az1 = coeff.value;
-                    }
-                    4 => {
-                        bz1 = coeff.value;
-                    }
-                    5 => {
-                        cz1 = coeff.value;
-                    }
-                    _ => unreachable!(),
                 }
-            }
-
-            let bound_az = az0 + r[streaming_rounds_end] * (az1 - az0);
-            if !bound_az.is_zero() {
-                self.binding_scratch_space[scratch_space_idx] =
-                    (3 * new_block_idx, bound_az).into();
-                scratch_space_idx += 1;
-            }
-            let bound_bz = bz0 + r[streaming_rounds_end] * (bz1 - bz0);
-            if !bound_bz.is_zero() {
-                self.binding_scratch_space[scratch_space_idx] =
-                    (3 * new_block_idx + 1, bound_bz).into();
-                scratch_space_idx += 1;
-            }
-            let bound_cz = cz0 + r[streaming_rounds_end] * (cz1 - cz0);
-            if !bound_cz.is_zero() {
-                self.binding_scratch_space[scratch_space_idx] =
-                    (3 * new_block_idx + 2, bound_cz).into();
-                scratch_space_idx += 1;
-            }
-        }
+                assert_eq!(
+                    current_output_idx_in_slice,
+                    output_slice.len(),
+                    "Mismatch in written elements vs pre-calculated slice length for task output"
+                );
+            });
         std::mem::swap(&mut self.bound_coeffs, &mut self.binding_scratch_space);
-
-        println!("Total time to bind = {:?}", time_to_bind.elapsed());
-        println!(
-            "Streaming time for rounds 3 to {streaming_rounds_end} = {:?}",
-            total_time.elapsed()
-        );
     }
 
     pub fn remaining_sumcheck_rounds(

@@ -37,7 +37,6 @@ use crate::poly::split_eq_poly::SplitEqPolynomial;
 use crate::subprotocols::sumcheck::eq_plus_one_shards;
 use rayon::prelude::*;
 
-
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
 pub enum SpartanError {
     /// returned if the supplied row or col in (row,col,val) tuple is out of range
