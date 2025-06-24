@@ -300,7 +300,7 @@ where
                 1 << 10,
             ),
         );
-
+        
         let r1cs_proof = UniformSpartanProof::prove_streaming::<PCS>(
             &preprocessing,
             &constraint_builder,

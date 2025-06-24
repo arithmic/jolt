@@ -37,7 +37,6 @@ use crate::poly::split_eq_poly::SplitEqPolynomial;
 use crate::subprotocols::sumcheck::eq_plus_one_shards;
 use rayon::prelude::*;
 
-
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
 pub enum SpartanError {
     /// returned if the supplied row or col in (row,col,val) tuple is out of range
@@ -583,7 +582,6 @@ where
             let batched_eval = unexpanded_pc_eval + r * pc_eval;
             batched_eval * eq_eval
         };
-
         // The batched claim equals NextUnexpandedPC(r_cycle) + r * NextPC(r_cycle)
         // let shift_sumcheck_claim = claimed_witness_evals[next_unexpanded_pc_index]
         //     + r * claimed_witness_evals[next_pc_index];
