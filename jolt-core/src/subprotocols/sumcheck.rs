@@ -793,7 +793,11 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
         let mut compressed_polys: Vec<CompressedUniPoly<F>> = Vec::with_capacity(num_rounds);
 
         let log2_shard = shard_length.log_2();
-        let split_at = num_rounds - log2_shard + 1;
+        let split_at = if (1 << num_rounds) == shard_length * shard_length {
+            num_rounds - log2_shard
+        } else {
+            num_rounds - log2_shard + 1
+        };
 
         let mut evals_1 = vec![F::zero(); 1 << split_at];
         let mut evals_2 = vec![F::zero(); 1 << (num_rounds - split_at)];
@@ -894,6 +898,13 @@ impl<F: JoltField, ProofTranscript: Transcript> SumcheckInstanceProof<F, ProofTr
 
         //Bind Polynomials
         let chunk_size = evals_1.len();
+        assert!(
+            shard_length >= chunk_size,
+            "shard length {} must be greater than equal to chunk size {}",
+            shard_length,
+            chunk_size
+        );
+
         let no_of_chunks = shard_length / chunk_size;
         let mut bind_shards = vec![Vec::with_capacity(num_shards * no_of_chunks); num_polys];
         for shard_idx in 0..num_shards {
