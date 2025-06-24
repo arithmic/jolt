@@ -1,8 +1,8 @@
 package pairing
 
 import (
-	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
-	"github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/groups"
+	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/groups"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
 )

@@ -11,8 +11,8 @@ import (
 
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
 
-	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/field_tower"
-	groups "github.com/arithmic/jolt/jolt-on-chain/circuits/circuits/algebra/native/bn254/groups"
+	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
+	groups "github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/groups"
 	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -791,105 +791,157 @@ func (e PairingAPI) FinalMillerLoopStepIntegrated(
 	return
 }
 
-type MillerUniformCircuit struct {
-	FIn     field_tower.Fp12 `gnark:",public"`
-	P       groups.G1Affine  `gnark:",public"`
-	Rin     groups.G2Projective
-	Q, NegQ groups.G2Affine
-	Rout    groups.G2Projective
-	Bit     frontend.Variable
-
-	// for output assertions
+// Pairing Step Circuit: Miller loop step
+type MillerStepCircuit struct {
+	FIn  field_tower.Fp12 `gnark:",public"`
+	P    groups.G1Affine  `gnark:",public"`
+	Q    groups.G2Affine  `gnark:",public"`
+	NegQ groups.G2Affine  `gnark:",public"`
+	Rin  groups.G2Projective
+	Rout groups.G2Projective
+	Bit  frontend.Variable
 	FOut [3]field_tower.Fp12
 
-	fIn     bn254.E12
-	p       bn254.G1Affine
-	rin     G2Projective
-	q, negQ bn254.G2Affine
-	rout    G2Projective
-	bit     int
-
-	// for output assertions
+	// Native values (internal use)
+	fIn  bn254.E12
+	p    bn254.G1Affine
+	q    bn254.G2Affine
+	negQ bn254.G2Affine
+	rin  G2Projective
+	rout G2Projective
+	bit  int
 	fOut [3]bn254.E12
 }
 
-func (circuit *MillerUniformCircuit) Define(api frontend.API) error {
-	pairing_api := New(api)
+func (step_circuit *MillerStepCircuit) Define(api frontend.API) error {
+	pairing := New(api)
 	twoInv := api.Inverse(frontend.Variable(2))
 
-	_, f1, f2, f3 := pairing_api.MillerLoopStepIntegrated(
-		&circuit.Rin, &circuit.Q, &circuit.NegQ,
-		&circuit.P, &circuit.FIn, circuit.Bit, twoInv,
+	_, f1, f2, f3 := pairing.MillerLoopStepIntegrated(
+		&step_circuit.Rin, &step_circuit.Q, &step_circuit.NegQ, &step_circuit.P, &step_circuit.FIn, step_circuit.Bit, twoInv,
 	)
 	e12 := field_tower.NewExt12(api)
-	e12.AssertIsEqual(&f1, &circuit.FOut[0])
-	e12.AssertIsEqual(&f2, &circuit.FOut[1])
-	e12.AssertIsEqual(&f3, &circuit.FOut[2])
-
+	e12.AssertIsEqual(&f1, &step_circuit.FOut[0])
+	e12.AssertIsEqual(&f2, &step_circuit.FOut[1])
+	e12.AssertIsEqual(&f3, &step_circuit.FOut[2])
 	return nil
 }
 
-func (circuit *MillerUniformCircuit) Hint() {
-	circuit.rout, circuit.fOut[0], circuit.fOut[1], circuit.fOut[2] = MillerLoopStepIntegrated_fn(&circuit.rin, &circuit.q, &circuit.negQ, &circuit.p, &circuit.fIn, circuit.bit)
+func (step_circuit *MillerStepCircuit) Hint() {
+	step_circuit.rout, step_circuit.fOut[0], step_circuit.fOut[1], step_circuit.fOut[2] = MillerLoopStepIntegrated_fn(
+		&step_circuit.rin, &step_circuit.q, &step_circuit.negQ, &step_circuit.p, &step_circuit.fIn, step_circuit.bit)
 }
 
-func (circuit *MillerUniformCircuit) Compile() *constraint.ConstraintSystem {
-	circuitR1CS, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit)
+func (step_circuit *MillerStepCircuit) GenerateWitness(constraints constraint.ConstraintSystem) grumpkin_fr.Vector {
+	w, err := frontend.NewWitness(step_circuit, ecc.GRUMPKIN.ScalarField())
+
 	if err != nil {
-		fmt.Println("err in compilation is ", err)
+		fmt.Println("Failed to create witness object", err)
 	}
-	return &circuitR1CS
+	wit, err := constraints.Solve(w)
+	if err != nil {
+		fmt.Println("Witness generation failed ", err)
+	}
+	wSolved := wit.(*cs.R1CSSolution).W
+
+	return wSolved
 }
 
-func (circuit *MillerUniformCircuit) GenerateWitness(circuits []*MillerUniformCircuit, r1cs *constraint.ConstraintSystem, _ uint32) grumpkin_fr.Vector {
+// Miller Uniform Circuit: Chains 64 steps
+type MillerUniformCircuit struct {
+	P                   groups.G1Affine  `gnark:",public"`
+	Q                   groups.G2Affine  `gnark:",public"`
+	NegQ                groups.G2Affine  `gnark:",public"`
+	FIn                 field_tower.Fp12 `gnark:",public"`
+	FOut                field_tower.Fp12
+	Miller_step_circuit *MillerStepCircuit
+
+	// Native
+	p    bn254.G1Affine
+	q    bn254.G2Affine
+	negQ bn254.G2Affine
+	fOut bn254.E12
+}
+
+func (miller_uniform_circuit *MillerUniformCircuit) CreateStepCircuit() constraint.ConstraintSystem {
+	miller_uniform_circuit.Miller_step_circuit = &MillerStepCircuit{
+		P:    miller_uniform_circuit.P,
+		Q:    miller_uniform_circuit.Q,
+		NegQ: miller_uniform_circuit.NegQ,
+		p:    miller_uniform_circuit.p,
+		q:    miller_uniform_circuit.q,
+		negQ: miller_uniform_circuit.negQ,
+	}
+	constraints, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, miller_uniform_circuit.Miller_step_circuit)
+	return constraints
+}
+
+func (miller_uniform_circuit *MillerUniformCircuit) GenerateWitness(constraints constraint.ConstraintSystem) grumpkin_fr.Vector {
+	// Constants
+	n := 64
+	bits := []int{
+		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
+		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
+		-1, 0, 0, 0, 1, 0, 1,
+	}
+
+	var FIn bn254.E12
+	FIn.SetOne()
+
+	rIn := ToProjective_fn(&miller_uniform_circuit.q)
+
 	var witness grumpkin_fr.Vector
+	for i := 0; i < n; i++ {
+		bit := bits[n-1-i]
+		miller_uniform_circuit.Miller_step_circuit.rin = rIn
+		miller_uniform_circuit.Miller_step_circuit.Rin = G2ProjectiveFromBNG2Projective(&miller_uniform_circuit.Miller_step_circuit.rin)
 
-	var fIn bn254.E12
-	fIn.SetOne()
-	circuits[0].FIn = field_tower.FromE12(&fIn)
+		miller_uniform_circuit.Miller_step_circuit.FIn = field_tower.FromE12(&FIn)
+		miller_uniform_circuit.Miller_step_circuit.fIn = FIn
 
-	for i := 1; i < len(circuits); i++ {
-		circuits[i].FIn = circuits[i-1].FOut[2]
-		circuits[i].P = circuits[0].P
-		circuits[i].Rin = circuits[i-1].Rout
-		circuits[i].Q = circuits[0].Q
-		circuits[i].NegQ = circuits[0].NegQ
+		miller_uniform_circuit.Miller_step_circuit.P = groups.AffineFromG1Affine(&miller_uniform_circuit.p)
+		miller_uniform_circuit.Miller_step_circuit.Q = groups.G2AffineFromBNG2Affine(&miller_uniform_circuit.q)
+		miller_uniform_circuit.Miller_step_circuit.NegQ = groups.G2AffineFromBNG2Affine(&miller_uniform_circuit.negQ)
 
-		circuits[i].fIn = circuits[i-1].fOut[2]
-		circuits[i].rin = circuits[i-1].rout
+		miller_uniform_circuit.Miller_step_circuit.p = miller_uniform_circuit.p
+		miller_uniform_circuit.Miller_step_circuit.q = miller_uniform_circuit.q
+		miller_uniform_circuit.Miller_step_circuit.negQ = miller_uniform_circuit.negQ
 
-		circuits[i].Hint()
-		circuits[i].Rout = G2ProjectiveFromBNG2Projective(&circuits[i].rout)
-		circuits[i].FOut[0] = field_tower.FromE12(&circuits[i].fOut[0])
-		circuits[i].FOut[1] = field_tower.FromE12(&circuits[i].fOut[1])
-		circuits[i].FOut[2] = field_tower.FromE12(&circuits[i].fOut[2])
+		miller_uniform_circuit.Miller_step_circuit.Bit = bit
+		miller_uniform_circuit.Miller_step_circuit.bit = bit
+
+		miller_uniform_circuit.Miller_step_circuit.Hint()
+
+		// FIn for next step
+		FIn = miller_uniform_circuit.Miller_step_circuit.fOut[2]
+
+		miller_uniform_circuit.Miller_step_circuit.Rout = G2ProjectiveFromBNG2Projective(&miller_uniform_circuit.Miller_step_circuit.rout)
+		miller_uniform_circuit.Miller_step_circuit.FOut[0] = field_tower.FromE12(&miller_uniform_circuit.Miller_step_circuit.fOut[0])
+		miller_uniform_circuit.Miller_step_circuit.FOut[1] = field_tower.FromE12(&miller_uniform_circuit.Miller_step_circuit.fOut[1])
+		miller_uniform_circuit.Miller_step_circuit.FOut[2] = field_tower.FromE12(&miller_uniform_circuit.Miller_step_circuit.fOut[2])
+
+		// RIn for next step
+		rIn = miller_uniform_circuit.Miller_step_circuit.rout
+
+		stepWitness := miller_uniform_circuit.Miller_step_circuit.GenerateWitness(constraints)
+		witness = append(witness, stepWitness...) // <-- accumulate all step results
+
 	}
+	miller_uniform_circuit.fOut = FIn
+	miller_uniform_circuit.FOut = field_tower.FromE12(&miller_uniform_circuit.fOut)
 
-	for i := 0; i < len(circuits); i++ {
-		w, err := frontend.NewWitness(circuits[i], ecc.GRUMPKIN.ScalarField())
-		if err != nil {
-			fmt.Println("err in generate witness is ", err)
-		}
-		wSolved, _ := (*r1cs).Solve(w)
-
-		witnessStep := wSolved.(*cs.R1CSSolution).W
-		for _, elem := range witnessStep {
-			witness = append(witness, grumpkin_fr.Element(elem))
-		}
-	}
 	return witness
 }
 
 type MillerEllFinalStepCircuit struct {
-	FIn field_tower.Fp12 `gnark:",public"`
-
-	Q groups.G2Affine `gnark:",public"`
-	P groups.G1Affine `gnark:",public"`
-
+	FIn  field_tower.Fp12 `gnark:",public"`
+	P    groups.G1Affine  `gnark:",public"`
+	Q    groups.G2Affine  `gnark:",public"`
 	Rin  groups.G2Projective
 	Rout groups.G2Projective
 	FOut field_tower.Fp12 `gnark:",public"`
 
+	// Native
 	fIn  bn254.E12
 	fOut bn254.E12
 	p    bn254.G1Affine
@@ -899,32 +951,26 @@ type MillerEllFinalStepCircuit struct {
 }
 
 func (c *MillerEllFinalStepCircuit) Define(api frontend.API) error {
-	pairing_api := New(api)
+	p := New(api)
+	rOut, fOut := p.FinalMillerLoopStepIntegrated(&c.Rin, &c.Q, &c.P, &c.FIn)
 
-	// Run final step logic
-	rOut, fOut := pairing_api.FinalMillerLoopStepIntegrated(&c.Rin, &c.Q, &c.P, &c.FIn)
-
-	// Constrain Rout to match computed rOut
-	pairing_api.e2.AssertIsEqual(&rOut.X, &c.Rout.X)
-	pairing_api.e2.AssertIsEqual(&rOut.Y, &c.Rout.Y)
-	pairing_api.e2.AssertIsEqual(&rOut.Z, &c.Rout.Z)
-
-	pairing_api.e12.AssertIsEqual(&fOut, &c.FOut)
-
+	p.e2.AssertIsEqual(&rOut.X, &c.Rout.X)
+	p.e2.AssertIsEqual(&rOut.Y, &c.Rout.Y)
+	p.e2.AssertIsEqual(&rOut.Z, &c.Rout.Z)
+	p.e12.AssertIsEqual(&fOut, &c.FOut)
 	return nil
 }
-
 
 func (circuit *MillerEllFinalStepCircuit) Hint() {
 	circuit.rout, circuit.fOut = FinalMillerLoopStepIntegrated_fn(&circuit.rin, &circuit.q, &circuit.p, &circuit.fIn)
 }
 
-func (circuit *MillerEllFinalStepCircuit) Compile() *constraint.ConstraintSystem {
+func (circuit *MillerEllFinalStepCircuit) Compile() constraint.ConstraintSystem {
 	circuitR1CS, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit)
 	if err != nil {
 		fmt.Println("err in compilation is ", err)
 	}
-	return &circuitR1CS
+	return circuitR1CS
 }
 
 func (circuit *MillerEllFinalStepCircuit) GenerateWitness(circuits []*MillerEllFinalStepCircuit, r1cs *constraint.ConstraintSystem, _ uint32) grumpkin_fr.Vector {
@@ -961,122 +1007,75 @@ func (circuit *MillerEllFinalStepCircuit) GenerateWitness(circuits []*MillerEllF
 	return witness
 }
 
-
 type PairingUniformCircuit struct {
-	Q   groups.G2Affine `gnark:",public"`
-	P   groups.G1Projective `gnark:",public"`
-	Res field_tower.Fp12 `gnark:",public"`
+	P    groups.G1Affine  `gnark:",public"`
+	Q    groups.G2Affine  `gnark:",public"`
+	NegQ groups.G2Affine  `gnark:",public"`
+	Res  field_tower.Fp12 `gnark:",public"`
 
-	p   bn254.G1Affine
-	q   bn254.G2Affine
-	res bn254.E12
+	// Native
+	p    bn254.G1Affine
+	q    bn254.G2Affine
+	negQ bn254.G2Affine
+	res  bn254.E12
+
+	Miller_uniform *MillerUniformCircuit
+	Miller_final   *MillerEllFinalStepCircuit
 }
 
-func (circuit *PairingUniformCircuit) Define(api frontend.API) error {
+func (p *PairingUniformCircuit) CreateStepCircuits() []constraint.ConstraintSystem {
+	p.Miller_uniform.P = p.P
+	p.Miller_uniform.Q = p.Q
+	p.Miller_uniform.NegQ = p.NegQ
+	p.Miller_uniform.p = p.p
+	p.Miller_uniform.q = p.q
+	p.Miller_uniform.negQ = p.negQ
 
-	return nil
+	cs1 := p.Miller_uniform.CreateStepCircuit()
+	cs2 := p.Miller_final.Compile()
+	return []constraint.ConstraintSystem{cs1, cs2}
 }
 
-func (circuit *PairingUniformCircuit) Compile() *constraint.ConstraintSystem {
-	circuitR1CS, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit)
+func (p *PairingUniformCircuit) GenerateWitness(constraints []constraint.ConstraintSystem) grumpkin_fr.Vector {
+	var witness grumpkin_fr.Vector
+
+	// Generate witness for Miller loop (64 steps)
+	witnessMiller := p.Miller_uniform.GenerateWitness(constraints[0])
+	witness = append(witness, witnessMiller...)
+
+	// ========== Final Ell Step ==========
+	// Feed final inputs from Miller output
+	p.Miller_final.fIn = p.Miller_uniform.fOut
+	p.Miller_final.rin = p.Miller_uniform.Miller_step_circuit.rout
+	p.Miller_final.q = p.q
+	p.Miller_final.p = p.p
+
+	// Hint to compute output
+	p.Miller_final.Hint()
+
+	// Assign for constraints
+	p.Miller_final.FIn = field_tower.FromE12(&p.Miller_uniform.fOut)
+	p.Miller_final.Rin = p.Miller_uniform.Miller_step_circuit.Rout
+	p.Miller_final.P = p.Miller_uniform.P
+	p.Miller_final.Q = p.Miller_uniform.Q
+	p.Miller_final.FOut = field_tower.FromE12(&p.Miller_final.fOut)
+	p.Miller_final.Rout = G2ProjectiveFromBNG2Projective(&p.Miller_final.rout)
+
+	// Solve final circuit and extract witness
+	w, err := frontend.NewWitness(p.Miller_final, ecc.GRUMPKIN.ScalarField())
 	if err != nil {
-		fmt.Println("err in compilation is ", err)
+		fmt.Println("final step witness error:", err)
 	}
-	return &circuitR1CS
-}
+	wSolved, _ := constraints[1].Solve(w)
+	wStep := wSolved.(*cs.R1CSSolution).W
 
-func (circuit *PairingUniformCircuit) Hint() {
-	// 
-}
-
-func (circuit *PairingUniformCircuit) GenerateWitness(pairing_circuit PairingUniformCircuit, r1cs *constraint.ConstraintSystem, _ uint32) grumpkin_fr.Vector {
-	// Call GenerateWitness of MillerUniformCircuit for n = 64
-	var miller_circuit MillerUniformCircuit
-
-	n := 64
-	circuits := make([]*MillerUniformCircuit, n)
-
-	bits := []int{
-		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
-		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
-		-1, 0, 0, 0, 1, 0, 1,
+	for _, elem := range wStep {
+		witness = append(witness, grumpkin_fr.Element(elem))
 	}
 
-	Rin := ToProjective_fn(&pairing_circuit.q)
-	var neg_Q bn254.G2Affine
-	neg_Q.X = pairing_circuit.q.X
-	neg_Q.Y.A1.Neg(&pairing_circuit.q.Y.A1)
-	neg_Q.Y.A0.Neg(&pairing_circuit.q.Y.A0)
-	var FIn bn254.E12
-	FIn.SetOne()
+	// ========== Final Consistency Check ==========
+	p.res = p.Miller_final.fOut
+	p.Res = field_tower.FromE12(&p.res)
 
-	circuits[0].rin = Rin
-	circuits[0].q = circuit.q
-	circuits[0].p = circuit.p
-	circuits[0].fIn = FIn
-	circuits[0].negQ = neg_Q
-	circuits[0].bit = bits[n-1]
-	circuits[0].Hint()
-	circuits[0].P = groups.AffineFromG1Affine(&pairing_circuit.p)
-	circuits[0].Q = groups.G2AffineFromBNG2Affine(&pairing_circuit.q)
-	circuits[0].FIn = field_tower.FromE12(&circuits[0].fIn)
-	circuits[0].Rin = groups.FromBNG2Affine(&pairing_circuit.q)
-	circuits[0].NegQ = groups.G2AffineFromBNG2Affine(&circuits[0].negQ)
-	circuits[0].Bit = bits[n-1]
-	circuits[0].FOut[0] = field_tower.FromE12(&circuits[0].fOut[0])
-	circuits[0].FOut[1] = field_tower.FromE12(&circuits[0].fOut[1])
-	circuits[0].FOut[2] = field_tower.FromE12(&circuits[0].fOut[2])
-	circuits[0].Rout = G2ProjectiveFromBNG2Projective(&circuits[0].rout)
-
-	for i := 1; i < n; i++ {
-		circuits[i] = &MillerUniformCircuit{
-			FIn:  circuits[0].FIn, // dummmy value
-			P:    groups.AffineFromG1Affine(&pairing_circuit.p),
-			Rin:  circuits[0].Rin, // dummmy value
-			Q:    groups.G2AffineFromBNG2Affine(&pairing_circuit.q),
-			NegQ: groups.G2AffineFromBNG2Affine(&neg_Q),
-			Rout: circuits[0].Rout, // dummmy value
-			FOut: circuits[0].FOut, // dummmy value
-			Bit:  bits[n-1-i],
-
-			fIn:  FIn, // dummmy value
-			p:    pairing_circuit.p,
-			rin:  Rin, // dummmy value
-			q:    pairing_circuit.q,
-			negQ: neg_Q,
-			rout: circuits[0].rout, // dummmy value
-			bit:  bits[n-1-i],
-			fOut: circuits[0].fOut, // dummmy value
-		}
-	}
-
-	// miller looop's lopp witness to be appended by final step witness later
-	extendZ := miller_circuit.GenerateWitness(circuits, r1cs, 64)
-
-	var miller_final_circuit *MillerEllFinalStepCircuit
-
-	final_circuits := make([]*MillerEllFinalStepCircuit, 1)
-
-	final_circuits[0] = &MillerEllFinalStepCircuit{
-		FIn:  circuits[n-1].FOut[2],
-		P:    groups.AffineFromG1Affine(&pairing_circuit.p),
-		Rin:  circuits[n-1].Rout,
-		Q:    groups.G2AffineFromBNG2Affine(&pairing_circuit.q),
-		Rout: circuits[n-1].Rout,    // dummy value
-		FOut: circuits[n-1].FOut[0], // dummy value
-		fIn:  circuits[n-1].fOut[2],
-		fOut: circuits[n-1].fOut[0], // dummy value
-		p:    pairing_circuit.p,
-		rin:  circuits[n-1].rout,
-		q:    pairing_circuit.q,
-		rout: circuits[n-1].rout, // dummy value
-	}
-	miller_final_circuit = &MillerEllFinalStepCircuit{}
-
-	final_witness := miller_final_circuit.GenerateWitness(final_circuits, r1cs, 1)
-	for i := 0; i < len(final_witness); i++ {
-		extendZ = append(extendZ, final_witness[i])
-	}
-
-	return extendZ
+	return witness
 }

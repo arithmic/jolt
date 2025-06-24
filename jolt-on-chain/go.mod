@@ -1,4 +1,4 @@
-module github.com/arithmic/jolt/jolt-on-chain/circuits
+module github.com/arithmic/jolt/jolt-on-chain
 
 go 1.24.2
 
@@ -13,6 +13,7 @@ require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/consensys/bavard v0.1.29 // indirect
 	github.com/consensys/gnark v0.12.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/google/pprof v0.0.0-20240727154555-813a5fbdbec8 // indirect
