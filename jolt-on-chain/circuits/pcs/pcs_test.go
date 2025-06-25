@@ -31,7 +31,7 @@ type G1ScalarUniformCircuit struct {
 }
 
 func (circuit *G1ScalarUniformCircuit) Define(api frontend.API) error {
-	groupAPI := &groups.G1API{Api: api}
+	groupAPI := groups.NewG1API(api)
 	groupAPI.Add(&circuit.Acc, groupAPI.ScalarMul(&circuit.In, &circuit.Exp))
 	return nil
 }
@@ -553,7 +553,7 @@ func computeOut2(out bn254.E12, exp bn254.E12) *bn254.E12 {
 func TestUniformG1Scalar(t *testing.T) {
 	var a [250]bn254.G1Affine
 	for i := 0; i < 250; i++ {
-		a[i] = groups.RandomG1Affine()
+		a[i], _ = groups.RandomG1G2Affines()
 	}
 
 	var exp [250]fr.Element

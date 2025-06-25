@@ -3,7 +3,6 @@ package field_tower
 import (
 	"github.com/arithmic/gnark/frontend"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
-	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
@@ -20,7 +19,7 @@ func New(api frontend.API) *Ext2 {
 	return &Ext2{api: api}
 }
 
-// FromE2 This function is required to create an object of Fp2 from an object of E2 provided by gnark-crypto/ecc/bn254/bn254.go/E2.
+// This function is required to create an object of Fp2 from an object of E2 provided by gnark-crypto/ecc/bn254/bn254.go/E2.
 // It comes in handy when we want to create random elements of Fp2
 func FromE2(y *bn254.E2) Fp2 {
 	return Fp2{
@@ -29,10 +28,23 @@ func FromE2(y *bn254.E2) Fp2 {
 	}
 }
 
-func ToE2(y Fp2) bn254.E2 {
-	return bn254.E2{
-		A0: y.A0.(fp.Element),
-		A1: y.A1.(fp.Element),
+
+func (e Ext2) IsZero(x *Fp2) frontend.Variable {
+	return e.api.Mul(e.api.IsZero(x.A0), e.api.IsZero(x.A1))
+}
+
+
+func (e Ext2) One() *Fp2 {
+	return &Fp2{
+		A0: frontend.Variable(grumpkin_fr.One()),
+		A1: frontend.Variable(0),
+	}
+}
+
+func (e Ext2) Zero() *Fp2 {
+	return &Fp2{
+		A0: frontend.Variable(0),
+		A1: frontend.Variable(0),
 	}
 }
 
@@ -203,17 +215,14 @@ func (e Ext2) MulByNonResidue(x *Fp2) *Fp2 {
 	}
 }
 
-// Exp TODO: Maybe n = 110. Provides enough security and leads to a smaller circuit.
+// TODO: Maybe n = 110. Provides enough security and leads to a smaller circuit.
 func (e Ext2) Exp(x *Fp2, k *frontend.Variable) *Fp2 {
 
 	const n = 254
 	bits := e.api.ToBinary(*k, n)
 
 	// Initialize z identity element in Fp2
-	z := &Fp2{
-		A0: frontend.Variable(1),
-		A1: frontend.Variable(0),
-	}
+	z := e.One()
 
 	// Perform binary exponentiation
 	for i := n - 1; i >= 0; i-- {
@@ -221,44 +230,26 @@ func (e Ext2) Exp(x *Fp2, k *frontend.Variable) *Fp2 {
 		z = e.Square(z)
 
 		// Conditionally multiply z by x if the current bit is 1
-		z = e.Select(bits[i], e.Mul(z, x), z)
+		z = e.Select(bits[i],  e.Mul(z, x), z)
 	}
 
 	return z
 }
 
-// func (e Ext2) Select(condition frontend.Variable, a, b *Fp2) *Fp2 {
-// 	// Select the components of a and b based on the condition
-// 	z0 := e.api.Select(condition, b.A0, a.A0)
-// 	z1 := e.api.Select(condition, b.A1, a.A1)
-
-// 	return &Fp2{
-// 		A0: z0,
-// 		A1: z1,
-// 	}
-// }
-
-func (e Ext2) Select(bit frontend.Variable, a, b *Fp2) *Fp2 {
-	api := e.api
-	oneMinusBit := api.Sub(frontend.Variable(1), bit)
-	api.AssertIsEqual(frontend.Variable(0), api.Mul(bit, oneMinusBit))
+// Select a if condition is 1, and b if it is 0
+func (e Ext2) Select(condition frontend.Variable, a, b *Fp2) *Fp2 {
 	// Select the components of a and b based on the condition
-	z0 := e.Fp2MulFp(a, bit)
-	z1 := e.Fp2MulFp(b, oneMinusBit)
-	choice := e.Add(z0, z1)
-	return choice
+	z0 := e.api.Select(condition, a.A0, b.A0)
+
+	z1 := e.api.Select(condition, a.A1, b.A1)
+
+	return &Fp2{
+		A0: z0,
+		A1: z1,
+	}
 }
 
 func (e Ext2) AssertIsEqual(x, y *Fp2) {
 	e.api.AssertIsEqual(x.A0, y.A0)
 	e.api.AssertIsEqual(x.A1, y.A1)
-}
-
-func (e Ext2) Fp2MulFp(x *Fp2, y frontend.Variable) *Fp2 {
-	z0 := e.api.Mul(x.A0, y)
-	z1 := e.api.Mul(x.A1, y)
-	return &Fp2{
-		A0: z0,
-		A1: z1,
-	}
 }

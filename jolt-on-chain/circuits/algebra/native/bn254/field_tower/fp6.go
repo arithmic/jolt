@@ -18,7 +18,7 @@ func NewExt6(api frontend.API) *Ext6 {
 	return &Ext6{e2: Ext2{api: api}}
 }
 
-// FromE6 This function is required to create an object of Fp6 from an object of E6 provided by gnark-crypto/ecc/bn254/bn254.go/E6.
+// This function is required to create an object of Fp6 from an object of E6 provided by gnark-crypto/ecc/bn254/bn254.go/E6.
 // It comes in handy when we want to create random elements of Fp6
 func FromE6(y *bn254.E6) Fp6 {
 	return Fp6{
@@ -30,17 +30,17 @@ func FromE6(y *bn254.E6) Fp6 {
 
 func (e Ext6) One() *Fp6 {
 	return &Fp6{
-		A0: Fp2{A0: frontend.Variable(1), A1: frontend.Variable(0)},
-		A1: Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)},
-		A2: Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)},
+		A0: *e.e2.One(),
+		A1: *e.e2.Zero(),
+		A2: *e.e2.Zero(),
 	}
 }
 
 func (e Ext6) Zero() *Fp6 {
 	return &Fp6{
-		A0: Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)},
-		A1: Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)},
-		A2: Fp2{A0: frontend.Variable(0), A1: frontend.Variable(0)},
+		A0: *e.e2.Zero(),
+		A1: *e.e2.Zero(),
+		A2: *e.e2.Zero(),
 	}
 }
 
@@ -223,30 +223,20 @@ func (e Ext6) MulByNonResidue(x *Fp6) *Fp6 {
 	return &result
 }
 
-// func (e Ext6) Select(condition frontend.Variable, a, b *Fp6) *Fp6 {
-// 	// Select the components of a and b based on the condition
-// 	z0 := e.e2.Select(condition, &b.A0, &a.A0)
-
-// 	z1 := e.e2.Select(condition, &b.A1, &a.A1)
-
-// 	z2 := e.e2.Select(condition, &b.A2, &a.A2)
-
-// 	return &Fp6{
-// 		A0: *z0,
-// 		A1: *z1,
-// 		A2: *z2,
-// 	}
-// }
-
-func (e Ext6) Select(bit frontend.Variable, a, b *Fp6) *Fp6 {
-	api := e.e2.api
-	oneMinusBit := api.Sub(frontend.Variable(1), bit)
-	api.AssertIsEqual(frontend.Variable(0), api.Mul(bit, oneMinusBit))
+// Select a if condition is 1, and b if it is 0
+func (e Ext6) Select(condition frontend.Variable, a, b *Fp6) *Fp6 {
 	// Select the components of a and b based on the condition
-	z0 := e.Fp6MulFp(a, bit)
-	z1 := e.Fp6MulFp(b, oneMinusBit)
-	choice := e.Add(z0, z1)
-	return choice
+	z0 := e.e2.Select(condition, &a.A0, &b.A0)
+
+	z1 := e.e2.Select(condition, &a.A1, &b.A1)
+
+	z2 := e.e2.Select(condition, &a.A2, &b.A2)
+
+	return &Fp6{
+		A0: *z0,
+		A1: *z1,
+		A2: *z2,
+	}
 }
 
 func (e Ext6) AssertIsEqual(x, y *Fp6) {
@@ -254,16 +244,4 @@ func (e Ext6) AssertIsEqual(x, y *Fp6) {
 	e.e2.AssertIsEqual(&x.A1, &y.A1)
 	e.e2.AssertIsEqual(&x.A2, &y.A2)
 
-}
-
-func (e Ext6) Fp6MulFp(x *Fp6, y frontend.Variable) *Fp6 {
-	z0 := e.e2.Fp2MulFp(&x.A0, y)
-	z1 := e.e2.Fp2MulFp(&x.A1, y)
-	z2 := e.e2.Fp2MulFp(&x.A2, y)
-
-	return &Fp6{
-		A0: *z0,
-		A1: *z1,
-		A2: *z2,
-	}
 }
