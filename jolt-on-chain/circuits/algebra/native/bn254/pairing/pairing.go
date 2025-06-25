@@ -525,49 +525,6 @@ func (e PairingAPI) EllCoeffs(Q *groups.G2Affine) ([]field_tower.Fp6, []groups.G
 	return ell_coeff, R
 }
 
-func (e PairingAPI) EllCoeffStep(
-	Rin *groups.G2Projective, // R[2*i]
-	Q, negQ *groups.G2Affine, // Q and -Q
-	bit frontend.Variable, // {-1, 0, 1}
-	twoInv frontend.Variable,
-) (Rmid, Rout groups.G2Projective, ell1, ell2 field_tower.Fp6) {
-	// Step 1: LineDouble
-	RmidPtr, ell1Ptr := LineDouble(&e.api, &e.e2, Rin, twoInv)
-	Rmid = *RmidPtr
-	ell1 = *ell1Ptr
-
-	// Compute selectors for bit == 1, bit == -1, bit == 0
-	isOne := e.api.IsZero(e.api.Sub(bit, frontend.Variable(1)))      // 1 if bit==1 else 0
-	isMinusOne := e.api.IsZero(e.api.Add(bit, frontend.Variable(1))) // 1 if bit==-1 else 0
-	// isZero := e.api.IsZero(bit)                                      // 1 if bit==0 else 0
-
-	// Compute Rout and ell2 for each case
-	Rout1Ptr, ell2_1Ptr := LineAddition(&e.api, &e.e2, &Rmid, Q)
-	RoutMinus1Ptr, ell2_minus1Ptr := LineAddition(&e.api, &e.e2, &Rmid, negQ)
-
-	// Select Rout.X
-	RoutX := e.e2.Select(isOne, &Rout1Ptr.X, &Rmid.X)
-	RoutX = e.e2.Select(isMinusOne, &RoutMinus1Ptr.X, RoutX)
-	// Select Rout.Y
-	RoutY := e.e2.Select(isOne, &Rout1Ptr.Y, &Rmid.Y)
-	RoutY = e.e2.Select(isMinusOne, &RoutMinus1Ptr.Y, RoutY)
-	// Select Rout.Z
-	RoutZ := e.e2.Select(isOne, &Rout1Ptr.Z, &Rmid.Z)
-	RoutZ = e.e2.Select(isMinusOne, &RoutMinus1Ptr.Z, RoutZ)
-
-	// Select ell2
-	ell2 = *e.e6.Select(isOne, ell2_1Ptr, &ell1)
-	ell2 = *e.e6.Select(isMinusOne, ell2_minus1Ptr, &ell2)
-
-	Rout = groups.G2Projective{
-		X: *RoutX,
-		Y: *RoutY,
-		Z: *RoutZ,
-	}
-
-	return
-}
-
 func MulByChar(e2 *field_tower.Ext2, Q *groups.G2Affine) *groups.G2Affine {
 
 	TWIST_MUL_BY_Q_X_A0, _ := new(big.Int).SetString("21575463638280843010398324269430826099269044274347216827212613867836435027261", 10)
@@ -655,29 +612,6 @@ func (e PairingAPI) MillerLoop(Q *groups.G2Affine, P *groups.G1Projective) *fiel
 
 	// Output the result
 	return &f[3*n+2]
-}
-
-func (e PairingAPI) MillerLoopStep(
-	fIn *field_tower.Fp12, // f[3*i]
-	ell []field_tower.Fp6, // ell_coeff[2*i], ell_coeff[2*i+1]
-	p *groups.G1Affine, // affine P
-	bit frontend.Variable, // bits[n-1-i]
-) (f1, f2, f3 field_tower.Fp12) {
-	// Step 1: f1 = fIn^2
-	f1 = *e.e12.Mul(fIn, fIn)
-
-	// Step 2: f2 = Ell(f1, ell1)
-	f2 = *Ell(&e.e2, &e.e6, &f1, &ell[0], p)
-
-	f3_val := *Ell(&e.e2, &e.e6, &f2, &ell[1], p)
-
-	val := e.api.IsZero(bit)
-	f3 = *(e).e12.Select(
-		val,
-		&f2,
-		&f3_val)
-
-	return f1, f2, f3
 }
 
 type PairingAPI struct {
@@ -1036,7 +970,6 @@ func (p *PairingUniformCircuit) GenerateWitness(constraints []constraint.Constra
 	witness = append(witness, witnessMiller...)
 
 	// ========== Final Ell Step ==========
-	// Feed final inputs from Miller output
 	p.Miller_final.fIn = p.Miller_uniform.fOut
 	p.Miller_final.rin = p.Miller_uniform.Miller_step_circuit.rout
 	p.Miller_final.q = p.q

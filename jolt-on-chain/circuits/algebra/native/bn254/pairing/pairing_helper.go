@@ -180,34 +180,6 @@ func LineAddition_fn(R *G2Projective, Q *bn254.G2Affine) (*G2Projective, *bn254.
 	return &R_New, &ell_coeff
 }
 
-func EllCoeffStep_fn(
-	Rin *G2Projective, // R[2*i]
-	Q, negQ *bn254.G2Affine, // Q and -Q
-	bit int, // {-1, 0, 1}
-) (Rmid, Rout G2Projective, ell1, ell2 *bn254.E6) {
-
-	// Step 1: LineDouble
-	RmidPtr, ell1Ptr := LineDouble_fn(Rin)
-	Rmid = *RmidPtr
-	ell1 = ell1Ptr
-
-	// Step 2: LineAddition or Propagation
-	if bit == 1 {
-		RoutPtr, ell2Ptr := LineAddition_fn(&Rmid, Q)
-		Rout = *RoutPtr
-		ell2 = ell2Ptr
-	} else if bit == -1 {
-		RoutPtr, ell2Ptr := LineAddition_fn(&Rmid, negQ)
-		Rout = *RoutPtr
-		ell2 = ell2Ptr
-	} else {
-		Rout = Rmid
-		ell2 = ell1
-	}
-
-	return
-}
-
 func ToProjective_fn(A *bn254.G2Affine) G2Projective {
 	var out G2Projective
 
@@ -270,100 +242,8 @@ func MulByChar_fn(Q *bn254.G2Affine) *bn254.G2Affine {
 	}
 }
 
-func EllCoeffs_fn(Q *bn254.G2Affine) ([]bn254.E6, []G2Projective) {
-	const n = 64
-
-	// Initialize arrays
-	ell_coeff := make([]bn254.E6, 2*n+2)
-	R := make([]G2Projective, 2*n+2)
-
-	// Inverse of 2
-	twoInv := new(fp.Element).SetUint64(2)
-	twoInv.Inverse(twoInv)
-
-	// Convert Q to projective
-	R[0] = ToProjective_fn(Q)
-
-	// Compute -Q
-	var neg_Q bn254.G2Affine
-	neg_Q.X = Q.X
-	neg_Q.Y.A0.Neg(&Q.Y.A0)
-	neg_Q.Y.A1.Neg(&Q.Y.A1)
-
-	// bits used in the Miller loop (signed digits from the NAF of loop scalar)
-	bits := []int{
-		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
-		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
-		-1, 0, 0, 0, 1, 0, 1,
-	}
-
-	// Main loop
-	for i := 0; i < n; i++ {
-		R_New, ell_New := LineDouble_fn(&R[2*i])
-		R[2*i+1] = *R_New
-		ell_coeff[2*i] = *ell_New
-
-		bit := bits[n-i-1]
-		if bit == 1 {
-			R_Add, ell_Add := LineAddition_fn(&R[2*i+1], Q)
-			R[2*i+2] = *R_Add
-			ell_coeff[2*i+1] = *ell_Add
-		} else if bit == -1 {
-			R_Add, ell_Add := LineAddition_fn(&R[2*i+1], &neg_Q)
-			R[2*i+2] = *R_Add
-			ell_coeff[2*i+1] = *ell_Add
-		} else {
-			R[2*i+2] = R[2*i+1]
-			ell_coeff[2*i+1] = ell_coeff[2*i]
-		}
-	}
-
-	// Frobenius twists
-	Q1 := MulByChar_fn(Q)
-	Q2 := MulByChar_fn(Q1)
-
-	// -Q2
-	var Q2_neg bn254.G2Affine
-	Q2_neg.X = Q2.X
-	Q2_neg.Y.A0.Neg(&Q2.Y.A0)
-	Q2_neg.Y.A1.Neg(&Q2.Y.A1)
-
-	// Final additions
-	R_Last1, ell_Last1 := LineAddition_fn(&R[2*n], Q1)
-	R[2*n+1] = *R_Last1
-	ell_coeff[2*n] = *ell_Last1
-
-	_, ell_Last2 := LineAddition_fn(&R[2*n+1], &Q2_neg)
-	ell_coeff[2*n+1] = *ell_Last2
-
-	return ell_coeff, R
-}
-
-func MillerLoopStep_fn(
-	fIn *bn254.E12,
-	ell []bn254.E6,
-	p *bn254.G1Affine,
-	bit int,
-) (f1, f2, f3 bn254.E12) {
-	// Step 1: f1 = fIn^2
-	f1.Mul(fIn, fIn)
-
-	// Step 2: f2 = Ell(f1, ell[0])
-	f2 = *Ell_fn(&f1, &ell[0], p)
-
-	// Step 3: Conditionally apply Ell with ell[1]
-	if bit == 1 || bit == -1 {
-		f3 = *Ell_fn(&f2, &ell[1], p)
-	} else {
-		f3 = f2
-	}
-
-	return
-}
-
 func MillerLoopStepIntegrated_fn(
 	Rin *G2Projective, // R[2*i]
-	// Q, negQ *bn254.G2Affine, // Q and -Q
 	Q *bn254.G2Affine, // Q
 	p *bn254.G1Affine, // affine P
 	fIn *bn254.E12, // f[3*i]
@@ -440,39 +320,4 @@ func FinalMillerLoopStepIntegrated_fn(
 	f2 = *Ell_fn(&f1, ell2, P)
 
 	return
-}
-
-func MillerLoop_fn(
-	Q *bn254.G2Affine,
-	P *bn254.G1Affine,
-) *bn254.E12 {
-	// Define constants
-	n := 64
-	bits := []int{
-		0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
-		0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
-		-1, 0, 0, 0, 1, 0, 1,
-	}
-
-	// Compute ell_coeff using precomputation
-	ellCoeff, _ := EllCoeffs_fn(Q)
-
-	// Initialize Miller loop accumulator
-	f := make([]bn254.E12, 4)
-	f[0].SetOne() // f[0] = 1 in Fp12
-
-	// Miller loop
-	for i := 0; i < n; i++ {
-		bit := bits[n-1-i]
-		f1, f2, f3 := MillerLoopStep_fn(&f[0], ellCoeff[2*i:2*i+2], P, bit)
-		f[0] = f3
-		f[1] = f1
-		f[2] = f2
-	}
-
-	// Final 2 steps (hardcoded)
-	f[1] = *Ell_fn(&f[0], &ellCoeff[2*n], P)
-	f[2] = *Ell_fn(&f[1], &ellCoeff[2*n+1], P)
-
-	return &f[2]
 }
