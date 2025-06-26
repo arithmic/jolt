@@ -2,6 +2,9 @@ package uniform
 
 import (
 	"fmt"
+	"math/big"
+	"testing"
+
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
@@ -9,8 +12,6 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	bn254Fp "github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
-	"math/big"
-	"testing"
 )
 
 func TestGtMul(t *testing.T) {
@@ -191,4 +192,123 @@ func TestComputeQuotientPoly(t *testing.T) {
 				i, fMinusRVal, prodVal)
 		}
 	}
+}
+
+func TestToTower(t *testing.T) {
+	var inTower bn254.E12
+	_, _ = inTower.SetRandom()
+	in1 := FromE12(&inTower)
+	in_tower_from_func := ToTower(in1)
+	res := inTower.Equal(&in_tower_from_func)
+	if !res {
+		fmt.Println("Final result mismatch")
+	}
+
+}
+
+func TestGTMultiMul(t *testing.T) {
+	var in1Tower, in2Tower bn254.E12
+	_, _ = in1Tower.SetRandom()
+	_, _ = in2Tower.SetRandom()
+
+	var one fr.Element
+	one.SetOne()
+
+	var random fr.Element
+	_, _ = random.SetRandom()
+
+	var rPowers [13]fr.Element
+	rPowers[0] = one
+	for i := 1; i < 13; i++ {
+		rPowers[i].Mul(&random, &rPowers[i-1])
+	}
+
+	// Change the constant  according to number of multiplications
+	n := 10
+	inTowerArr := make([]bn254.E12, n)
+	for i := 0; i < n; i++ {
+		_, _ = inTowerArr[i].SetRandom()
+	}
+
+	inTowervalue := make([][]fr.Element, n)
+	for i := 0; i < n; i++ {
+		inTowervalue[i] = FromE12(&inTowerArr[i])
+	}
+
+	var out_res bn254.E12
+	out_res.SetOne()
+	for i := 0; i < n; i++ {
+		out_res.Mul(&out_res, &inTowerArr[i])
+	}
+
+	out_val := FromE12(&out_res)
+
+	gtmultimulCircuit := GTMultiMul{
+		in:      inTowervalue,
+		rPowers: rPowers,
+		out:     out_val,
+	}
+
+	gtmultimulR1Cs := gtmultimulCircuit.CreateStepCircuit()
+	fmt.Println("No of Constraints ", gtmultimulR1Cs.GetNbConstraints())
+	gtmultimulCircuit.GenerateWitness(gtmultimulR1Cs)
+}
+
+func TestMSM(t *testing.T) {
+
+	var one fr.Element
+	one.SetOne()
+	var random fr.Element
+	_, _ = random.SetRandom()
+
+	var rPowers [13]fr.Element
+	rPowers[0] = one
+	for i := 1; i < 13; i++ {
+		rPowers[i].Mul(&random, &rPowers[i-1])
+	}
+
+	n := 50
+	basesArr := make([]bn254.E12, n)
+	for i := 0; i < n; i++ {
+		_, _ = basesArr[i].SetRandom()
+	}
+
+	basesArrvalue := make([][]fr.Element, n)
+	for i := 0; i < n; i++ {
+		basesArrvalue[i] = FromE12(&basesArr[i])
+	}
+
+	powers := make([]fr.Element, n)
+	for i := 0; i < n; i++ {
+		powers[i].SetRandom()
+	}
+
+	powersBigInt := make([]big.Int, n)
+
+	for i := 0; i < n; i++ {
+		powers[i].BigInt(&powersBigInt[i])
+	}
+
+	var out_res bn254.E12
+	out_res.SetOne()
+	gt_exp := make([]bn254.E12, n)
+
+	for i := 0; i < n; i++ {
+		gt_exp[i].Exp(basesArr[i], &powersBigInt[i])
+		out_res.Mul(&out_res, &gt_exp[i])
+	}
+
+	msmCircuit := MSM{
+		bases:      basesArrvalue,
+		rPowers:    rPowers,
+		powers:     powersBigInt,
+		out:        FromE12(&out_res),
+		gtExp:      &GTExp{},
+		gtMultiMul: &GTMultiMul{},
+	}
+
+	msmR1Cs := msmCircuit.CreateStepCircuits()
+	// fmt.Println("No of Constraints in exp ", msmCircuit.GetConstraints())
+	msmCircuit.GenerateWitness(msmR1Cs)
+
 }
