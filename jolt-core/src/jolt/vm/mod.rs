@@ -147,9 +147,9 @@ where
     ProofTranscript: Transcript,
     PCS: CommitmentScheme<ProofTranscript, Field = F>,
 {
-    pub(crate) transcript: ProofTranscript,
-    pub(crate) opening_accumulator: ProverOpeningAccumulator<F, PCS, ProofTranscript>,
-    pub(crate) prover_setup: PCS::ProverSetup,
+    pub transcript: ProofTranscript,
+    pub opening_accumulator: ProverOpeningAccumulator<F, PCS, ProofTranscript>,
+    pub prover_setup: PCS::ProverSetup,
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug, Clone)]

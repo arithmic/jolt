@@ -82,7 +82,7 @@ impl RAMPreprocessing {
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug, Clone)]
 pub struct RAMTwistProof<F: JoltField, ProofTranscript: Transcript> {
-    pub(crate) K: usize,
+    pub K: usize,
     /// Proof for the read-checking and write-checking sumchecks
     /// (steps 3 and 4 of Figure 9).
     read_write_checking_proof: ReadWriteCheckingProof<F, ProofTranscript>,

@@ -7,7 +7,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use super::{Jolt, JoltProof};
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
 
-const WORD_SIZE: usize = 32;
+pub const WORD_SIZE: usize = 32;
 
 // ==================== JOLT ====================
 
