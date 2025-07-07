@@ -1,4 +1,5 @@
 use crate::field::JoltField;
+use crate::host;
 use crate::poly::commitment::hyperkzg::HyperKZG;
 use crate::r1cs::constraints::JoltRV32IMConstraints;
 use ark_bn254::{Bn254, Fr};
@@ -75,10 +76,55 @@ pub struct JoltHyperKZGProof {
 
 impl Serializable for JoltHyperKZGProof {}
 
+use crate::jolt::vm::JoltVerifierPreprocessing;
+
+use std::sync::{LazyLock, Mutex};
+static FIB_FILE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+static SHA3_FILE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+pub fn fib_e2e_for_riscv<F, PCS, ProofTranscript>()
+where
+    F: JoltField,
+    PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    ProofTranscript: Transcript,
+{
+    let artifact_guard = FIB_FILE_LOCK.lock().unwrap();
+    let mut program = host::Program::new("fibonacci-guest");
+    let inputs = postcard::to_stdvec(&9u32).unwrap();
+    let (bytecode, memory_init) = program.decode();
+    let (io_device, trace) = program.trace(&inputs);
+    drop(artifact_guard);
+
+    let preprocessing = RV32IJoltVM::prover_preprocess(
+        bytecode.clone(),
+        io_device.memory_layout.clone(),
+        memory_init,
+        1 << 16,
+        1 << 16,
+        1 << 16,
+    );
+    let (proof, commitments, debug_info) =
+        <RV32IJoltVM as Jolt<32, F, PCS, ProofTranscript>>::prove(
+            io_device,
+            trace,
+            preprocessing.clone(),
+        );
+
+    let verifier_preprocessing =
+        JoltVerifierPreprocessing::<F, PCS, ProofTranscript>::from(&preprocessing);
+    let verification_result =
+        RV32IJoltVM::verify(verifier_preprocessing, proof, commitments, debug_info);
+    assert!(
+        verification_result.is_ok(),
+        "Verification failed with error: {:?}",
+        verification_result.err()
+    );
+}
+
 // ==================== TEST ====================
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use ark_bn254::Fr;
 
     use crate::field::JoltField;
@@ -97,7 +143,7 @@ mod tests {
     static FIB_FILE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
     static SHA3_FILE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
-    fn fib_e2e<F, PCS, ProofTranscript>()
+    pub fn fib_e2e<F, PCS, ProofTranscript>()
     where
         F: JoltField,
         PCS: CommitmentScheme<ProofTranscript, Field = F>,
