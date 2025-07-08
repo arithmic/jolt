@@ -980,7 +980,7 @@ fn compute_witness_eval<F: JoltField>(
     degree: usize,
     polys: &[MultilinearPolynomial<F>],
     evals_1: &[F],
-    eq_eval_idx_s_vec: &Vec<SmallVec<[F; 2]>>,
+    eq_eval_idx_s_vec: &[SmallVec<[F; 2]>],
     round: usize,
     mask: usize,
 ) -> Vec<Vec<F>> {
@@ -1012,7 +1012,7 @@ fn compute_acc_for_shard<Func, F: JoltField>(
     mask: usize,
     polys: &[MultilinearPolynomial<F>],
     evals_1: &[F],
-    eq_eval_idx_s_vec: &Vec<SmallVec<[F; 2]>>,
+    eq_eval_idx_s_vec: &[SmallVec<[F; 2]>],
     comb_func: Func,
     chunk_size: usize,
 ) -> Vec<F>
