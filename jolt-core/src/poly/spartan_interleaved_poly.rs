@@ -2294,17 +2294,9 @@ where
     PCS: CommitmentScheme<ProofTranscript, Field = F>,
     ProofTranscript: Transcript,
 {
-    // type Shard = Vec<Vec<SparseCoefficient<i128>>>;
-
-    // fn next(&mut self) -> Self::Shard {
-    //     self.generate_shard()
-    // }
-
     type Item = Vec<Vec<SparseCoefficient<i128>>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(self.generate_shard())
     }
-
-  
 }

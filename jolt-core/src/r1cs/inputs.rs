@@ -590,10 +590,8 @@ where
             self.compute_shard(&self.trace[self.step..self.step + self.shard_length], None)
         };
         self.step = (self.step + self.shard_length) % self.trace.len();
-        Some((shard))
+        Some(shard)
     }
-
-    
 }
 
 #[cfg(test)]

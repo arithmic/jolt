@@ -491,8 +491,8 @@ pub trait PolynomialEvaluation<F: JoltField> {
     /// where EQ table is EQ(x, r) for x \in {0, 1}^|r|. This is used for
     /// batched opening proofs (see opening_proof.rs)
     fn batch_evaluate(polys: &[&Self], r: &[F]) -> (Vec<F>, Vec<F>);
-    fn stream_batch_evaluate<O: Iterator<Item = Vec<MultilinearPolynomial<F>>> + Send>(
-        _: &mut O,
+    fn stream_batch_evaluate<I: Iterator<Item = Vec<MultilinearPolynomial<F>>> + Send>(
+        _: &mut I,
         _: &[F],
         _: usize,
         _: usize,
@@ -592,8 +592,8 @@ impl<F: JoltField> PolynomialEvaluation<F> for MultilinearPolynomial<F> {
         (evals, eq)
     }
 
-    fn stream_batch_evaluate<O: Iterator<Item = Vec<MultilinearPolynomial<F>>> + Send>(
-        oracle: &mut O,
+    fn stream_batch_evaluate<I: Iterator<Item = Vec<MultilinearPolynomial<F>>> + Send>(
+        oracle: &mut I,
         r: &[F],
         num_shards: usize,
         shard_length: usize,
