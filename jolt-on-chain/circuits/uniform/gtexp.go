@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+
 	"github.com/arithmic/gnark/constraint"
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
@@ -84,11 +85,9 @@ type GTExpStep struct {
 	divisorEval fr.Element
 
 	// Native computation fields
-	inTower  bn254.E12
-	accTower bn254.E12
-	in       []fr.Element
-	// bit           uint
-	// bitAcc        big.Int
+	inTower       bn254.E12
+	accTower      bn254.E12
+	in            []fr.Element
 	reduciblePoly []fr.Element
 }
 

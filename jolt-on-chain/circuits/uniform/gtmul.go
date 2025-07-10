@@ -131,14 +131,6 @@ func (gtMultiMul *GTMultiMul) GenerateWitness(constraints constraint.ConstraintS
 		gtMultiMul.gtMulStep.Acc = gtMultiMul.gtMulStep.Rem
 	}
 
-	// mul_result, _ := convertFrontendArrayToFrArray(gtMultiMul.gtMulStep.Rem[:])
-	// for i := 0; i < len(mul_result); i++ {
-	// 	res := mul_result[i].Equal(&gtMultiMul.out[i])
-	// 	if !res {
-	// 		fmt.Println("Final result mismatch")
-	// 	}
-	// }
-
 	return witness
 
 }

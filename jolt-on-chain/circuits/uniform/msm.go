@@ -24,10 +24,10 @@ func (circuit *MSM) Compile() []constraint.ConstraintSystem {
 
 func (msm *MSM) CreateStepCircuits() []constraint.ConstraintSystem {
 
-	gtExpR1Cs := msm.gtExp.CreateStepCircuit()
+	gtExpR1CS := msm.gtExp.CreateStepCircuit()
 	gtmultimulR1Cs := msm.gtMultiMul.CreateStepCircuit()
 
-	stepCircuits := []constraint.ConstraintSystem{gtExpR1Cs, gtmultimulR1Cs}
+	stepCircuits := []constraint.ConstraintSystem{gtExpR1CS, gtmultimulR1Cs}
 	return stepCircuits
 
 }
