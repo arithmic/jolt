@@ -23,7 +23,6 @@ type UniformCircuit interface {
 }
 
 type PiecewiseUniformCircuit interface {
-
 	CreateStepCircuits() []constraint.ConstraintSystem
 
 	GenerateWitness(constraints []constraint.ConstraintSystem) fr.Vector

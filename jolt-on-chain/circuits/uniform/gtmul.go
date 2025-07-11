@@ -2,12 +2,14 @@ package uniform
 
 import (
 	"fmt"
+
 	"github.com/arithmic/gnark/constraint"
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
+	"github.com/arithmic/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark-crypto/ecc"
-
 	"github.com/consensys/gnark-crypto/ecc/bn254"
+
 	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
@@ -60,6 +62,7 @@ func (circuit *GTMul) GenerateWitness(constraints constraint.ConstraintSystem) f
 
 	return wSolved
 }
+
 func (circuit *GTMul) Hint() {
 	in1, _ := convertFrontendArrayToFrArray(circuit.Acc[:])
 	in2, _ := convertFrontendArrayToFrArray(circuit.In[:])
@@ -67,20 +70,70 @@ func (circuit *GTMul) Hint() {
 	in2Tower := ToTower(in2)
 	var in1in2Tower bn254.E12
 	in1in2Tower.Mul(&in1Tower, &in2Tower)
+
 	in1in2 := FromE12(&in1in2Tower)
 
 	in1in2Poly := multiplyPolynomials(in1, in2)
 	quotient := computeQuotientPoly(in1in2Poly, circuit.reduciblePoly, in1in2)
+
 	circuit.Quot = [11]frontend.Variable(makeFrontendVariable(quotient))
 	circuit.Rem = [12]frontend.Variable(makeFrontendVariable(in1in2))
 }
 
 type GTMultiMul struct {
-	in      [][]fr.Element
-	out     []fr.Element
-	rPowers [13]fr.Element
+	in        [][]fr.Element
+	out       []fr.Element
+	rPowers   [13]fr.Element
+	gtMulStep *GTMul
 }
 
+func (gtMultiMul *GTMultiMul) CreateStepCircuit() constraint.ConstraintSystem {
+
+	reduciblePoly := make([]fr.Element, 13)
+	reduciblePoly[0].SetInt64(82)
+	reduciblePoly[6].SetInt64(-18)
+	reduciblePoly[12].SetOne()
+	divisorEval := fr.Element{}
+
+	for i := 0; i < len(reduciblePoly); i++ {
+		var temp fr.Element
+		temp.Mul(&reduciblePoly[i], &gtMultiMul.rPowers[i])
+		divisorEval.Add(&divisorEval, &temp)
+	}
+
+	gtMultiMul.gtMulStep = &GTMul{
+		DivisorEval:   divisorEval,
+		reduciblePoly: reduciblePoly,
+		rPowers:       gtMultiMul.rPowers,
+	}
+
+	gtMulConstraints, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, gtMultiMul.gtMulStep)
+
+	return gtMulConstraints
+
+}
+
+func (gtMultiMul *GTMultiMul) GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector {
+
+	gtMultiMul.gtMulStep.Acc = [12]frontend.Variable(makeFrontendVariable(gtMultiMul.in[0]))
+
+	var witness fr.Vector
+
+	for i := 1; i < len(gtMultiMul.in); i++ {
+		gtMultiMul.gtMulStep.In = [12]frontend.Variable(makeFrontendVariable(gtMultiMul.in[i]))
+
+		gtMultiMul.gtMulStep.Hint()
+
+		witnessStep := gtMultiMul.gtMulStep.GenerateWitness(constraints)
+
+		witness = append(witness, witnessStep...)
+
+		gtMultiMul.gtMulStep.Acc = gtMultiMul.gtMulStep.Rem
+	}
+
+	return witness
+
+}
 
 func multiplyPolynomials(a, b []fr.Element) []fr.Element {
 	degree := len(a) + len(b) - 1
@@ -242,18 +295,19 @@ func ToTower(a []fr.Element) bn254.E12 {
 		panic("slice must have at least 12 elements")
 	}
 
-	nine := fp.Element{9}
-
+	var nine fp.Element
+	nine.SetUint64(9)
 	a6MulNine := fp.Element(a[6])
 	a6MulNine.Mul(&a6MulNine, &nine)
-
 	a000 := fp.Element(a[0])
 	a000.Add(&a000, &a6MulNine)
 
 	a001 := fp.Element(a[6])
-	a8MulNine := fp.Element(a[6])
+
+	a8MulNine := fp.Element(a[8])
 	a8MulNine.Mul(&a8MulNine, &nine)
 	a010 := fp.Element(a[2])
+
 	a010.Add(&a010, &a8MulNine)
 
 	a011 := fp.Element(a[8])
@@ -286,4 +340,3 @@ func ToTower(a []fr.Element) bn254.E12 {
 		C1: bn254.E6{B0: bn254.E2{A0: a100, A1: a101}, B1: bn254.E2{A0: a110, A1: a111}, B2: bn254.E2{A0: a120, A1: a121}}}
 	return tower
 }
-

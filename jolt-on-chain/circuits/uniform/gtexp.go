@@ -2,6 +2,9 @@ package uniform
 
 import (
 	"fmt"
+	"math/big"
+	"strconv"
+
 	"github.com/arithmic/gnark/constraint"
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
@@ -9,8 +12,6 @@ import (
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
-	"math/big"
-	"strconv"
 )
 
 func makeFrontendVariable(input []fr.Element) []frontend.Variable {
@@ -20,7 +21,6 @@ func makeFrontendVariable(input []fr.Element) []frontend.Variable {
 	}
 	return res
 }
-
 
 // frontendVariableToFrElement converts a single frontend.Variable to fr.Element
 func frontendVariableToFrElement(v frontend.Variable) (fr.Element, error) {
@@ -70,7 +70,6 @@ func convertFrontendArrayToFrArray(vars []frontend.Variable) ([]fr.Element, erro
 	return result, nil
 }
 
-
 type GTExpStep struct {
 	AccEval     frontend.Variable
 	AccQuot     [11]frontend.Variable
@@ -89,8 +88,6 @@ type GTExpStep struct {
 	inTower       bn254.E12
 	accTower      bn254.E12
 	in            []fr.Element
-	bit           uint
-	bitAcc        big.Int
 	reduciblePoly []fr.Element
 }
 
@@ -135,13 +132,25 @@ func (circuit *GTExpStep) Hint() {
 	var square bn254.E12
 	square.Square(&circuit.accTower)
 
+	var bit fr.Element
+	bit, _ = frontendVariableToFrElement(circuit.Bit)
+
+	var bitInt big.Int
+	bit.BigInt(&bitInt)
+
+	var bitAcc fr.Element
+	bitAcc, _ = frontendVariableToFrElement(circuit.AccBit)
+
+	var bitAccInt big.Int
+	bitAcc.BigInt(&bitAccInt)
+
 	var bitAccDouble big.Int
 	var bitOut big.Int
-	bitAccDouble.Add(&circuit.bitAcc, &circuit.bitAcc)
-	bitOut.Add(&bitAccDouble, big.NewInt(int64(circuit.bit)))
+	bitAccDouble.Add(&bitAccInt, &bitAccInt)
+	bitOut.Add(&bitAccDouble, big.NewInt(bitInt.Int64()))
 
 	var outTower bn254.E12
-	if circuit.bit == 1 {
+	if bitInt.Int64() == 1 {
 		outTower.Mul(&square, &circuit.inTower)
 	} else {
 		outTower = square
@@ -166,7 +175,7 @@ func (circuit *GTExpStep) Hint() {
 	accQuot := computeQuotientPoly(accSquarePoly, circuit.reduciblePoly, accRem)
 	accInQuot := computeQuotientPoly(accInPoly, circuit.reduciblePoly, accInRem)
 	var accBitCopy big.Int
-	accBitCopy.Set(&circuit.bitAcc)
+	accBitCopy.Set(&bitAccInt)
 	circuit.AccEval = accEval
 	circuit.AccQuot = [11]frontend.Variable(makeFrontendVariable(accQuot))
 	circuit.AccRem = [12]frontend.Variable(makeFrontendVariable(accRem))
@@ -177,7 +186,6 @@ func (circuit *GTExpStep) Hint() {
 	circuit.BitOut = bitOut
 
 	circuit.accTower.Set(&outTower)
-	circuit.bitAcc.Set(&bitOut)
 
 }
 
@@ -242,15 +250,13 @@ func (gtExp *GTExp) GenerateWitness(constraints constraint.ConstraintSystem) fr.
 	gtExp.gtExpStep.inTower = gtExp.base
 
 	gtExp.gtExpStep.accTower.Set(&e12OneTower)
-	gtExp.gtExpStep.bitAcc.Set(&big.Int{})
 	var witness fr.Vector
 	for i := 0; i < 254; i++ {
 		bit := gtExp.exp.Bit(253 - i)
-		gtExp.gtExpStep.bit = bit
+		gtExp.gtExpStep.Bit = bit
 
 		gtExp.gtExpStep.Hint()
-    
-		gtExp.gtExpStep.Bit = bit
+
 		witnessStep := gtExp.gtExpStep.GenerateWitness(constraints)
 
 		for _, elem := range witnessStep {
