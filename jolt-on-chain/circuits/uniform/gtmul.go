@@ -7,6 +7,7 @@ import (
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/utils"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 
@@ -64,8 +65,8 @@ func (circuit *GTMul) GenerateWitness(constraints constraint.ConstraintSystem) f
 }
 
 func (circuit *GTMul) Hint() {
-	in1, _ := convertFrontendArrayToFrArray(circuit.Acc[:])
-	in2, _ := convertFrontendArrayToFrArray(circuit.In[:])
+	in1, _ := utils.ConvertFrontendArrayToFrArray(circuit.Acc[:])
+	in2, _ := utils.ConvertFrontendArrayToFrArray(circuit.In[:])
 	in1Tower := ToTower(in1)
 	in2Tower := ToTower(in2)
 	var in1in2Tower bn254.E12
@@ -76,8 +77,8 @@ func (circuit *GTMul) Hint() {
 	in1in2Poly := multiplyPolynomials(in1, in2)
 	quotient := computeQuotientPoly(in1in2Poly, circuit.reduciblePoly, in1in2)
 
-	circuit.Quot = [11]frontend.Variable(makeFrontendVariable(quotient))
-	circuit.Rem = [12]frontend.Variable(makeFrontendVariable(in1in2))
+	circuit.Quot = [11]frontend.Variable(utils.MakeFrontendVariable(quotient))
+	circuit.Rem = [12]frontend.Variable(utils.MakeFrontendVariable(in1in2))
 }
 
 type GTMultiMul struct {
@@ -115,12 +116,12 @@ func (gtMultiMul *GTMultiMul) CreateStepCircuit() constraint.ConstraintSystem {
 
 func (gtMultiMul *GTMultiMul) GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector {
 
-	gtMultiMul.gtMulStep.Acc = [12]frontend.Variable(makeFrontendVariable(gtMultiMul.in[0]))
+	gtMultiMul.gtMulStep.Acc = [12]frontend.Variable(utils.MakeFrontendVariable(gtMultiMul.in[0]))
 
 	var witness fr.Vector
 
 	for i := 1; i < len(gtMultiMul.in); i++ {
-		gtMultiMul.gtMulStep.In = [12]frontend.Variable(makeFrontendVariable(gtMultiMul.in[i]))
+		gtMultiMul.gtMulStep.In = [12]frontend.Variable(utils.MakeFrontendVariable(gtMultiMul.in[i]))
 
 		gtMultiMul.gtMulStep.Hint()
 

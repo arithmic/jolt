@@ -5,7 +5,7 @@ import (
 	"math/big"
 
 	"github.com/arithmic/gnark/frontend"
-	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/utils"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
@@ -161,9 +161,9 @@ func RandomG1Affine() bn254.G1Affine {
 
 func To_Bn254G1Affine(p G1Projective) bn254.G1Affine {
 	var affine bn254.G1Affine
-	x, _ := field_tower.FrontendVariableToFrElement(p.X)
-	y, _ := field_tower.FrontendVariableToFrElement(p.Y)
-	z, _ := field_tower.FrontendVariableToFrElement(p.Z)
+	x, _ := utils.FrontendVariableToFrElement(p.X)
+	y, _ := utils.FrontendVariableToFrElement(p.Y)
+	z, _ := utils.FrontendVariableToFrElement(p.Z)
 
 	affine.X = fp.Element{}
 	affine.Y = fp.Element{}

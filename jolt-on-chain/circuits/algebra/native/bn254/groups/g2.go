@@ -194,7 +194,7 @@ func (g2 *G2API) Mul(P *G2Projective, exp *frontend.Variable) *G2Projective {
 		dbl := g2.Double(&res)
 		add := g2.Add(dbl, P)
 
-		res = *g2.Select(bits[n-1-i], dbl, add)
+		res = *g2.Select(bits[n-1-i], add, dbl)
 	}
 
 	return &res

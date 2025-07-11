@@ -5,6 +5,7 @@ import (
 	"math/big"
 
 	"github.com/arithmic/gnark/constraint"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/utils"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
@@ -50,7 +51,7 @@ func (msm *MSM) GenerateWitness(constraints []constraint.ConstraintSystem) fr.Ve
 	witnessgtMultiMul := msm.gtMultiMul.GenerateWitness(constraints[1])
 	witness = append(witness, witnessgtMultiMul...)
 
-	final_result, _ := convertFrontendArrayToFrArray(msm.gtMultiMul.gtMulStep.Rem[:])
+	final_result, _ := utils.ConvertFrontendArrayToFrArray(msm.gtMultiMul.gtMulStep.Rem[:])
 	for i := 0; i < len(final_result); i++ {
 		res := final_result[i].Equal(&msm.out[i])
 		if !res {

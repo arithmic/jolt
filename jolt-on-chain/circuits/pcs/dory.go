@@ -11,6 +11,8 @@ import (
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/groups"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/utils"
+
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
@@ -123,8 +125,8 @@ func (circuit *DoryVerifierStep) Hint() {
 
 	// Computing C_prime
 	var C_prime bn254.E12
-	chi, _ := field_tower.FrontendVariableToFrElement(circuit.Chi)
-	beta, _ := field_tower.FrontendVariableToFrElement(circuit.Beta)
+	chi, _ := utils.FrontendVariableToFrElement(circuit.Chi)
+	beta, _ := utils.FrontendVariableToFrElement(circuit.Beta)
 	d2 := field_tower.ToE12(circuit.D2)
 	var beta_d2 bn254.E12
 	var betaBigInt big.Int
@@ -149,7 +151,7 @@ func (circuit *DoryVerifierStep) Hint() {
 
 	C_prime.Mul(&beta_inverse_d1, &C_prime)
 
-	alpha, _ := field_tower.FrontendVariableToFrElement(circuit.Alpha)
+	alpha, _ := utils.FrontendVariableToFrElement(circuit.Alpha)
 	var alpha_bigint big.Int
 	alpha.BigInt(&alpha_bigint)
 
@@ -291,49 +293,37 @@ func (circuit *DoryVerifierStep) GenerateWitness(constraints constraint.Constrai
 }
 
 type DoryVerifier struct {
-	C     GT
-	D1    GT
-	D2    GT
-	E1    groups.G1Projective
-	E2    groups.G2Projective
-	Alpha frontend.Variable
-	Beta  frontend.Variable
-	Chi   frontend.Variable
+	C  GT
+	D1 GT
+	D2 GT
+	E1 groups.G1Projective
+	E2 groups.G2Projective
 
-	// Need to confirm
-	C_Plus   GT
-	C_Minus  GT
-	D1_L     GT
-	D1_R     GT
-	D2_L     GT
-	D2_R     GT
-	Delta1_L GT
-	Delta1_R GT
-	Delta2_L GT
-	Delta2_R GT
+	Alpha    []frontend.Variable
+	Beta     []frontend.Variable
+	Chi      []frontend.Variable
+	C_Plus   []GT
+	C_Minus  []GT
+	D1_L     []GT
+	D1_R     []GT
+	D2_L     []GT
+	D2_R     []GT
+	Delta1_L []GT
+	Delta1_R []GT
+	Delta2_L []GT
+	Delta2_R []GT
 
-	E1_Beta  groups.G1Projective
-	E2_Beta  groups.G2Projective
-	E1_PLUS  groups.G1Projective
-	E1_MINUS groups.G1Projective
-	E2_PLUS  groups.G2Projective
-	E2_MINUS groups.G2Projective
+	E1_Beta  []groups.G1Projective
+	E1_PLUS  []groups.G1Projective
+	E1_MINUS []groups.G1Projective
+	E2_Beta  []groups.G2Projective
+	E2_PLUS  []groups.G2Projective
+	E2_MINUS []groups.G2Projective
 
 	doryverifierstep *DoryVerifierStep
 }
 
 func (dory_verifier *DoryVerifier) CreateStepCircuit() constraint.ConstraintSystem {
-
-	dory_verifier.doryverifierstep = &DoryVerifierStep{
-		C:     dory_verifier.C,
-		D1:    dory_verifier.D1,
-		D2:    dory_verifier.D2,
-		E1:    dory_verifier.E1,
-		E2:    dory_verifier.E2,
-		Alpha: dory_verifier.Alpha,
-		Beta:  dory_verifier.Beta,
-		Chi:   dory_verifier.Chi,
-	}
 
 	doryVerifierConstraints, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, dory_verifier.doryverifierstep)
 
@@ -343,50 +333,47 @@ func (dory_verifier *DoryVerifier) CreateStepCircuit() constraint.ConstraintSyst
 
 func (dory_verifier *DoryVerifier) GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector {
 
-	var n int
-	n = 1
+	n := len(dory_verifier.Alpha)
 	var witness fr.Vector
 
 	dory_verifier.doryverifierstep = &DoryVerifierStep{
-		C:        dory_verifier.C,
-		D1:       dory_verifier.D1,
-		D2:       dory_verifier.D2,
-		E1:       dory_verifier.E1,
-		E2:       dory_verifier.E2,
-		Alpha:    dory_verifier.Alpha,
-		Beta:     dory_verifier.Beta,
-		Chi:      dory_verifier.Chi,
-		C_Plus:   dory_verifier.C_Plus,
-		C_Minus:  dory_verifier.C_Minus,
-		D1_L:     dory_verifier.D1_L,
-		D1_R:     dory_verifier.D1_R,
-		D2_L:     dory_verifier.D2_L,
-		D2_R:     dory_verifier.D2_R,
-		Delta1_L: dory_verifier.Delta1_L,
-		Delta1_R: dory_verifier.Delta1_R,
-		Delta2_L: dory_verifier.Delta2_L,
-		Delta2_R: dory_verifier.Delta2_R,
-		E1_Beta:  dory_verifier.E1_Beta,
-		E2_Beta:  dory_verifier.E2_Beta,
-		E1_PLUS:  dory_verifier.E1_PLUS,
-		E1_MINUS: dory_verifier.E1_MINUS,
-		E2_PLUS:  dory_verifier.E2_PLUS,
-		E2_MINUS: dory_verifier.E2_MINUS,
+		C:  dory_verifier.C,
+		D1: dory_verifier.D1,
+		D2: dory_verifier.D2,
+		E1: dory_verifier.E1,
+		E2: dory_verifier.E2,
 	}
 
-	// dory_verifier.doryverifierstep.Hint()
-
 	for i := 0; i < n; i++ {
+		dory_verifier.doryverifierstep.Alpha = dory_verifier.Alpha[i]
+		dory_verifier.doryverifierstep.Beta = dory_verifier.Beta[i]
+		dory_verifier.doryverifierstep.Chi = dory_verifier.Chi[i]
+		dory_verifier.doryverifierstep.C_Plus = dory_verifier.C_Plus[i]
+		dory_verifier.doryverifierstep.C_Minus = dory_verifier.C_Minus[i]
+		dory_verifier.doryverifierstep.D1_L = dory_verifier.D1_L[i]
+		dory_verifier.doryverifierstep.D1_R = dory_verifier.D1_R[i]
+		dory_verifier.doryverifierstep.D2_L = dory_verifier.D2_L[i]
+		dory_verifier.doryverifierstep.D2_R = dory_verifier.D2_R[i]
+		dory_verifier.doryverifierstep.Delta1_L = dory_verifier.Delta1_L[i]
+		dory_verifier.doryverifierstep.Delta1_R = dory_verifier.Delta1_R[i]
+		dory_verifier.doryverifierstep.Delta2_L = dory_verifier.Delta2_L[i]
+		dory_verifier.doryverifierstep.Delta2_R = dory_verifier.Delta2_R[i]
+		dory_verifier.doryverifierstep.E1_Beta = dory_verifier.E1_Beta[i]
+		dory_verifier.doryverifierstep.E1_PLUS = dory_verifier.E1_PLUS[i]
+		dory_verifier.doryverifierstep.E1_MINUS = dory_verifier.E1_MINUS[i]
+		dory_verifier.doryverifierstep.E2_Beta = dory_verifier.E2_Beta[i]
+		dory_verifier.doryverifierstep.E2_PLUS = dory_verifier.E2_PLUS[i]
+		dory_verifier.doryverifierstep.E2_MINUS = dory_verifier.E2_MINUS[i]
 
 		dory_verifier.doryverifierstep.Hint()
 		stepWitness := dory_verifier.doryverifierstep.GenerateWitness(constraints)
 		witness = append(witness, stepWitness...)
 
-		// dory_verifier.doryverifierstep.C = dory_verifier.doryverifierstep.C_Prime
-		// dory_verifier.doryverifierstep.D1 = dory_verifier.doryverifierstep.D1_Prime
-		// dory_verifier.doryverifierstep.D2 = dory_verifier.doryverifierstep.D2_Prime
-		// dory_verifier.doryverifierstep.E1 = dory_verifier.doryverifierstep.E1_Prime
-		// dory_verifier.doryverifierstep.E2 = dory_verifier.doryverifierstep.E2_Prime
+		dory_verifier.doryverifierstep.C = dory_verifier.doryverifierstep.C_Prime
+		dory_verifier.doryverifierstep.D1 = dory_verifier.doryverifierstep.D1_Prime
+		dory_verifier.doryverifierstep.D2 = dory_verifier.doryverifierstep.D2_Prime
+		dory_verifier.doryverifierstep.E1 = dory_verifier.doryverifierstep.E1_Prime
+		dory_verifier.doryverifierstep.E2 = dory_verifier.doryverifierstep.E2_Prime
 
 	}
 

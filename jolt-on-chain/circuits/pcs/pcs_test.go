@@ -17,6 +17,8 @@ import (
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/groups"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/utils"
+
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	bn254Fp "github.com/consensys/gnark-crypto/ecc/bn254/fp"
@@ -690,10 +692,92 @@ func TestCircuitdoryParallel(t *testing.T) {
 	_, _ = b.SetRandom()
 	_, _ = c.SetRandom()
 
-	var alpha, beta, chi fr.Element
-	_, _ = alpha.SetRandom()
-	_, _ = beta.SetRandom()
-	_, _ = chi.SetRandom()
+	n := 5
+	alpha := make([]fr.Element, n)
+	beta := make([]fr.Element, n)
+	chi := make([]fr.Element, n)
+
+	for i := 0; i < n; i++ {
+		_, _ = alpha[i].SetRandom()
+		_, _ = beta[i].SetRandom()
+		_, _ = chi[i].SetRandom()
+	}
+
+	C_Plus_arr := make([]bn254.E12, n)
+	C_Plus := make([]GT, n)
+
+	C_Minus := make([]GT, n)
+	C_Minus_arr := make([]bn254.E12, n)
+
+	D1_L_arr := make([]bn254.E12, n)
+	D1_L := make([]GT, n)
+
+	D1_R_arr := make([]bn254.E12, n)
+	D1_R := make([]GT, n)
+
+	D2_L_arr := make([]bn254.E12, n)
+	D2_L := make([]GT, n)
+
+	D2_R_arr := make([]bn254.E12, n)
+	D2_R := make([]GT, n)
+
+	Delta1_L_arr := make([]bn254.E12, n)
+	Delta1_L := make([]GT, n)
+
+	Delta1_R_arr := make([]bn254.E12, n)
+	Delta1_R := make([]GT, n)
+
+	Delta2_L_arr := make([]bn254.E12, n)
+	Delta2_L := make([]GT, n)
+
+	Delta2_R_arr := make([]bn254.E12, n)
+	Delta2_R := make([]GT, n)
+
+	E1_Beta := make([]groups.G1Projective, n)
+	E1_PLUS := make([]groups.G1Projective, n)
+	E1_MINUS := make([]groups.G1Projective, n)
+	E2_Beta := make([]groups.G2Projective, n)
+	E2_PLUS := make([]groups.G2Projective, n)
+	E2_MINUS := make([]groups.G2Projective, n)
+
+	for i := 0; i < n; i++ {
+		_, _ = C_Plus_arr[i].SetRandom()
+		C_Plus[i] = field_tower.FromE12(&C_Plus_arr[i])
+		_, _ = C_Minus_arr[i].SetRandom()
+		C_Minus[i] = field_tower.FromE12(&C_Minus_arr[i])
+		_, _ = D1_L_arr[i].SetRandom()
+		D1_L[i] = field_tower.FromE12(&D1_L_arr[i])
+
+		_, _ = D1_R_arr[i].SetRandom()
+		D1_R[i] = field_tower.FromE12(&D1_R_arr[i])
+
+		_, _ = D2_L_arr[i].SetRandom()
+		D2_L[i] = field_tower.FromE12(&D2_L_arr[i])
+		_, _ = D2_R_arr[i].SetRandom()
+		D2_R[i] = field_tower.FromE12(&D2_R_arr[i])
+
+		_, _ = Delta1_L_arr[i].SetRandom()
+		Delta1_L[i] = field_tower.FromE12(&Delta1_L_arr[i])
+		_, _ = Delta1_R_arr[i].SetRandom()
+		Delta1_R[i] = field_tower.FromE12(&Delta1_R_arr[i])
+		_, _ = Delta2_L_arr[i].SetRandom()
+		Delta2_L[i] = field_tower.FromE12(&Delta2_L_arr[i])
+		_, _ = Delta2_R_arr[i].SetRandom()
+		Delta2_R[i] = field_tower.FromE12(&Delta2_R_arr[i])
+
+		in1, in2 = groups.RandomG1G2Affines()
+		E1_Beta[i] = groups.FromG1Affine(&in1)
+		E2_Beta[i] = groups.FromBNG2Affine(&in2)
+
+		in1, in2 = groups.RandomG1G2Affines()
+		E1_PLUS[i] = groups.FromG1Affine(&in1)
+		E2_PLUS[i] = groups.FromBNG2Affine(&in2)
+
+		in1, in2 = groups.RandomG1G2Affines()
+		E1_MINUS[i] = groups.FromG1Affine(&in1)
+		E2_MINUS[i] = groups.FromBNG2Affine(&in2)
+
+	}
 
 	dory_Circuit := DoryVerifier{
 		C:                field_tower.FromE12(&a),
@@ -701,29 +785,27 @@ func TestCircuitdoryParallel(t *testing.T) {
 		D2:               field_tower.FromE12(&c),
 		E1:               groups.FromG1Affine(&in1),
 		E2:               groups.FromBNG2Affine(&in2),
-		Alpha:            alpha,
-		Beta:             beta,
-		Chi:              chi,
-		C_Plus:           field_tower.FromE12(&a),
-		C_Minus:          field_tower.FromE12(&b),
-		D1_L:             field_tower.FromE12(&a),
-		D1_R:             field_tower.FromE12(&a),
-		D2_L:             field_tower.FromE12(&a),
-		D2_R:             field_tower.FromE12(&a),
-		Delta1_L:         field_tower.FromE12(&a),
-		Delta1_R:         field_tower.FromE12(&a),
-		Delta2_L:         field_tower.FromE12(&a),
-		Delta2_R:         field_tower.FromE12(&a),
-		E1_Beta:          groups.FromG1Affine(&in1),
-		E2_Beta:          groups.FromBNG2Affine(&in2),
-		E1_PLUS:          groups.FromG1Affine(&in1),
-		E1_MINUS:         groups.FromG1Affine(&in1),
-		E2_PLUS:          groups.FromBNG2Affine(&in2),
-		E2_MINUS:         groups.FromBNG2Affine(&in2),
+		Alpha:            utils.MakeFrontendVariable(alpha),
+		Beta:             utils.MakeFrontendVariable(beta),
+		Chi:              utils.MakeFrontendVariable(chi),
+		C_Plus:           C_Plus,
+		C_Minus:          C_Minus,
+		D1_L:             D1_L,
+		D1_R:             D1_R,
+		D2_L:             D2_L,
+		D2_R:             D2_R,
+		Delta1_L:         Delta1_L,
+		Delta1_R:         Delta1_R,
+		Delta2_L:         Delta2_L,
+		Delta2_R:         Delta2_R,
+		E1_Beta:          E1_Beta,
+		E1_PLUS:          E1_PLUS,
+		E1_MINUS:         E1_MINUS,
+		E2_Beta:          E2_Beta,
+		E2_PLUS:          E2_PLUS,
+		E2_MINUS:         E2_MINUS,
 		doryverifierstep: &DoryVerifierStep{},
 	}
-
-	// dory_Circuit.doryverifierstep.Hint()
 
 	dory_R1Cs := dory_Circuit.CreateStepCircuit()
 	dory_Circuit.GenerateWitness(dory_R1Cs)

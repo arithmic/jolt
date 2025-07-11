@@ -308,37 +308,3 @@ func (e Ext2) Fp2MulFp(x *Fp2, y frontend.Variable) *Fp2 {
 		A1: z1,
 	}
 }
-
-func FrontendVariableToFrElement(v frontend.Variable) (grumpkin_fr.Element, error) {
-	var result grumpkin_fr.Element
-
-	switch val := v.(type) {
-	case grumpkin_fr.Element:
-		result = val
-	case *big.Int:
-		result.SetBigInt(val)
-	case big.Int:
-		result.SetBigInt(&val)
-	case int:
-		result.SetInt64(int64(val))
-	case int64:
-		result.SetInt64(val)
-	case uint64:
-		result.SetUint64(val)
-	case string:
-		bigInt := new(big.Int)
-		if _, ok := bigInt.SetString(val, 10); !ok {
-			return result, fmt.Errorf("failed to parse string %s as big integer", val)
-		}
-		result.SetBigInt(bigInt)
-	default:
-		str := fmt.Sprintf("%v", val)
-		bigInt := new(big.Int)
-		if _, ok := bigInt.SetString(str, 10); !ok {
-			return result, fmt.Errorf("unsupported frontend.Variable type: %T", val)
-		}
-		result.SetBigInt(bigInt)
-	}
-
-	return result, nil
-}

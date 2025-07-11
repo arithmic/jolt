@@ -9,66 +9,11 @@ import (
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/utils"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
-
-func makeFrontendVariable(input []fr.Element) []frontend.Variable {
-	res := make([]frontend.Variable, len(input))
-	for i, elem := range input {
-		res[i] = frontend.Variable(elem)
-	}
-	return res
-}
-
-// frontendVariableToFrElement converts a single frontend.Variable to fr.Element
-func frontendVariableToFrElement(v frontend.Variable) (fr.Element, error) {
-	var result fr.Element
-
-	switch val := v.(type) {
-	case fr.Element:
-		result = val
-	case *big.Int:
-		result.SetBigInt(val)
-	case big.Int:
-		result.SetBigInt(&val)
-	case int:
-		result.SetInt64(int64(val))
-	case int64:
-		result.SetInt64(val)
-	case uint64:
-		result.SetUint64(val)
-	case string:
-		bigInt := new(big.Int)
-		if _, ok := bigInt.SetString(val, 10); !ok {
-			return result, fmt.Errorf("failed to parse string %s as big integer", val)
-		}
-		result.SetBigInt(bigInt)
-	default:
-		str := fmt.Sprintf("%v", val)
-		bigInt := new(big.Int)
-		if _, ok := bigInt.SetString(str, 10); !ok {
-			return result, fmt.Errorf("unsupported frontend.Variable type: %T", val)
-		}
-		result.SetBigInt(bigInt)
-	}
-
-	return result, nil
-}
-
-// Generic function to convert arrays of any size
-func convertFrontendArrayToFrArray(vars []frontend.Variable) ([]fr.Element, error) {
-	result := make([]fr.Element, len(vars))
-	for i, v := range vars {
-		elem, err := frontendVariableToFrElement(v)
-		if err != nil {
-			return nil, fmt.Errorf("error converting variable at index %d: %w", i, err)
-		}
-		result[i] = elem
-	}
-	return result, nil
-}
 
 type GTExpStep struct {
 	AccEval     frontend.Variable
@@ -133,13 +78,13 @@ func (circuit *GTExpStep) Hint() {
 	square.Square(&circuit.accTower)
 
 	var bit fr.Element
-	bit, _ = frontendVariableToFrElement(circuit.Bit)
+	bit, _ = utils.FrontendVariableToFrElement(circuit.Bit)
 
 	var bitInt big.Int
 	bit.BigInt(&bitInt)
 
 	var bitAcc fr.Element
-	bitAcc, _ = frontendVariableToFrElement(circuit.AccBit)
+	bitAcc, _ = utils.FrontendVariableToFrElement(circuit.AccBit)
 
 	var bitAccInt big.Int
 	bitAcc.BigInt(&bitAccInt)
@@ -177,10 +122,10 @@ func (circuit *GTExpStep) Hint() {
 	var accBitCopy big.Int
 	accBitCopy.Set(&bitAccInt)
 	circuit.AccEval = accEval
-	circuit.AccQuot = [11]frontend.Variable(makeFrontendVariable(accQuot))
-	circuit.AccRem = [12]frontend.Variable(makeFrontendVariable(accRem))
-	circuit.AccInQuot = [11]frontend.Variable(makeFrontendVariable(accInQuot))
-	circuit.AccInRem = [12]frontend.Variable(makeFrontendVariable(accInRem))
+	circuit.AccQuot = [11]frontend.Variable(utils.MakeFrontendVariable(accQuot))
+	circuit.AccRem = [12]frontend.Variable(utils.MakeFrontendVariable(accRem))
+	circuit.AccInQuot = [11]frontend.Variable(utils.MakeFrontendVariable(accInQuot))
+	circuit.AccInRem = [12]frontend.Variable(utils.MakeFrontendVariable(accInRem))
 	circuit.AccBit = accBitCopy
 	circuit.OutEval = outEval
 	circuit.BitOut = bitOut

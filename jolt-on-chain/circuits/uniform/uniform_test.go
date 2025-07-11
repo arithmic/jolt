@@ -8,6 +8,7 @@ import (
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/utils"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	bn254Fp "github.com/consensys/gnark-crypto/ecc/bn254/fp"
@@ -58,10 +59,10 @@ func TestGtMul(t *testing.T) {
 
 	quotient := computeQuotientPoly(in1in2Poly, reduciblePoly, in1in2)
 	assignment := &GTMul{
-		Acc:  [12]frontend.Variable(makeFrontendVariable(in1)),
-		In:   [12]frontend.Variable(makeFrontendVariable(in2)),
-		Quot: [11]frontend.Variable(makeFrontendVariable(quotient)),
-		Rem:  [12]frontend.Variable(makeFrontendVariable(in1in2)),
+		Acc:  [12]frontend.Variable(utils.MakeFrontendVariable(in1)),
+		In:   [12]frontend.Variable(utils.MakeFrontendVariable(in2)),
+		Quot: [11]frontend.Variable(utils.MakeFrontendVariable(quotient)),
+		Rem:  [12]frontend.Variable(utils.MakeFrontendVariable(in1in2)),
 	}
 
 	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
