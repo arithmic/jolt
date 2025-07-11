@@ -28,6 +28,14 @@ func FromE6(y *bn254.E6) Fp6 {
 	}
 }
 
+func ToE6(y Fp6) bn254.E6 {
+	return bn254.E6{
+		B0: ToE2(y.A0),
+		B1: ToE2(y.A1),
+		B2: ToE2(y.A2),
+	}
+}
+
 func (e Ext6) One() *Fp6 {
 	return &Fp6{
 		A0: Fp2{A0: frontend.Variable(1), A1: frontend.Variable(0)},

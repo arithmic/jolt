@@ -680,3 +680,52 @@ func ExtractConstraints(r1cs constraint.ConstraintSystem) ([]Constraint, int, in
 
 	return outputConstraints, aCount, bCount, cCount
 }
+
+func TestCircuitdoryParallel(t *testing.T) {
+
+	in1, in2 := groups.RandomG1G2Affines()
+	// in11, in22 := groups.RandomG1G2Affines()
+	var a, b, c bn254.E12
+	_, _ = a.SetRandom()
+	_, _ = b.SetRandom()
+	_, _ = c.SetRandom()
+
+	var alpha, beta, chi fr.Element
+	_, _ = alpha.SetRandom()
+	_, _ = beta.SetRandom()
+	_, _ = chi.SetRandom()
+
+	dory_Circuit := DoryVerifier{
+		C:                field_tower.FromE12(&a),
+		D1:               field_tower.FromE12(&b),
+		D2:               field_tower.FromE12(&c),
+		E1:               groups.FromG1Affine(&in1),
+		E2:               groups.FromBNG2Affine(&in2),
+		Alpha:            alpha,
+		Beta:             beta,
+		Chi:              chi,
+		C_Plus:           field_tower.FromE12(&a),
+		C_Minus:          field_tower.FromE12(&b),
+		D1_L:             field_tower.FromE12(&a),
+		D1_R:             field_tower.FromE12(&a),
+		D2_L:             field_tower.FromE12(&a),
+		D2_R:             field_tower.FromE12(&a),
+		Delta1_L:         field_tower.FromE12(&a),
+		Delta1_R:         field_tower.FromE12(&a),
+		Delta2_L:         field_tower.FromE12(&a),
+		Delta2_R:         field_tower.FromE12(&a),
+		E1_Beta:          groups.FromG1Affine(&in1),
+		E2_Beta:          groups.FromBNG2Affine(&in2),
+		E1_PLUS:          groups.FromG1Affine(&in1),
+		E1_MINUS:         groups.FromG1Affine(&in1),
+		E2_PLUS:          groups.FromBNG2Affine(&in2),
+		E2_MINUS:         groups.FromBNG2Affine(&in2),
+		doryverifierstep: &DoryVerifierStep{},
+	}
+
+	// dory_Circuit.doryverifierstep.Hint()
+
+	dory_R1Cs := dory_Circuit.CreateStepCircuit()
+	dory_Circuit.GenerateWitness(dory_R1Cs)
+
+}

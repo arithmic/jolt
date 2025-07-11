@@ -1,6 +1,9 @@
 package field_tower
 
 import (
+	"fmt"
+	"math/big"
+
 	"github.com/arithmic/gnark/frontend"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
@@ -30,9 +33,52 @@ func FromE2(y *bn254.E2) Fp2 {
 }
 
 func ToE2(y Fp2) bn254.E2 {
+	// Handle both fp.Element and fr.Element types
+	var a0, a1 fp.Element
+
+	switch v := y.A0.(type) {
+	case fp.Element:
+		a0 = v
+	case grumpkin_fr.Element:
+		// Convert fr.Element to fp.Element
+		a0.SetBigInt(v.BigInt(new(big.Int)))
+
+	case frontend.Variable:
+		if bv, ok := v.(big.Int); ok {
+			a0.SetBigInt(&bv)
+		} else if iv, ok := v.(int); ok {
+			big_int := big.NewInt(int64(iv))
+			a0.SetBigInt(big_int)
+		} else {
+			panic(fmt.Sprintf("unsupported conversion for A0: %T", v))
+		}
+	default:
+		panic(fmt.Sprintf("unsupported type for A0: %T", v))
+	}
+
+	switch v := y.A1.(type) {
+	case fp.Element:
+		a1 = v
+	case grumpkin_fr.Element:
+		// Convert fr.Element to fp.Element
+		a1.SetBigInt(v.BigInt(new(big.Int)))
+
+	case frontend.Variable:
+		if bv, ok := v.(big.Int); ok {
+			a1.SetBigInt(&bv)
+		} else if iv, ok := v.(int); ok {
+			big_int := big.NewInt(int64(iv))
+			a1.SetBigInt(big_int)
+		} else {
+			panic(fmt.Sprintf("unsupported conversion for A1: %T", v))
+		}
+	default:
+		panic(fmt.Sprintf("unsupported type for A1: %T", v))
+	}
+
 	return bn254.E2{
-		A0: y.A0.(fp.Element),
-		A1: y.A1.(fp.Element),
+		A0: a0,
+		A1: a1,
 	}
 }
 
@@ -261,4 +307,38 @@ func (e Ext2) Fp2MulFp(x *Fp2, y frontend.Variable) *Fp2 {
 		A0: z0,
 		A1: z1,
 	}
+}
+
+func FrontendVariableToFrElement(v frontend.Variable) (grumpkin_fr.Element, error) {
+	var result grumpkin_fr.Element
+
+	switch val := v.(type) {
+	case grumpkin_fr.Element:
+		result = val
+	case *big.Int:
+		result.SetBigInt(val)
+	case big.Int:
+		result.SetBigInt(&val)
+	case int:
+		result.SetInt64(int64(val))
+	case int64:
+		result.SetInt64(val)
+	case uint64:
+		result.SetUint64(val)
+	case string:
+		bigInt := new(big.Int)
+		if _, ok := bigInt.SetString(val, 10); !ok {
+			return result, fmt.Errorf("failed to parse string %s as big integer", val)
+		}
+		result.SetBigInt(bigInt)
+	default:
+		str := fmt.Sprintf("%v", val)
+		bigInt := new(big.Int)
+		if _, ok := bigInt.SetString(str, 10); !ok {
+			return result, fmt.Errorf("unsupported frontend.Variable type: %T", val)
+		}
+		result.SetBigInt(bigInt)
+	}
+
+	return result, nil
 }

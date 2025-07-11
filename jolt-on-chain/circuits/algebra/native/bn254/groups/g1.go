@@ -2,8 +2,12 @@ package groups
 
 import (
 	"crypto/rand"
+	"math/big"
+
 	"github.com/arithmic/gnark/frontend"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
+	"github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
@@ -153,4 +157,29 @@ func RandomG1Affine() bn254.G1Affine {
 	p.ScalarMultiplication(&gen, s1)
 
 	return p
+}
+
+func To_Bn254G1Affine(p G1Projective) bn254.G1Affine {
+	var affine bn254.G1Affine
+	x, _ := field_tower.FrontendVariableToFrElement(p.X)
+	y, _ := field_tower.FrontendVariableToFrElement(p.Y)
+	z, _ := field_tower.FrontendVariableToFrElement(p.Z)
+
+	affine.X = fp.Element{}
+	affine.Y = fp.Element{}
+	affine.X.SetBigInt(x.BigInt(new(big.Int)))
+	affine.Y.SetBigInt(y.BigInt(new(big.Int)))
+	var Z fp.Element
+	Z.SetBigInt(z.BigInt(new(big.Int)))
+
+	if Z.IsZero() {
+		affine.X.SetZero()
+		affine.Y.SetZero()
+	} else {
+		Z.Inverse(&Z)
+		affine.X.Mul(&affine.X, &Z)
+		affine.Y.Mul(&affine.Y, &Z)
+	}
+	return affine
+
 }

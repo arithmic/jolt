@@ -27,12 +27,12 @@ func FromE12(y *bn254.E12) Fp12 {
 	}
 }
 
-// func ToE12(y *Fp12) bn254.E12 {
-// 	return Fp12{
-// 		A0: FromE6(&y.C0),
-// 		A1: FromE6(&y.C1),
-// 	}
-// }
+func ToE12(y Fp12) bn254.E12 {
+	return bn254.E12{
+		C0: ToE6(y.A0),
+		C1: ToE6(y.A1),
+	}
+}
 
 func (e Ext12) One() *Fp12 {
 	return &Fp12{

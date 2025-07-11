@@ -1,9 +1,11 @@
 package groups
 
 import (
+	"crypto/rand"
 	"math/big"
 
 	"github.com/arithmic/gnark/frontend"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	fp2 "github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 )
@@ -198,7 +200,6 @@ func (g2 *G2API) Mul(P *G2Projective, exp *frontend.Variable) *G2Projective {
 	return &res
 }
 
-
 func (g2 *G2API) ToProjective(A *G2Affine) *G2Projective {
 	const n = 256
 	var out G2Projective
@@ -300,5 +301,45 @@ func (g2 G2API) Select(bit frontend.Variable, A, B *G2Projective) *G2Projective 
 		X: *g2.e2.Select(bit, &A.X, &B.X),
 		Y: *g2.e2.Select(bit, &A.Y, &B.Y),
 		Z: *g2.e2.Select(bit, &A.Z, &B.Z),
+	}
+}
+
+func RandomG1G2Affines() (bn254.G1Affine, bn254.G2Affine) {
+	_, _, G1AffGen, G2AffGen := bn254.Generators()
+	mod := bn254.ID.ScalarField()
+	s1, err := rand.Int(rand.Reader, mod)
+	if err != nil {
+		panic(err)
+	}
+	s2, err := rand.Int(rand.Reader, mod)
+	if err != nil {
+		panic(err)
+	}
+
+	var p bn254.G1Affine
+	p.ScalarMultiplication(&G1AffGen, s1)
+	var q bn254.G2Affine
+	q.ScalarMultiplication(&G2AffGen, s2)
+	return p, q
+}
+
+// To_Bn254G2Affine converts a G2Projective point to a bn254.G2Affine point.
+func To_Bn254G2Affine(p G2Projective) bn254.G2Affine {
+	var affine bn254.G2Affine
+	affine.X = field_tower.ToE2(p.X)
+	affine.Y = field_tower.ToE2(p.Y)
+
+	z_element := field_tower.ToE2(p.Z)
+
+	if z_element.IsZero() {
+		affine.X.SetZero()
+		affine.Y.SetOne()
+		return affine
+	} else {
+		var z_element_inverse bn254.E2
+		z_element_inverse.Inverse(&z_element)
+		affine.X.Mul(&affine.X, &z_element_inverse)
+		affine.Y.Mul(&affine.Y, &z_element_inverse)
+		return affine
 	}
 }
