@@ -43,20 +43,20 @@ type DoryVerifierStep struct {
 	Alpha   frontend.Variable
 
 	C_Prime               GT
-	Beta_D2               GT // Derived variables
-	Beta_Inverse_D1       GT // Derived variables
-	Alpha_C_PLUS          GT // Derived variables
-	Alpha_Inverse_C_MINUS GT // Derived variables
+	Beta_D2               GT
+	Beta_Inverse_D1       GT
+	Alpha_C_PLUS          GT
+	Alpha_Inverse_C_MINUS GT
 
 	D1_Prime            GT
-	Alpha_D1_L          GT // Derived variables
-	Alpha_Beta_Delta1_L GT // Derived variables
-	Beta_Delta1_R       GT // Derived variables
+	Alpha_D1_L          GT
+	Alpha_Beta_Delta1_L GT
+	Beta_Delta1_R       GT
 
 	D2_Prime                            GT
-	Alpha_Inverse_D2_L                  GT // Derived variables
-	Alpha_Inverse_Beta_Inverse_Delta2_L GT // Derived variables
-	Beta_Inverse_Delta2_R               GT // Derived variables
+	Alpha_Inverse_D2_L                  GT
+	Alpha_Inverse_Beta_Inverse_Delta2_L GT
+	Beta_Inverse_Delta2_R               GT
 
 	E1       groups.G1Projective
 	E2       groups.G2Projective
@@ -379,6 +379,115 @@ func (dory_verifier *DoryVerifier) GenerateWitness(constraints constraint.Constr
 
 	return witness
 
+}
+
+type DoryVerifierFinalStep struct {
+	C  GT
+	D1 GT
+	D2 GT
+	E1 groups.G1Projective
+	E2 groups.G2Projective
+
+	Chi    frontend.Variable
+	Gamma1 groups.G1Projective
+	Gamma2 groups.G2Projective
+	V1     groups.G1Projective
+	V2     groups.G2Projective
+
+	D     frontend.Variable
+	S     []frontend.Variable
+	R     []frontend.Variable
+	Alpha []frontend.Variable
+}
+
+func (circuit *DoryVerifierFinalStep) Define(api frontend.API) error {
+
+	// gt_api := field_tower.NewExt12(api)
+
+	// // Computing e(v_1 + d * gamma_1 , v_2 + d^{-1} * gamma_2)
+
+	g1_api := groups.G1API{api}
+
+	// d_gamma1 := g1_api.ScalarMul(&circuit.Gamma1, &circuit.D)
+
+	g2_api := groups.New(api)
+	// d_inverse := api.Inverse(circuit.D)
+	// d_inverse_gamma2 := g2_api.Mul(&circuit.Gamma2, &d_inverse)
+
+	// v1_plus_d_gamma1 := g1_api.Add(&circuit.V1, d_gamma1)
+	// v2_plus_d_inverse_gamma2 := g2_api.Add(&circuit.V2, d_inverse_gamma2)
+
+	// // e1 := g1_api.Pairing(v1_plus_d_gamma1, &v2_plus_d_inverse_gamma2)
+
+	// // Computing  Chi + C + d * D2 + d^{-1} * D1
+
+	// chi_c := gt_api.Fp12MulFp(&circuit.C, circuit.Chi)
+	// d_d2 := gt_api.Fp12MulFp(&circuit.D2, circuit.D)
+	// d_inverse_d1 := gt_api.Fp12MulFp(&circuit.D1, d_inverse)
+	// chi_c_plus_d_d2 := gt_api.Add(chi_c, d_d2)
+	// chi_c_plus_d_d2_plus_d_inverse_d1 := gt_api.Add(chi_c_plus_d_d2, d_inverse_d1)
+
+	// Computing e1 = prod_{i=0}^{n-1} (alpha_i * (1-s_i) + s_i )
+	// computed_alpha_s := make([]frontend.Variable, len(circuit.s)+1)
+	computed_alpha_s := frontend.Variable(1)
+
+	computed_alpha_r := frontend.Variable(1)
+
+	for i := 0; i < len(circuit.S); i++ {
+		one_minus_si := api.Sub(1, circuit.S[i])
+		one_minus_si_alpha_i := api.Mul(one_minus_si, circuit.Alpha[i])
+		one_minus_si_alpha_i_plus_s_i := api.Add(one_minus_si_alpha_i, circuit.S[i])
+		computed_alpha_s = api.Mul(computed_alpha_s, one_minus_si_alpha_i_plus_s_i)
+
+		alpha_i_inverse := api.Inverse(circuit.Alpha[i])
+		one_minus_ri := api.Sub(1, circuit.R[i])
+		one_minus_ri_alpha_i_inverse := api.Mul(one_minus_ri, alpha_i_inverse)
+		one_minus_ri_alpha_i_inverse_plus_r_i := api.Add(one_minus_ri_alpha_i_inverse, circuit.R[i])
+
+		computed_alpha_r = api.Mul(computed_alpha_r, one_minus_ri_alpha_i_inverse_plus_r_i)
+	}
+
+	computed_e1 := g1_api.ScalarMul(&circuit.V1, &computed_alpha_s)
+	computed_e2 := g2_api.Mul(&circuit.V2, &computed_alpha_r)
+
+	g1_api.AssertIsEqual(&circuit.E1, computed_e1)
+	g2_api.AssertIsEqual(&circuit.E2, computed_e2)
+
+	return nil
+
+}
+
+func (circuit *DoryVerifierFinalStep) Compile() constraint.ConstraintSystem {
+
+	circuitR1CS, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit)
+	if err != nil {
+		fmt.Println("err in compilation is ", err)
+	}
+	return circuitR1CS
+}
+
+func (circuit *DoryVerifierFinalStep) GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector {
+
+	var witness fr.Vector
+
+	// Generate witness
+	w, err := frontend.NewWitness(circuit, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		fmt.Println("error generating witness:", err)
+		return witness
+	}
+
+	wSolved, err := (constraints).Solve(w)
+	if err != nil {
+		fmt.Println("error solving R1CS:", err)
+		return witness
+	}
+
+	witnessStep := wSolved.(*cs.R1CSSolution).W
+
+	witness = append(witness, witnessStep...)
+
+	return witness
 }
 
 // //////////////////////////////////

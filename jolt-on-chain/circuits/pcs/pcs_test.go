@@ -683,7 +683,7 @@ func ExtractConstraints(r1cs constraint.ConstraintSystem) ([]Constraint, int, in
 	return outputConstraints, aCount, bCount, cCount
 }
 
-func TestCircuitdoryParallel(t *testing.T) {
+func TestCircuitdory(t *testing.T) {
 
 	in1, in2 := groups.RandomG1G2Affines()
 	// in11, in22 := groups.RandomG1G2Affines()
