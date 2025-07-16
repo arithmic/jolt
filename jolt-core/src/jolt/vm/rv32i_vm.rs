@@ -4,6 +4,7 @@ use crate::poly::commitment::hyperkzg::HyperKZG;
 use crate::r1cs::constraints::JoltRV32IMConstraints;
 use ark_bn254::{Bn254, Fr};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use tracer::JoltDevice;
 
 use super::{Jolt, JoltProof};
 use crate::poly::commitment::commitment_scheme::CommitmentScheme;
@@ -76,13 +77,15 @@ pub struct JoltHyperKZGProof {
 
 impl Serializable for JoltHyperKZGProof {}
 
-use crate::jolt::vm::JoltVerifierPreprocessing;
+use crate::jolt::vm::{JoltProverPreprocessing, JoltVerifierPreprocessing, ProverDebugInfo};
 
 use std::sync::{LazyLock, Mutex};
 static FIB_FILE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 static SHA3_FILE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
-pub fn fib_e2e_for_riscv<F, PCS, ProofTranscript>()
+pub fn construct_proof_for_riscv<F, PCS, ProofTranscript>() -> (JoltProof<32, F, PCS, ProofTranscript>, JoltDevice, std::option::Option<ProverDebugInfo<F, ProofTranscript, PCS>>,
+    JoltProverPreprocessing<F, PCS, ProofTranscript>
+    )
 where
     F: JoltField,
     PCS: CommitmentScheme<ProofTranscript, Field = F>,
@@ -95,7 +98,7 @@ where
     let (io_device, trace) = program.trace(&inputs);
     drop(artifact_guard);
 
-    let preprocessing = RV32IJoltVM::prover_preprocess(
+    let preprocessing: super::JoltProverPreprocessing<F, PCS, ProofTranscript> = RV32IJoltVM::prover_preprocess(
         bytecode.clone(),
         io_device.memory_layout.clone(),
         memory_init,
@@ -109,6 +112,16 @@ where
             trace,
             preprocessing.clone(),
         );
+
+    return (proof, commitments, debug_info, preprocessing);
+}
+pub fn fib_e2e_for_riscv<F, PCS, ProofTranscript>()
+where
+    F: JoltField,
+    PCS: CommitmentScheme<ProofTranscript, Field = F>,
+    ProofTranscript: Transcript,
+{
+    let (proof, commitments, debug_info, preprocessing) = construct_proof_for_riscv::<F, PCS, ProofTranscript>();
 
     let verifier_preprocessing =
         JoltVerifierPreprocessing::<F, PCS, ProofTranscript>::from(&preprocessing);

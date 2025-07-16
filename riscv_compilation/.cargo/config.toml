@@ -1,3 +1,8 @@
 
 [target.riscv64gc-unknown-linux-gnu]
 linker = "riscv64-unknown-linux-gnu-gcc"
+
+# To use musl linker uncomment the following lines
+# [target.riscv64gc-unknown-linux-musl]
+# linker = "/opt/musl-riscv64/bin/riscv64-linux-musl-gcc"
+# rustflags = ["-C", "target-feature=+crt-static"]

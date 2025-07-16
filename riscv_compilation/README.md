@@ -1,4 +1,15 @@
-# RISC-V Rust Project
+## To analyze bytecode
+<!-- If you are getting this error, do the following -->
+```export OPENSSL_DIR=$HOME/riscv-linux-toolchain/riscv/sysroot/usr```
+```export OPENSSL_LIB_DIR=$OPENSSL_DIR/lib```
+```export OPENSSL_INCLUDE_DIR=$OPENSSL_DIR/include```
+
+```export PKG_CONFIG_ALLOW_CROSS=1```
+```export PKG_CONFIG_SYSROOT_DIR=$HOME/riscv-linux-toolchain/riscv/sysroot```
+```export PKG_CONFIG_PATH=$OPENSSL_DIR/lib/pkgconfig```
+
+
+<!-- # RISC-V Rust Project
 
 This project is set up to build and analyze a Rust project targeting RISC-V (`riscv32imc-unknown-none-elf`) on macOS.
 
@@ -24,3 +35,6 @@ This project is set up to build and analyze a Rust project targeting RISC-V (`ri
 
 ## Analyze the binary and count instructions:
 ```./analyze.sh```
+ -->
+
+
