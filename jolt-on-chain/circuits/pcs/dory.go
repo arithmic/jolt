@@ -67,6 +67,15 @@ type DoryVerifierStep struct {
 	E2_PLUS  groups.G2Projective
 	E2_MINUS groups.G2Projective
 
+	beta_e1_beta groups.G1Projective
+	beta_e2_beta groups.G2Projective
+
+	alpha_e1_plus  groups.G1Projective
+	alpha_e2_plus  groups.G2Projective
+
+	alpha_inv_e1_minus groups.G1Projective
+	alpha_inv_e2_minus groups.G2Projective
+
 	E1_Prime groups.G1Projective
 	E2_Prime groups.G2Projective
 }
@@ -96,29 +105,22 @@ func (circuit *DoryVerifierStep) Define(api frontend.API) error {
 	gt_api.AssertIsEqual(&circuit.D2_Prime, D2_Prime)
 
 	// Computing E1_Prime
+	// E1_Prime = E1 + beta * E1_Beta + alpha * E1_PLUS + alpha⁻¹ * E1_MINUS
+	// Final addition using precomputed parts
 	g1_api := groups.G1API{api}
-	beta_E1_beta := g1_api.ScalarMul(&circuit.E1_Beta, &circuit.Beta)
-	E1_Prime_temp_1 := g1_api.Add(&circuit.E1, beta_E1_beta)
-	alpha_E1 := g1_api.ScalarMul(&circuit.E1_PLUS, &circuit.Alpha)
-	alpha_inverse := api.Inverse(circuit.Alpha)
-	alpha_inverse_E1_minus := g1_api.ScalarMul(&circuit.E1_MINUS, &alpha_inverse)
-	E1_Prime_temp_2 := g1_api.Add(alpha_E1, alpha_inverse_E1_minus)
-	E1_Prime := g1_api.Add(E1_Prime_temp_1, E1_Prime_temp_2)
+	E1_Prime_temp_1 := g1_api.Add(&circuit.E1, &circuit.beta_e1_beta)             // E1 + beta * E1_Beta
+	E1_Prime_temp_2 := g1_api.Add(&circuit.alpha_e1_plus, &circuit.alpha_inv_e1_minus)  // alpha * E1_PLUS + alpha⁻¹ * E1_MINUS
+	E1_Prime := g1_api.Add(E1_Prime_temp_1, E1_Prime_temp_2)                      // full E1'
 	g1_api.AssertIsEqual(&circuit.E1_Prime, E1_Prime)
 
-	// Computing E2_Prime
+	// E2_Prime = E2 + beta * E2_Beta + alpha * E2_PLUS + alpha⁻¹ * E2_MINUS
 	g2_api := groups.New(api)
-	beta_inverse := api.Inverse(circuit.Beta)
-	beta_inverse_E2_beta := g2_api.Mul(&circuit.E2_Beta, &beta_inverse)
-	E2_Prime_temp_1 := g2_api.Add(&circuit.E2, beta_inverse_E2_beta)
-	alpha_E2 := g2_api.Mul(&circuit.E2_PLUS, &circuit.Alpha)
-
-	alpha_inverse_E2_minus := g2_api.Mul(&circuit.E2_MINUS, &alpha_inverse)
-	E2_Prime_temp_2 := g2_api.Add(alpha_E2, alpha_inverse_E2_minus)
-	E2_Prime := g2_api.Add(E2_Prime_temp_1, E2_Prime_temp_2)
+	E2_Prime_temp_1 := g2_api.Add(&circuit.E2, &circuit.beta_e2_beta)          // E2 + beta * E2_Beta
+	E2_Prime_temp_2 := g2_api.Add(&circuit.alpha_e2_plus, &circuit.alpha_inv_e2_minus)  // alpha * E2_PLUS + alpha⁻¹ * E2_MINUS
+	E2_Prime := g2_api.Add(E2_Prime_temp_1, E2_Prime_temp_2)                      // full E2'
 	g2_api.AssertIsEqual(&circuit.E2_Prime, E2_Prime)
-	return nil
 
+	return nil
 }
 
 func (circuit *DoryVerifierStep) Hint() {
@@ -231,50 +233,55 @@ func (circuit *DoryVerifierStep) Hint() {
 	D2_prime.Mul(&betaInverseDelta2R, &D2_prime)
 	circuit.D2_Prime = field_tower.FromE12(&D2_prime)
 
-	// Computing E1_prime
-	var E1_prime bn254.G1Affine
-	e1_beta := groups.To_Bn254G1Affine(circuit.E1_Beta)
+	// ----- E1_Prime computation -----
 
-	E1_prime.ScalarMultiplication(&e1_beta, &betaBigInt)
+	e1_beta_affine := groups.To_Bn254G1Affine(circuit.E1_Beta)
+	var beta_e1_beta_affine bn254.G1Affine
+	beta_e1_beta_affine.ScalarMultiplication(&e1_beta_affine, &betaBigInt)
+	circuit.beta_e1_beta = groups.FromG1Affine(&beta_e1_beta_affine)
 
-	e1 := groups.To_Bn254G1Affine(circuit.E1)
-	E1_prime.Add(&E1_prime, &e1)
+	e1_plus_affine := groups.To_Bn254G1Affine(circuit.E1_PLUS)
+	var alpha_e1_plus_affine bn254.G1Affine
+	alpha_e1_plus_affine.ScalarMultiplication(&e1_plus_affine, &alpha_bigint)
+	circuit.alpha_e1_plus = groups.FromG1Affine(&alpha_e1_plus_affine)
 
-	var alpha_e1 bn254.G1Affine
-	e1_plus := groups.To_Bn254G1Affine(circuit.E1_PLUS)
-	alpha_e1.ScalarMultiplication(&e1_plus, &alpha_bigint)
-	E1_prime.Add(&E1_prime, &alpha_e1)
+	e1_minus_affine := groups.To_Bn254G1Affine(circuit.E1_MINUS)
+	var alpha_inv_e1_minus_affine bn254.G1Affine
+	alpha_inv_e1_minus_affine.ScalarMultiplication(&e1_minus_affine, &alpha_inverse_bigint)
+	circuit.alpha_inv_e1_minus = groups.FromG1Affine(&alpha_inv_e1_minus_affine)
 
-	var alpha_inverse_e1_minus bn254.G1Affine
-	e1_minus := groups.To_Bn254G1Affine(circuit.E1_MINUS)
-	alpha_inverse_e1_minus.ScalarMultiplication(&e1_minus, &alpha_inverse_bigint)
-	E1_prime.Add(&E1_prime, &alpha_inverse_e1_minus)
+	e1_affine := groups.To_Bn254G1Affine(circuit.E1)
+	var E1_Prime_affine bn254.G1Affine
+	E1_Prime_affine.Add(&e1_affine, &beta_e1_beta_affine)          // E1 + beta * E1_Beta
+	E1_Prime_affine.Add(&E1_Prime_affine, &alpha_e1_plus_affine)   // + alpha * E1_PLUS
+	E1_Prime_affine.Add(&E1_Prime_affine, &alpha_inv_e1_minus_affine) // + alpha⁻¹ * E1_MINUS
 
-	circuit.E1_Prime = groups.FromG1Affine(&E1_prime)
+	circuit.E1_Prime = groups.FromG1Affine(&E1_Prime_affine)
 
-	// Computing E2_prime
-	var E2_prime bn254.G2Affine
-	e2_beta := groups.To_Bn254G2Affine(circuit.E2_Beta)
+	// ----- E2_Prime computation -----
 
-	var beta_inverse_e2_beta bn254.G2Affine
-	beta_inverse_e2_beta.ScalarMultiplication(&e2_beta, &beta_inverse_bigint)
+	e2_beta_affine := groups.To_Bn254G2Affine(circuit.E2_Beta)
+	var beta_e2_beta_affine bn254.G2Affine
+	beta_e2_beta_affine.ScalarMultiplication(&e2_beta_affine, &betaBigInt)
+	circuit.beta_e2_beta = groups.FromBNG2Affine(&beta_e2_beta_affine)
 
-	e2 := groups.To_Bn254G2Affine(circuit.E2)
-	E2_prime.Add(&e2, &beta_inverse_e2_beta)
+	e2_plus_affine := groups.To_Bn254G2Affine(circuit.E2_PLUS)
+	var alpha_e2_plus_affine bn254.G2Affine
+	alpha_e2_plus_affine.ScalarMultiplication(&e2_plus_affine, &alpha_bigint)
+	circuit.alpha_e2_plus = groups.FromBNG2Affine(&alpha_e2_plus_affine)
 
-	var alpha_e2_plus bn254.G2Affine
-	e2_plus := groups.To_Bn254G2Affine(circuit.E2_PLUS)
+	e2_minus_affine := groups.To_Bn254G2Affine(circuit.E2_MINUS)
+	var alpha_inv_e2_minus_affine bn254.G2Affine
+	alpha_inv_e2_minus_affine.ScalarMultiplication(&e2_minus_affine, &alpha_inverse_bigint)
+	circuit.alpha_inv_e2_minus = groups.FromBNG2Affine(&alpha_inv_e2_minus_affine)
 
-	alpha_e2_plus.ScalarMultiplication(&e2_plus, &alpha_bigint)
-	E2_prime.Add(&E2_prime, &alpha_e2_plus)
+	e2_affine := groups.To_Bn254G2Affine(circuit.E2)
+	var E2_Prime_affine bn254.G2Affine
+	E2_Prime_affine.Add(&e2_affine, &beta_e2_beta_affine)          // E2 + beta * E2_Beta
+	E2_Prime_affine.Add(&E2_Prime_affine, &alpha_e2_plus_affine)   // + alpha * E2_PLUS
+	E2_Prime_affine.Add(&E2_Prime_affine, &alpha_inv_e2_minus_affine) // + alpha⁻¹ * E2_MINUS
 
-	var alpha_inverse_e2_minus bn254.G2Affine
-	e2_minus := groups.To_Bn254G2Affine(circuit.E2_MINUS)
-	alpha_inverse_e2_minus.ScalarMultiplication(&e2_minus, &alpha_inverse_bigint)
-	E2_prime.Add(&E2_prime, &alpha_inverse_e2_minus)
-
-	circuit.E2_Prime = groups.FromBNG2Affine(&E2_prime)
-
+	circuit.E2_Prime = groups.FromBNG2Affine(&E2_Prime_affine)
 }
 
 func (circuit *DoryVerifierStep) GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector {

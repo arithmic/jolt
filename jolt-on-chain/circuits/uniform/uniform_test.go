@@ -1,6 +1,7 @@
 package uniform
 
 import (
+	"crypto/rand"
 	"fmt"
 	"math/big"
 	"testing"
@@ -8,11 +9,14 @@ import (
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/groups"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/utils"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	bn254Fp "github.com/consensys/gnark-crypto/ecc/bn254/fp"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
+
+	bn254_fr "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 )
 
 func TestGtMul(t *testing.T) {
@@ -107,6 +111,7 @@ func TestGTExp(t *testing.T) {
 	gtExpCircuit.GenerateWitness(gtExpR1Cs)
 }
 
+// This test is failing
 func TestComputeQuotientPoly(t *testing.T) {
 	// Create test polynomials - use a simpler example first
 	// f(x) = x^2 + 3x + 2 = (x + 1)(x + 2)
@@ -312,4 +317,259 @@ func TestMSM(t *testing.T) {
 	// fmt.Println("No of Constraints in exp ", msmCircuit.GetConstraints())
 	msmCircuit.GenerateWitness(msmR1Cs)
 
+}
+
+func TestG1MulCircuit(t *testing.T) {
+
+	// Base G1 point
+	base := groups.RandomG1Affine()
+
+	var exp big.Int
+	// Generate exactly 128 random bits:
+	buf := make([]byte, 16) // 16 bytes = 128 bits
+	_, err := rand.Read(buf)
+	if err != nil {
+		panic(err)
+	}
+	exp.SetBytes(buf)
+
+	// Scalar exp
+	var expected bn254.G1Affine
+	expected.ScalarMultiplication(&base, &exp)
+
+	gmul := G1Mul{
+		Base: groups.FromG1Affine(&base),
+		Exp:  exp,
+		Step: &G1MulStep{},
+	}
+
+	// Compile single step circuit
+	r1cs := gmul.CreateStepCircuit()
+
+	// Generate full witness
+	witness := gmul.GenerateWitness(r1cs)
+
+	var res_from_witness groups.G1Projective
+	res_from_witness.X = witness[5090]
+	res_from_witness.Y = witness[5091]
+	res_from_witness.Z = witness[5092]
+
+	// Compare witness with expected
+	if res_from_witness != groups.FromG1Affine(&expected) {
+		fmt.Println("Witness is not equal to expected")
+	}
+
+	fmt.Println("✅ G1 scalar mul test passed")
+
+}
+
+
+func TestG2MulCircuit(t *testing.T) {
+	// Random base G2 point
+	var base bn254.G2Affine
+	_, base = groups.RandomG1G2Affines()
+
+	// Random scalar exponent
+	var exp big.Int
+	// Generate exactly 128 random bits:
+	buf := make([]byte, 16) // 16 bytes = 128 bits
+	_, err := rand.Read(buf)
+	if err != nil {
+		panic(err)
+	}
+	exp.SetBytes(buf)
+
+	// Native expected output
+	var expected bn254.G2Affine
+	expected.ScalarMultiplication(&base, &exp)
+
+	// Build the step-by-step G2Mul circuit
+	gmul := &G2Mul{
+		Base: groups.FromBNG2Affine(&base),
+		Exp:  exp,
+	}
+
+	fmt.Println("Compiling G2Mul step circuit...")
+
+	r1cs := gmul.CreateStepCircuit()
+
+	fmt.Println("Number of constraints per step:", r1cs.GetNbConstraints())
+
+	// Generate full witness by stepping
+	witness := gmul.GenerateWitness(r1cs)
+
+	var res_from_witness groups.G2Projective
+	res_from_witness.X.A0 = witness[13605]
+	res_from_witness.X.A1 = witness[13606]
+
+	res_from_witness.Y.A0 = witness[13607]
+	res_from_witness.Y.A1 = witness[13608]
+
+	res_from_witness.Z.A0 = witness[13609]
+	res_from_witness.Z.A1 = witness[13610]
+
+	// Compare witness with expected
+	if res_from_witness != groups.FromBNG2Affine(&expected) {
+		fmt.Println("Witness is not equal to expected")
+	}
+
+	fmt.Println("✅ G2 scalar mul test passed")
+}
+
+func TestG1MultiMul(t *testing.T) {
+	// Random base points
+	E1_Beta := groups.RandomG1Affine()
+	E1_Plus := groups.RandomG1Affine()
+	expected_E1_Minus := groups.RandomG1Affine()
+
+	// Random alpha and beta
+	var alpha, beta big.Int
+	alphaBytes := make([]byte, 16)
+	betaBytes := make([]byte, 16)
+	rand.Read(alphaBytes)
+	rand.Read(betaBytes)
+	alpha.SetBytes(alphaBytes)
+	beta.SetBytes(betaBytes)
+
+	// Compute expected results using native scalar mul
+	var expected_Beta_E1_Beta bn254.G1Affine
+	var expected_Alpha_E1_Plus bn254.G1Affine
+	var alphaInvE1_Minus bn254.G1Affine
+
+	expected_Beta_E1_Beta.ScalarMultiplication(&E1_Beta, &beta)
+	expected_Alpha_E1_Plus.ScalarMultiplication(&E1_Plus, &alpha)
+
+	// alpha^-1 mod r
+	alphaInv := new(big.Int).ModInverse(&alpha, bn254_fr.Modulus())
+	alphaInvE1_Minus.ScalarMultiplication(&expected_E1_Minus, alphaInv)
+
+	// Setup the circuit
+	circuit := &G1MultiMul{
+		Alpha:              alpha,
+		Beta:               beta,
+		E1_Beta:            groups.FromG1Affine(&E1_Beta),
+		E1_Plus:            groups.FromG1Affine(&E1_Plus),
+		Alpha_Inv_E1_Minus: groups.FromG1Affine(&alphaInvE1_Minus),
+
+		Step: &G1MulStep{},
+	}
+
+	// Compile the step circuit
+	r1cs := circuit.CreateStepCircuit()
+
+	// Generate full witness
+	witness := circuit.GenerateWitness(r1cs)
+
+	var beta_e1_beta_from_witness groups.G1Projective
+
+	beta_e1_beta_from_witness.X = witness[5090]
+	beta_e1_beta_from_witness.Y = witness[5091]
+	beta_e1_beta_from_witness.Z = witness[5092]
+
+	// Compare beta_e1_beta_from_witness and expected_Beta_E1_Beta
+	if beta_e1_beta_from_witness != groups.FromG1Affine(&expected_Beta_E1_Beta) {
+		fmt.Println("beta_e1_beta_from_witness is not equal to expected_Beta_E1_Beta")
+	}
+
+	var alpha_e1_plus_from_witness groups.G1Projective
+
+	alpha_e1_plus_from_witness.X = witness[10210]
+	alpha_e1_plus_from_witness.Y = witness[10211]
+	alpha_e1_plus_from_witness.Z = witness[10212]
+
+	if alpha_e1_plus_from_witness != groups.FromG1Affine(&expected_Alpha_E1_Plus) {
+		fmt.Println("alpha_e1_plus_from_witness is not equal to expected_Alpha_E1_Plus")
+	}
+
+	var E1_minus_from_witness groups.G1Projective
+
+	E1_minus_from_witness.X = witness[15330]
+	E1_minus_from_witness.Y = witness[15331]
+	E1_minus_from_witness.Z = witness[15332]
+
+	if E1_minus_from_witness != groups.FromG1Affine(&expected_E1_Minus) {
+		fmt.Println("E1_minus__from_witness is not equal to expected_E1_Minus")
+	}
+}
+
+func TestG2MultiMul(t *testing.T) {
+	// Random base points
+	_, E2_Beta := groups.RandomG1G2Affines()
+	_, E2_Plus := groups.RandomG1G2Affines()
+	_, expected_E2_Minus := groups.RandomG1G2Affines()
+
+	// Random alpha and beta (128-bit)
+	var alpha, beta big.Int
+	alphaBytes := make([]byte, 16)
+	betaBytes := make([]byte, 16)
+	rand.Read(alphaBytes)
+	rand.Read(betaBytes)
+	alpha.SetBytes(alphaBytes)
+	beta.SetBytes(betaBytes)
+
+	// Compute expected results using native scalar mul
+	var expected_Beta_E2_Beta bn254.G2Affine
+	var expected_Alpha_E2_Plus bn254.G2Affine
+	var alphaInvE2_Minus bn254.G2Affine
+
+	expected_Beta_E2_Beta.ScalarMultiplication(&E2_Beta, &beta)
+	expected_Alpha_E2_Plus.ScalarMultiplication(&E2_Plus, &alpha)
+
+	// alpha^-1 mod r
+	alphaInv := new(big.Int).ModInverse(&alpha, bn254_fr.Modulus())
+	alphaInvE2_Minus.ScalarMultiplication(&expected_E2_Minus, alphaInv)
+
+	// Setup the circuit
+	circuit := &G2MultiMul{
+		Alpha:              alpha,
+		Beta:               beta,
+		E2_Beta:            groups.FromBNG2Affine(&E2_Beta),
+		E2_Plus:            groups.FromBNG2Affine(&E2_Plus),
+		Alpha_Inv_E2_Minus: groups.FromBNG2Affine(&alphaInvE2_Minus),
+		Step:               &G2MulStep{},
+	}
+
+	// Compile the step circuit
+	r1cs := circuit.CreateStepCircuit()
+
+	// Generate full witness
+	witness := circuit.GenerateWitness(r1cs)
+	fmt.Println("Witness length:", len(witness))
+
+	var beta_e2_beta_from_witness groups.G2Projective
+	beta_e2_beta_from_witness.X.A0 = witness[13605]
+	beta_e2_beta_from_witness.X.A1 = witness[13606]
+	beta_e2_beta_from_witness.Y.A0 = witness[13607]
+	beta_e2_beta_from_witness.Y.A1 = witness[13608]
+	beta_e2_beta_from_witness.Z.A0 = witness[13609]
+	beta_e2_beta_from_witness.Z.A1 = witness[13610]
+
+	if beta_e2_beta_from_witness != groups.FromBNG2Affine(&expected_Beta_E2_Beta) {
+		panic("beta_e2_beta_from_witness is not equal to expected_Beta_E2_Beta")
+	}
+
+	// construct G2Projective from witness
+	var alpha_e2_plus_from_witness groups.G2Projective
+	alpha_e2_plus_from_witness.X.A0 = witness[27301]
+	alpha_e2_plus_from_witness.X.A1 = witness[27302]
+	alpha_e2_plus_from_witness.Y.A0 = witness[27303]
+	alpha_e2_plus_from_witness.Y.A1 = witness[27304]
+	alpha_e2_plus_from_witness.Z.A0 = witness[27305]
+	alpha_e2_plus_from_witness.Z.A1 = witness[27306]
+
+	if alpha_e2_plus_from_witness != groups.FromBNG2Affine(&expected_Alpha_E2_Plus) {
+		panic("alpha_e2_plus_from_witness is not equal to expected_Alpha_E2_Plus")
+	}
+
+	var E2_minus_from_witness groups.G2Projective
+	E2_minus_from_witness.X.A0 = witness[40997]
+	E2_minus_from_witness.X.A1 = witness[40998]
+	E2_minus_from_witness.Y.A0 = witness[40999]
+	E2_minus_from_witness.Y.A1 = witness[41000]
+	E2_minus_from_witness.Z.A0 = witness[41001]
+	E2_minus_from_witness.Z.A1 = witness[41002]
+
+	if E2_minus_from_witness != groups.FromBNG2Affine(&expected_E2_Minus) {
+		panic("E2_minus_from_witness is not equal to alphaInvE2_Minus")
+	}
 }

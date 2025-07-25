@@ -7,7 +7,9 @@ import (
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	fp2 "github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
+
 	"github.com/consensys/gnark-crypto/ecc/bn254"
+	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
 type G2Projective struct {
@@ -174,8 +176,7 @@ func (g2 *G2API) Double(P *G2Projective) *G2Projective {
 func (g2 *G2API) Mul(P *G2Projective, exp *frontend.Variable) *G2Projective {
 	const n = 254
 
-	bits := make([]frontend.Variable, n)
-	bits = g2.api.ToBinary(*exp, n)
+	bits := g2.api.ToBinary(*exp, n)
 
 	// Identity point (0, 1, 0)
 	zero := frontend.Variable(0)
@@ -204,16 +205,11 @@ func (g2 *G2API) ToProjective(A *G2Affine) *G2Projective {
 	const n = 256
 	var out G2Projective
 
-	xA0Bits := make([]frontend.Variable, n)
-	xA1Bits := make([]frontend.Variable, n)
-	yA0Bits := make([]frontend.Variable, n)
-	yA1Bits := make([]frontend.Variable, n)
-
 	// Decompose each Fp2 component into bits
-	xA0Bits = g2.api.ToBinary(A.X.A0, n)
-	xA1Bits = g2.api.ToBinary(A.X.A1, n)
-	yA0Bits = g2.api.ToBinary(A.Y.A0, n)
-	yA1Bits = g2.api.ToBinary(A.Y.A1, n)
+	xA0Bits := g2.api.ToBinary(A.X.A0, n)
+	xA1Bits := g2.api.ToBinary(A.X.A1, n)
+	yA0Bits := g2.api.ToBinary(A.Y.A0, n)
+	yA1Bits := g2.api.ToBinary(A.Y.A1, n)
 
 	comp := func(bits []frontend.Variable) []frontend.Variable {
 		out := make([]frontend.Variable, len(bits))
@@ -259,14 +255,13 @@ func (g2 *G2API) ToProjective(A *G2Affine) *G2Projective {
 		},
 	}
 
-	out = *g2.Select(identityIndicator, &G2Projective{
+	out = *g2.Select(identityIndicator, &projective_identity, &G2Projective{
 		X: A.X,
 		Y: A.Y,
 		Z: fp2.Fp2{
 			A0: frontend.Variable(1),
 			A1: frontend.Variable(0),
-		},
-	}, &projective_identity)
+		}})
 	return &out
 }
 
@@ -276,19 +271,34 @@ func (e G2API) AssertIsEqual(p, q *G2Projective) {
 	e.e2.AssertIsEqual(e.e2.Mul(&p.Y, &q.Z), e.e2.Mul(&q.Y, &p.Z))
 }
 
-// This is just for testing purposes, its working with the non identity element in this form,
-// to test ToProjective for identity element, we have to change A0 to 0 instead of 1.
+// Now it works for both identity and non identity element
 func FromBNG2Affine(y *bn254.G2Affine) G2Projective {
-	return G2Projective{
-		X: fp2.FromE2(&y.X),
-		Y: fp2.FromE2(&y.Y),
-		Z: fp2.Fp2{
-			A0: frontend.Variable(1),
-			A1: frontend.Variable(0),
-		},
-	}
-}
+	var proj G2Projective
 
+	proj.X = fp2.FromE2(&y.X)
+	proj.Y = fp2.FromE2(&y.Y)
+
+	var one fr.Element
+	one.SetOne()
+
+	var zero fr.Element
+	zero.SetZero()
+
+	if y.X.IsZero() && y.Y.IsZero() {
+		// The affine point is identity → projective Z = 0
+		proj.Z = fp2.Fp2{
+			A0: zero,
+			A1: zero,
+		}
+	} else {
+		proj.Z = fp2.Fp2{
+			A0: one,
+			A1: zero,
+		}
+	}
+
+	return proj
+}
 func G2AffineFromBNG2Affine(y *bn254.G2Affine) G2Affine {
 	return G2Affine{
 		X: fp2.FromE2(&y.X),
@@ -333,7 +343,7 @@ func To_Bn254G2Affine(p G2Projective) bn254.G2Affine {
 
 	if z_element.IsZero() {
 		affine.X.SetZero()
-		affine.Y.SetOne()
+		affine.Y.SetZero()
 		return affine
 	} else {
 		var z_element_inverse bn254.E2
