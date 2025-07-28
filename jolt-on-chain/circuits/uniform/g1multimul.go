@@ -14,12 +14,17 @@ import (
 type G1MultiMul struct {
 	Alpha big.Int `gnark:",public"`
 	Beta  big.Int `gnark:",public"`
+	d     big.Int `gnark:",public"`
 
 	E1_Beta groups.G1Projective
 
 	E1_Plus groups.G1Projective
 
 	Alpha_Inv_E1_Minus groups.G1Projective
+
+	Gamma1 groups.G1Projective
+
+	dGamma1Out groups.G1Projective
 
 	Step *G1MulStep
 }
@@ -104,6 +109,31 @@ func (g1MultiMul *G1MultiMul) GenerateWitness(cs constraint.ConstraintSystem) gr
 		acc = g1MultiMul.Step.Out
 		accBit = g1MultiMul.Step.BitOut
 	}
+
+	acc = groups.G1Projective{
+		X: frontend.Variable(0),
+		Y: frontend.Variable(1),
+		Z: frontend.Variable(0),
+	}
+	accBit = 0
+
+	// 	#4: d * gamma1
+	for i := 0; i < 128; i++ {
+		g1MultiMul.Step.Acc = acc
+		g1MultiMul.Step.Base = g1MultiMul.Gamma1
+		g1MultiMul.Step.Bit = g1MultiMul.d.Bit(127 - i)
+		g1MultiMul.Step.AccBit = accBit
+
+		g1MultiMul.Step.Hint()
+
+		witnessStep := g1MultiMul.Step.GenerateWitness(cs)
+		witness = append(witness, witnessStep...)
+
+		acc = g1MultiMul.Step.Out
+		accBit = g1MultiMul.Step.BitOut
+	}
+
+	g1MultiMul.dGamma1Out = acc
 
 	return witness
 }

@@ -779,7 +779,7 @@ func TestCircuitdory(t *testing.T) {
 
 	}
 
-	dory_Circuit := DoryVerifier{
+	dory_Circuit := DoryVerifierUniform{
 		C:                field_tower.FromE12(&a),
 		D1:               field_tower.FromE12(&b),
 		D2:               field_tower.FromE12(&c),
