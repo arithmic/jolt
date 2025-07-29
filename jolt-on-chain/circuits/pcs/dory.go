@@ -69,14 +69,14 @@ type DoryVerifierStep struct {
 	E2_PLUS  groups.G2Projective
 	E2_MINUS groups.G2Projective
 
-	beta_e1_beta groups.G1Projective
-	beta_e2_beta groups.G2Projective
+	Beta_e1_beta groups.G1Projective
+	Beta_e2_beta groups.G2Projective
 
-	alpha_e1_plus groups.G1Projective
-	alpha_e2_plus groups.G2Projective
+	Alpha_e1_plus groups.G1Projective
+	Alpha_e2_plus groups.G2Projective
 
-	alpha_inv_e1_minus groups.G1Projective
-	alpha_inv_e2_minus groups.G2Projective
+	Alpha_inv_e1_minus groups.G1Projective
+	Alpha_inv_e2_minus groups.G2Projective
 
 	E1_Prime groups.G1Projective
 	E2_Prime groups.G2Projective
@@ -110,15 +110,15 @@ func (circuit *DoryVerifierStep) Define(api frontend.API) error {
 	// E1_Prime = E1 + beta * E1_Beta + alpha * E1_PLUS + alpha⁻¹ * E1_MINUS
 	// Final addition using precomputed parts
 	g1_api := groups.G1API{api}
-	E1_Prime_temp_1 := g1_api.Add(&circuit.E1, &circuit.beta_e1_beta)                  // E1 + beta * E1_Beta
-	E1_Prime_temp_2 := g1_api.Add(&circuit.alpha_e1_plus, &circuit.alpha_inv_e1_minus) // alpha * E1_PLUS + alpha⁻¹ * E1_MINUS
+	E1_Prime_temp_1 := g1_api.Add(&circuit.E1, &circuit.Beta_e1_beta)                  // E1 + beta * E1_Beta
+	E1_Prime_temp_2 := g1_api.Add(&circuit.Alpha_e1_plus, &circuit.Alpha_inv_e1_minus) // alpha * E1_PLUS + alpha⁻¹ * E1_MINUS
 	E1_Prime := g1_api.Add(E1_Prime_temp_1, E1_Prime_temp_2)                           // full E1'
 	g1_api.AssertIsEqual(&circuit.E1_Prime, E1_Prime)
 
 	// E2_Prime = E2 + beta * E2_Beta + alpha * E2_PLUS + alpha⁻¹ * E2_MINUS
 	g2_api := groups.New(api)
-	E2_Prime_temp_1 := g2_api.Add(&circuit.E2, &circuit.beta_e2_beta)                  // E2 + beta * E2_Beta
-	E2_Prime_temp_2 := g2_api.Add(&circuit.alpha_e2_plus, &circuit.alpha_inv_e2_minus) // alpha * E2_PLUS + alpha⁻¹ * E2_MINUS
+	E2_Prime_temp_1 := g2_api.Add(&circuit.E2, &circuit.Beta_e2_beta)                  // E2 + beta * E2_Beta
+	E2_Prime_temp_2 := g2_api.Add(&circuit.Alpha_e2_plus, &circuit.Alpha_inv_e2_minus) // alpha * E2_PLUS + alpha⁻¹ * E2_MINUS
 	E2_Prime := g2_api.Add(E2_Prime_temp_1, E2_Prime_temp_2)                           // full E2'
 	g2_api.AssertIsEqual(&circuit.E2_Prime, E2_Prime)
 
@@ -240,17 +240,17 @@ func (circuit *DoryVerifierStep) Hint() {
 	e1_beta_affine := groups.To_Bn254G1Affine(circuit.E1_Beta)
 	var beta_e1_beta_affine bn254.G1Affine
 	beta_e1_beta_affine.ScalarMultiplication(&e1_beta_affine, &betaBigInt)
-	circuit.beta_e1_beta = groups.FromG1Affine(&beta_e1_beta_affine)
+	circuit.Beta_e1_beta = groups.FromG1Affine(&beta_e1_beta_affine)
 
 	e1_plus_affine := groups.To_Bn254G1Affine(circuit.E1_PLUS)
 	var alpha_e1_plus_affine bn254.G1Affine
 	alpha_e1_plus_affine.ScalarMultiplication(&e1_plus_affine, &alpha_bigint)
-	circuit.alpha_e1_plus = groups.FromG1Affine(&alpha_e1_plus_affine)
+	circuit.Alpha_e1_plus = groups.FromG1Affine(&alpha_e1_plus_affine)
 
 	e1_minus_affine := groups.To_Bn254G1Affine(circuit.E1_MINUS)
 	var alpha_inv_e1_minus_affine bn254.G1Affine
 	alpha_inv_e1_minus_affine.ScalarMultiplication(&e1_minus_affine, &alpha_inverse_bigint)
-	circuit.alpha_inv_e1_minus = groups.FromG1Affine(&alpha_inv_e1_minus_affine)
+	circuit.Alpha_inv_e1_minus = groups.FromG1Affine(&alpha_inv_e1_minus_affine)
 
 	e1_affine := groups.To_Bn254G1Affine(circuit.E1)
 	var E1_Prime_affine bn254.G1Affine
@@ -265,17 +265,17 @@ func (circuit *DoryVerifierStep) Hint() {
 	e2_beta_affine := groups.To_Bn254G2Affine(circuit.E2_Beta)
 	var beta_e2_beta_affine bn254.G2Affine
 	beta_e2_beta_affine.ScalarMultiplication(&e2_beta_affine, &betaBigInt)
-	circuit.beta_e2_beta = groups.FromBNG2Affine(&beta_e2_beta_affine)
+	circuit.Beta_e2_beta = groups.FromBNG2Affine(&beta_e2_beta_affine)
 
 	e2_plus_affine := groups.To_Bn254G2Affine(circuit.E2_PLUS)
 	var alpha_e2_plus_affine bn254.G2Affine
 	alpha_e2_plus_affine.ScalarMultiplication(&e2_plus_affine, &alpha_bigint)
-	circuit.alpha_e2_plus = groups.FromBNG2Affine(&alpha_e2_plus_affine)
+	circuit.Alpha_e2_plus = groups.FromBNG2Affine(&alpha_e2_plus_affine)
 
 	e2_minus_affine := groups.To_Bn254G2Affine(circuit.E2_MINUS)
 	var alpha_inv_e2_minus_affine bn254.G2Affine
 	alpha_inv_e2_minus_affine.ScalarMultiplication(&e2_minus_affine, &alpha_inverse_bigint)
-	circuit.alpha_inv_e2_minus = groups.FromBNG2Affine(&alpha_inv_e2_minus_affine)
+	circuit.Alpha_inv_e2_minus = groups.FromBNG2Affine(&alpha_inv_e2_minus_affine)
 
 	e2_affine := groups.To_Bn254G2Affine(circuit.E2)
 	var E2_Prime_affine bn254.G2Affine
@@ -553,6 +553,10 @@ type DoryPieceWiseUniform struct {
 	E1_Beta  []groups.G1Projective
 	E1_PLUS  []groups.G1Projective
 	E1_MINUS []groups.G1Projective
+
+	Alpha_Inv_E1_Minus []groups.G1Projective
+	Alpha_Inv_E2_Minus []groups.G2Projective
+
 	E2_Beta  []groups.G2Projective
 	E2_PLUS  []groups.G2Projective
 	E2_MINUS []groups.G2Projective
@@ -561,8 +565,21 @@ type DoryPieceWiseUniform struct {
 	g2MultiMul  *uniform.G2MultiMul
 	doryUniform *DoryVerifierUniform
 
-	// finalstep *DoryVerifierFinalStep
+	// Chi            frontend.Variable
+	Gamma1         groups.G1Projective
+	d_times_Gamma1 groups.G1Projective
 
+	Gamma2           groups.G2Projective
+	dInvTimes_Gamma2 groups.G2Projective
+
+	V1 groups.G1Projective
+	V2 groups.G2Projective
+
+	D frontend.Variable
+	S []frontend.Variable
+	R []frontend.Variable
+
+	finalstep *DoryVerifierFinalStep
 }
 
 func (circuit *DoryPieceWiseUniform) Compile() []constraint.ConstraintSystem {
@@ -571,16 +588,112 @@ func (circuit *DoryPieceWiseUniform) Compile() []constraint.ConstraintSystem {
 }
 
 func (circuit *DoryPieceWiseUniform) CreateStepCircuits() []constraint.ConstraintSystem {
+	doryStepR1CS := circuit.doryUniform.CreateStepCircuit()
 	g1R1CS := circuit.g1MultiMul.CreateStepCircuit()
 	g2R1CS := circuit.g2MultiMul.CreateStepCircuit()
-	doryStepR1CS := circuit.doryUniform.CreateStepCircuit()
+	final_stepR1CS := circuit.finalstep.Compile()
 
-	stepCircuits := []constraint.ConstraintSystem{g1R1CS, g2R1CS, doryStepR1CS}
+	stepCircuits := []constraint.ConstraintSystem{g1R1CS, g2R1CS, doryStepR1CS, final_stepR1CS}
 	return stepCircuits
 }
 
-// unimplemented method
 func (circuit *DoryPieceWiseUniform) GenerateWitness(constraints []constraint.ConstraintSystem) fr.Vector {
 
-	return nil
+	n := len(circuit.Alpha)
+	var witness fr.Vector
+
+	circuit.doryUniform = &DoryVerifierUniform{
+		C:  circuit.C,
+		D1: circuit.D1,
+		D2: circuit.D2,
+		E1: circuit.E1,
+		E2: circuit.E2,
+	}
+
+	circuit.doryUniform.Alpha = circuit.Alpha
+	circuit.doryUniform.Beta = circuit.Beta
+	circuit.doryUniform.Chi = circuit.Chi
+	circuit.doryUniform.C_Plus = circuit.C_Plus
+	circuit.doryUniform.C_Minus = circuit.C_Minus
+	circuit.doryUniform.D1_L = circuit.D1_L
+	circuit.doryUniform.D1_R = circuit.D1_R
+	circuit.doryUniform.D2_L = circuit.D2_L
+	circuit.doryUniform.D2_R = circuit.D2_R
+	circuit.doryUniform.Delta1_L = circuit.Delta1_L
+	circuit.doryUniform.Delta1_R = circuit.Delta1_R
+	circuit.doryUniform.Delta2_L = circuit.Delta2_L
+	circuit.doryUniform.Delta2_R = circuit.Delta2_R
+
+	circuit.doryUniform.E1_Beta = circuit.E1_Beta
+	circuit.doryUniform.E1_PLUS = circuit.E1_PLUS
+	circuit.doryUniform.E1_MINUS = circuit.E1_MINUS
+	circuit.doryUniform.E2_Beta = circuit.E2_Beta
+	circuit.doryUniform.E2_PLUS = circuit.E2_PLUS
+	circuit.doryUniform.E2_MINUS = circuit.E2_MINUS
+
+	circuit.doryUniform.doryverifierstep = &DoryVerifierStep{}
+
+	// generate witness for DoryVerifierStep
+	doryWitness := circuit.doryUniform.GenerateWitness(constraints[0])
+	witness = append(witness, doryWitness...)
+
+	// MultiMul for G1
+	circuit.g1MultiMul = &uniform.G1MultiMul{
+		Alpha:              circuit.Alpha,
+		Beta:               circuit.Beta,
+		D:                  circuit.D,
+		E1_Beta:            circuit.E1_Beta,
+		E1_Plus:            circuit.E1_PLUS,
+		Alpha_Inv_E1_Minus: circuit.Alpha_Inv_E1_Minus,
+		Gamma1:             circuit.Gamma1,
+		Step:               &uniform.G1MulStep{},
+	}
+
+	g1MultiMulWitness := circuit.g1MultiMul.GenerateWitness(constraints[1])
+
+	witness = append(witness, g1MultiMulWitness...)
+
+	// MultiMul for G2
+	circuit.g2MultiMul = &uniform.G2MultiMul{
+		Alpha:              circuit.Alpha,
+		Beta:               circuit.Beta,
+		D:                  circuit.D,
+		E2_Beta:            circuit.E2_Beta,
+		E2_Plus:            circuit.E2_PLUS,
+		Alpha_Inv_E2_Minus: circuit.Alpha_Inv_E2_Minus,
+		DInvGamma2:         circuit.dInvTimes_Gamma2,
+		Gamma2Out:          circuit.Gamma2,
+
+		Step: &uniform.G2MulStep{},
+	}
+
+	g2MultiMulWitness := circuit.g2MultiMul.GenerateWitness(constraints[2])
+	witness = append(witness, g2MultiMulWitness...)
+
+	// final step
+	circuit.finalstep = &DoryVerifierFinalStep{
+		C:  circuit.doryUniform.doryverifierstep.C,
+		D1: circuit.doryUniform.doryverifierstep.D1,
+		D2: circuit.doryUniform.doryverifierstep.D2,
+		E1: circuit.doryUniform.doryverifierstep.E1,
+		E2: circuit.doryUniform.doryverifierstep.E2,
+
+		Chi:              circuit.Chi[n-1],
+		Gamma1:           circuit.Gamma1,
+		d_times_Gamma1:   circuit.d_times_Gamma1,
+		Gamma2:           circuit.Gamma2,
+		dInvTimes_Gamma2: circuit.dInvTimes_Gamma2,
+		V1:               circuit.V1,
+		V2:               circuit.V2,
+
+		D:     circuit.D,
+		S:     circuit.S,
+		R:     circuit.R,
+		Alpha: circuit.Alpha,
+	}
+
+	finalStepWitness := circuit.finalstep.GenerateWitness(constraints[3])
+	witness = append(witness, finalStepWitness...)
+
+	return witness
 }

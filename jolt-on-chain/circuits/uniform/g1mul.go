@@ -101,10 +101,9 @@ func (circuit *G1MulStep) GenerateWitness(constraints constraint.ConstraintSyste
 	return wSolved
 }
 
-
 type G1Mul struct {
 	Base groups.G1Projective
-	Exp  big.Int // 128 bits
+	Exp  frontend.Variable // 128 bits
 
 	Step *G1MulStep
 }
@@ -134,9 +133,13 @@ func (gmul *G1Mul) GenerateWitness(cs constraint.ConstraintSystem) grumpkin_fr.V
 
 	var witness grumpkin_fr.Vector
 
-	for i := 0; i < 128; i++ {
-		bit := gmul.Exp.Bit(127 - i)
+	exp_bn254_fr, _ := utils.FrontendVariableToBN254FrElement(gmul.Exp)
+	var exp_bn254_fr_bigint big.Int
+	exp_bn254_fr.BigInt(&exp_bn254_fr_bigint)
 
+	for i := 0; i < 128; i++ {
+		bit := exp_bn254_fr_bigint.Bit(127 - i)
+		//
 		// Setup step
 		gmul.Step.Acc = acc
 		gmul.Step.Base = gmul.Base

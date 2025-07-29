@@ -15,6 +15,8 @@ import (
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/utils"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
+
+	// bn254_fr "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
@@ -105,7 +107,7 @@ func (circuit *G2MulStep) GenerateWitness(constraints constraint.ConstraintSyste
 
 type G2Mul struct {
 	Base groups.G2Projective
-	Exp  big.Int // 128 bits
+	Exp  frontend.Variable // 128 bits
 
 	Step *G2MulStep
 }
@@ -143,9 +145,13 @@ func (gmul *G2Mul) GenerateWitness(cs constraint.ConstraintSystem) grumpkin_fr.V
 
 	var witness grumpkin_fr.Vector
 
+	exp_bn254_fr, _ := utils.FrontendVariableToBN254FrElement(gmul.Exp)
+	var exp_bn254_fr_bigint big.Int
+	exp_bn254_fr.BigInt(&exp_bn254_fr_bigint)
+
 	// MSB -> LSB
 	for i := 0; i < 128; i++ {
-		bit := gmul.Exp.Bit(127 - i)
+		bit := exp_bn254_fr_bigint.Bit(127 - i)
 
 		// Fill step inputs
 		gmul.Step.Acc = acc

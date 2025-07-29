@@ -381,10 +381,13 @@ func TestG2MulCircuit(t *testing.T) {
 	var expected bn254.G2Affine
 	expected.ScalarMultiplication(&base, &exp)
 
+	var bn254_fr_exp bn254_fr.Element
+	bn254_fr_exp.SetBigInt(&exp)
+
 	// Build the step-by-step G2Mul circuit
 	gmul := &G2Mul{
 		Base: groups.FromBNG2Affine(&base),
-		Exp:  exp,
+		Exp:  bn254_fr_exp,
 	}
 
 	fmt.Println("Compiling G2Mul step circuit...")
@@ -449,12 +452,12 @@ func TestG1MultiMul(t *testing.T) {
 
 	// Setup the circuit
 	circuit := &G1MultiMul{
-		Alpha:              alpha,
-		Beta:               beta,
-		d:                  d,
-		E1_Beta:            groups.FromG1Affine(&E1_Beta),
-		E1_Plus:            groups.FromG1Affine(&E1_Plus),
-		Alpha_Inv_E1_Minus: groups.FromG1Affine(&alphaInvE1_Minus),
+		Alpha:              []frontend.Variable{alpha},
+		Beta:               []frontend.Variable{beta},
+		D:                  d,
+		E1_Beta:            []groups.G1Projective{groups.FromG1Affine(&E1_Beta)},
+		E1_Plus:            []groups.G1Projective{groups.FromG1Affine(&E1_Plus)},
+		Alpha_Inv_E1_Minus: []groups.G1Projective{groups.FromG1Affine(&alphaInvE1_Minus)},
 		Gamma1:             groups.FromG1Affine(&Gamma1),
 		// dGamma1Out:         groups.FromG1Affine(&expected_d_Gamma1),
 		Step: &G1MulStep{},
@@ -550,14 +553,14 @@ func TestG2MultiMul(t *testing.T) {
 
 	// Setup the circuit
 	circuit := &G2MultiMul{
-		Alpha:              alpha,
-		Beta:               beta,
-		E2_Beta:            groups.FromBNG2Affine(&E2_Beta),
-		E2_Plus:            groups.FromBNG2Affine(&E2_Plus),
-		Alpha_Inv_E2_Minus: groups.FromBNG2Affine(&alphaInvE2_Minus),
-		d:                  d,
+		Alpha:              []frontend.Variable{alpha},
+		Beta:               []frontend.Variable{beta},
+		E2_Beta:            []groups.G2Projective{groups.FromBNG2Affine(&E2_Beta)},
+		E2_Plus:            []groups.G2Projective{groups.FromBNG2Affine(&E2_Plus)},
+		Alpha_Inv_E2_Minus: []groups.G2Projective{groups.FromBNG2Affine(&alphaInvE2_Minus)},
+		D:                  d,
 		Gamma2Out:          groups.FromBNG2Affine(&ExpectedGamma2),
-		dInvGamma2:         groups.FromBNG2Affine(&dInvGamma2),
+		DInvGamma2:         groups.FromBNG2Affine(&dInvGamma2),
 		Step:               &G2MulStep{},
 	}
 
