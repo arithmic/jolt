@@ -340,59 +340,51 @@ func (dory_verifier *DoryVerifierUniform) CreateStepCircuit() constraint.Constra
 	return doryVerifierConstraints
 
 }
-func (dvu *DoryVerifierUniform) GenerateWitness(cs constraint.ConstraintSystem) fr.Vector {
-	var fullWitness fr.Vector
+func (dory_verifier *DoryVerifierUniform) GenerateWitness(cs constraint.ConstraintSystem) fr.Vector {
+	var witness fr.Vector
 
-	step := &DoryVerifierStep{
-		C:  dvu.C,
-		D1: dvu.D1,
-		D2: dvu.D2,
-		E1: dvu.E1,
-		E2: dvu.E2,
+	dory_verifier.doryverifierstep = &DoryVerifierStep{
+		C:  dory_verifier.C,
+		D1: dory_verifier.D1,
+		D2: dory_verifier.D2,
+		E1: dory_verifier.E1,
+		E2: dory_verifier.E2,
 	}
 
-	for i := 0; i < dvu.n; i++ {
-		*step = DoryVerifierStep{
-			C:        step.C,
-			D1:       step.D1,
-			D2:       step.D2,
-			E1:       step.E1,
-			E2:       step.E2,
-			Alpha:    dvu.Alpha[i],
-			Beta:     dvu.Beta[i],
-			Chi:      dvu.Chi[i],
-			C_Plus:   dvu.C_Plus[i],
-			C_Minus:  dvu.C_Minus[i],
-			D1_L:     dvu.D1_L[i],
-			D1_R:     dvu.D1_R[i],
-			D2_L:     dvu.D2_L[i],
-			D2_R:     dvu.D2_R[i],
-			Delta1_L: dvu.Delta1_L[i],
-			Delta1_R: dvu.Delta1_R[i],
-			Delta2_L: dvu.Delta2_L[i],
-			Delta2_R: dvu.Delta2_R[i],
-			E1_Beta:  dvu.E1_Beta[i],
-			E1_PLUS:  dvu.E1_PLUS[i],
-			E1_MINUS: dvu.E1_MINUS[i],
-			E2_Beta:  dvu.E2_Beta[i],
-			E2_PLUS:  dvu.E2_PLUS[i],
-			E2_MINUS: dvu.E2_MINUS[i],
-		}
+	for i := 0; i < dory_verifier.n; i++ {
+		dory_verifier.doryverifierstep.Alpha = dory_verifier.Alpha[i]
+		dory_verifier.doryverifierstep.Beta = dory_verifier.Beta[i]
+		dory_verifier.doryverifierstep.Chi = dory_verifier.Chi[i]
+		dory_verifier.doryverifierstep.C_Plus = dory_verifier.C_Plus[i]
+		dory_verifier.doryverifierstep.C_Minus = dory_verifier.C_Minus[i]
+		dory_verifier.doryverifierstep.D1_L = dory_verifier.D1_L[i]
+		dory_verifier.doryverifierstep.D1_R = dory_verifier.D1_R[i]
+		dory_verifier.doryverifierstep.D2_L = dory_verifier.D2_L[i]
+		dory_verifier.doryverifierstep.D2_R = dory_verifier.D2_R[i]
+		dory_verifier.doryverifierstep.Delta1_L = dory_verifier.Delta1_L[i]
+		dory_verifier.doryverifierstep.Delta1_R = dory_verifier.Delta1_R[i]
+		dory_verifier.doryverifierstep.Delta2_L = dory_verifier.Delta2_L[i]
+		dory_verifier.doryverifierstep.Delta2_R = dory_verifier.Delta2_R[i]
+		dory_verifier.doryverifierstep.E1_Beta = dory_verifier.E1_Beta[i]
+		dory_verifier.doryverifierstep.E1_PLUS = dory_verifier.E1_PLUS[i]
+		dory_verifier.doryverifierstep.E1_MINUS = dory_verifier.E1_MINUS[i]
+		dory_verifier.doryverifierstep.E2_Beta = dory_verifier.E2_Beta[i]
+		dory_verifier.doryverifierstep.E2_PLUS = dory_verifier.E2_PLUS[i]
+		dory_verifier.doryverifierstep.E2_MINUS = dory_verifier.E2_MINUS[i]
 
-		step.Hint()
-		w := step.GenerateWitness(cs)
-		fullWitness = append(fullWitness, w...)
+		dory_verifier.doryverifierstep.Hint()
+		stepWitness := dory_verifier.doryverifierstep.GenerateWitness(cs)
+		witness = append(witness, stepWitness...)
 
-		step.C = step.C_Prime
-		step.D1 = step.D1_Prime
-		step.D2 = step.D2_Prime
-		step.E1 = step.E1_Prime
-		step.E2 = step.E2_Prime
+		dory_verifier.doryverifierstep.C = dory_verifier.doryverifierstep.C_Prime
+		dory_verifier.doryverifierstep.D1 = dory_verifier.doryverifierstep.D1_Prime
+		dory_verifier.doryverifierstep.D2 = dory_verifier.doryverifierstep.D2_Prime
+		dory_verifier.doryverifierstep.E1 = dory_verifier.doryverifierstep.E1_Prime
+		dory_verifier.doryverifierstep.E2 = dory_verifier.doryverifierstep.E2_Prime
 	}
 
-	return fullWitness
+	return witness
 }
-
 
 func (dory_verifier *DoryVerifierUniform) GetConstraints() uniform.UniformR1CS {
 	var constraints []uniform.Constraint

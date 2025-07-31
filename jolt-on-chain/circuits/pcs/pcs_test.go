@@ -973,7 +973,7 @@ func TestCircuitdoryMatrix(t *testing.T) {
 
 func TestDoryPieceWiseUniform(t *testing.T) {
 	// Create test data
-	n := 1 // number of steps
+	n := 17 // number of steps
 
 	// Generate random field elements
 	var a, b, c bn254.E12
@@ -1186,25 +1186,6 @@ func TestDoryPieceWiseUniform(t *testing.T) {
 		D: d,
 		S: utils.MakeFrontendVariable(s),
 		R: utils.MakeFrontendVariable(r),
-
-		// finalstep: &DoryVerifierFinalStep{
-		// 	C:                field_tower.FromE12(&a),
-		// 	D1:               field_tower.FromE12(&b),
-		// 	D2:               field_tower.FromE12(&c),
-		// 	E1:               groups.FromG1Affine(&g1_e),
-		// 	E2:               groups.FromBNG2Affine(&g2_e),
-		// 	Chi:              chi[n-1], // Use last chi value
-		// 	Gamma1:           groups.FromG1Affine(&g1_gamma),
-		// 	D_times_Gamma1:   groups.FromG1Affine(&g1_d_gamma),
-		// 	Gamma2:           groups.FromBNG2Affine(&g2_gamma),
-		// 	DInvTimes_Gamma2: groups.FromBNG2Affine(&g2_d_inv_gamma),
-		// 	V1:               groups.FromG1Affine(&g1_v),
-		// 	V2:               groups.FromBNG2Affine(&g2_v),
-		// 	D:                d,
-		// 	S:                utils.MakeFrontendVariable(s),
-		// 	R:                utils.MakeFrontendVariable(r),
-		// 	Alpha:            utils.MakeFrontendVariable(alpha),
-		// },
 
 		finalstep: &DoryVerifierFinalStepUniform{
 			C:                field_tower.FromE12(&a),
