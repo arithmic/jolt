@@ -3,6 +3,7 @@ package pcs
 import (
 	"fmt"
 	"math/big"
+	"strconv"
 
 	"github.com/arithmic/gnark/constraint"
 	cs "github.com/arithmic/gnark/constraint/grumpkin"
@@ -108,7 +109,6 @@ func (circuit *DoryVerifierStep) Define(api frontend.API) error {
 
 	// Computing E1_Prime
 	// E1_Prime = E1 + beta * E1_Beta + alpha * E1_PLUS + alpha⁻¹ * E1_MINUS
-	// Final addition using precomputed parts
 	g1_api := groups.G1API{api}
 	E1_Prime_temp_1 := g1_api.Add(&circuit.E1, &circuit.Beta_e1_beta)                  // E1 + beta * E1_Beta
 	E1_Prime_temp_2 := g1_api.Add(&circuit.Alpha_e1_plus, &circuit.Alpha_inv_e1_minus) // alpha * E1_PLUS + alpha⁻¹ * E1_MINUS
@@ -179,7 +179,7 @@ func (circuit *DoryVerifierStep) Hint() {
 	C_prime.Mul(&alpha_inverse_c_minus, &C_prime)
 	circuit.C_Prime = field_tower.FromE12(&C_prime)
 
-	// // Computing D1_prime
+	// Computing D1_prime
 	d1L := field_tower.ToE12(circuit.D1_L)
 	var alpha_d1_l bn254.E12
 	alpha_d1_l.Exp(d1L, &alpha_bigint)
@@ -302,6 +302,7 @@ func (circuit *DoryVerifierStep) GenerateWitness(constraints constraint.Constrai
 }
 
 type DoryVerifierUniform struct {
+	n  int
 	C  GT
 	D1 GT
 	D2 GT
@@ -339,170 +340,117 @@ func (dory_verifier *DoryVerifierUniform) CreateStepCircuit() constraint.Constra
 	return doryVerifierConstraints
 
 }
+func (dvu *DoryVerifierUniform) GenerateWitness(cs constraint.ConstraintSystem) fr.Vector {
+	var fullWitness fr.Vector
 
-func (dory_verifier *DoryVerifierUniform) GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector {
-
-	n := len(dory_verifier.Alpha)
-	var witness fr.Vector
-
-	dory_verifier.doryverifierstep = &DoryVerifierStep{
-		C:  dory_verifier.C,
-		D1: dory_verifier.D1,
-		D2: dory_verifier.D2,
-		E1: dory_verifier.E1,
-		E2: dory_verifier.E2,
+	step := &DoryVerifierStep{
+		C:  dvu.C,
+		D1: dvu.D1,
+		D2: dvu.D2,
+		E1: dvu.E1,
+		E2: dvu.E2,
 	}
 
-	for i := 0; i < n; i++ {
-		dory_verifier.doryverifierstep.Alpha = dory_verifier.Alpha[i]
-		dory_verifier.doryverifierstep.Beta = dory_verifier.Beta[i]
-		dory_verifier.doryverifierstep.Chi = dory_verifier.Chi[i]
-		dory_verifier.doryverifierstep.C_Plus = dory_verifier.C_Plus[i]
-		dory_verifier.doryverifierstep.C_Minus = dory_verifier.C_Minus[i]
-		dory_verifier.doryverifierstep.D1_L = dory_verifier.D1_L[i]
-		dory_verifier.doryverifierstep.D1_R = dory_verifier.D1_R[i]
-		dory_verifier.doryverifierstep.D2_L = dory_verifier.D2_L[i]
-		dory_verifier.doryverifierstep.D2_R = dory_verifier.D2_R[i]
-		dory_verifier.doryverifierstep.Delta1_L = dory_verifier.Delta1_L[i]
-		dory_verifier.doryverifierstep.Delta1_R = dory_verifier.Delta1_R[i]
-		dory_verifier.doryverifierstep.Delta2_L = dory_verifier.Delta2_L[i]
-		dory_verifier.doryverifierstep.Delta2_R = dory_verifier.Delta2_R[i]
-		dory_verifier.doryverifierstep.E1_Beta = dory_verifier.E1_Beta[i]
-		dory_verifier.doryverifierstep.E1_PLUS = dory_verifier.E1_PLUS[i]
-		dory_verifier.doryverifierstep.E1_MINUS = dory_verifier.E1_MINUS[i]
-		dory_verifier.doryverifierstep.E2_Beta = dory_verifier.E2_Beta[i]
-		dory_verifier.doryverifierstep.E2_PLUS = dory_verifier.E2_PLUS[i]
-		dory_verifier.doryverifierstep.E2_MINUS = dory_verifier.E2_MINUS[i]
+	for i := 0; i < dvu.n; i++ {
+		*step = DoryVerifierStep{
+			C:        step.C,
+			D1:       step.D1,
+			D2:       step.D2,
+			E1:       step.E1,
+			E2:       step.E2,
+			Alpha:    dvu.Alpha[i],
+			Beta:     dvu.Beta[i],
+			Chi:      dvu.Chi[i],
+			C_Plus:   dvu.C_Plus[i],
+			C_Minus:  dvu.C_Minus[i],
+			D1_L:     dvu.D1_L[i],
+			D1_R:     dvu.D1_R[i],
+			D2_L:     dvu.D2_L[i],
+			D2_R:     dvu.D2_R[i],
+			Delta1_L: dvu.Delta1_L[i],
+			Delta1_R: dvu.Delta1_R[i],
+			Delta2_L: dvu.Delta2_L[i],
+			Delta2_R: dvu.Delta2_R[i],
+			E1_Beta:  dvu.E1_Beta[i],
+			E1_PLUS:  dvu.E1_PLUS[i],
+			E1_MINUS: dvu.E1_MINUS[i],
+			E2_Beta:  dvu.E2_Beta[i],
+			E2_PLUS:  dvu.E2_PLUS[i],
+			E2_MINUS: dvu.E2_MINUS[i],
+		}
 
-		dory_verifier.doryverifierstep.Hint()
-		stepWitness := dory_verifier.doryverifierstep.GenerateWitness(constraints)
-		witness = append(witness, stepWitness...)
+		step.Hint()
+		w := step.GenerateWitness(cs)
+		fullWitness = append(fullWitness, w...)
 
-		dory_verifier.doryverifierstep.C = dory_verifier.doryverifierstep.C_Prime
-		dory_verifier.doryverifierstep.D1 = dory_verifier.doryverifierstep.D1_Prime
-		dory_verifier.doryverifierstep.D2 = dory_verifier.doryverifierstep.D2_Prime
-		dory_verifier.doryverifierstep.E1 = dory_verifier.doryverifierstep.E1_Prime
-		dory_verifier.doryverifierstep.E2 = dory_verifier.doryverifierstep.E2_Prime
-
+		step.C = step.C_Prime
+		step.D1 = step.D1_Prime
+		step.D2 = step.D2_Prime
+		step.E1 = step.E1_Prime
+		step.E2 = step.E2_Prime
 	}
 
-	return witness
-
+	return fullWitness
 }
 
-type DoryVerifierFinalStep struct {
-	C  GT
-	D1 GT
-	D2 GT
-	E1 groups.G1Projective
-	E2 groups.G2Projective
 
-	Chi            frontend.Variable
-	Gamma1         groups.G1Projective
-	d_times_Gamma1 groups.G1Projective
+func (dory_verifier *DoryVerifierUniform) GetConstraints() uniform.UniformR1CS {
+	var constraints []uniform.Constraint
+	var aCount, bCount, cCount int
 
-	Gamma2           groups.G2Projective
-	dInvTimes_Gamma2 groups.G2Projective
-
-	V1 groups.G1Projective
-	V2 groups.G2Projective
-
-	D     frontend.Variable
-	S     []frontend.Variable
-	R     []frontend.Variable
-	Alpha []frontend.Variable
-}
-
-func (circuit *DoryVerifierFinalStep) Define(api frontend.API) error {
-
-	// gt_api := field_tower.NewExt12(api)
-
-	// // Computing e(v_1 + d * gamma_1 , v_2 + d^{-1} * gamma_2)
-
-	g1_api := groups.G1API{api}
-
-	// d_gamma1 := g1_api.ScalarMul(&circuit.Gamma1, &circuit.D)
-
-	g2_api := groups.New(api)
-	// d_inverse := api.Inverse(circuit.D)
-	// d_inverse_gamma2 := g2_api.Mul(&circuit.Gamma2, &d_inverse)
-
-	_ = g1_api.Add(&circuit.V1, &circuit.d_times_Gamma1)
-	_ = g2_api.Add(&circuit.V2, &circuit.dInvTimes_Gamma2)
-
-	// v2_plus_d_inverse_gamma2_affine := groups.ToAffine(&v2_plus_d_inverse_gamma2)
-	// pairing_api := pairing.New(api)
-	// e1 := pairing_api.Pairing(&v2_plus_d_inverse_gamma2, v1_plus_d_gamma1)
-
-	// // Computing  Chi + C + d * D2 + d^{-1} * D1
-
-	// chi_c := gt_api.Fp12MulFp(&circuit.C, circuit.Chi)
-	// d_d2 := gt_api.Fp12MulFp(&circuit.D2, circuit.D)
-	// d_inverse_d1 := gt_api.Fp12MulFp(&circuit.D1, d_inverse)
-	// chi_c_plus_d_d2 := gt_api.Add(chi_c, d_d2)
-	// chi_c_plus_d_d2_plus_d_inverse_d1 := gt_api.Add(chi_c_plus_d_d2, d_inverse_d1)
-
-	// Computing e1 = prod_{i=0}^{n-1} (alpha_i * (1-s_i) + s_i )
-	// computed_alpha_s := make([]frontend.Variable, len(circuit.s)+1)
-	computed_alpha_s := frontend.Variable(1)
-
-	computed_alpha_r := frontend.Variable(1)
-
-	for i := 0; i < len(circuit.S); i++ {
-		one_minus_si := api.Sub(1, circuit.S[i])
-		one_minus_si_alpha_i := api.Mul(one_minus_si, circuit.Alpha[i])
-		one_minus_si_alpha_i_plus_s_i := api.Add(one_minus_si_alpha_i, circuit.S[i])
-		computed_alpha_s = api.Mul(computed_alpha_s, one_minus_si_alpha_i_plus_s_i)
-
-		alpha_i_inverse := api.Inverse(circuit.Alpha[i])
-		one_minus_ri := api.Sub(1, circuit.R[i])
-		one_minus_ri_alpha_i_inverse := api.Mul(one_minus_ri, alpha_i_inverse)
-		one_minus_ri_alpha_i_inverse_plus_r_i := api.Add(one_minus_ri_alpha_i_inverse, circuit.R[i])
-
-		computed_alpha_r = api.Mul(computed_alpha_r, one_minus_ri_alpha_i_inverse_plus_r_i)
-	}
-
-	computed_e1 := g1_api.ScalarMul(&circuit.V1, &computed_alpha_s)
-	computed_e2 := g2_api.Mul(&circuit.V2, &computed_alpha_r)
-
-	g1_api.AssertIsEqual(&circuit.E1, computed_e1)
-	g2_api.AssertIsEqual(&circuit.E2, computed_e2)
-
-	return nil
-
-}
-
-func (circuit *DoryVerifierFinalStep) Compile() constraint.ConstraintSystem {
-
-	circuitR1CS, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit)
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, dory_verifier.doryverifierstep)
 	if err != nil {
 		fmt.Println("err in compilation is ", err)
 	}
-	return circuitR1CS
-}
 
-func (circuit *DoryVerifierFinalStep) GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector {
-
-	var witness fr.Vector
-
-	// Generate witness
-	w, err := frontend.NewWitness(circuit, ecc.GRUMPKIN.ScalarField())
-	if err != nil {
-		fmt.Println("error generating witness:", err)
-		return witness
+	nR1CS, ok := r1cs.(constraint.R1CS)
+	if !ok {
+		return uniform.UniformR1CS{
+			Constraints: constraints,
+			ACount:      0,
+			BCount:      0,
+			CCount:      0,
+			NumSteps:    0}
 	}
 
-	wSolved, err := (constraints).Solve(w)
-	if err != nil {
-		fmt.Println("error solving R1CS:", err)
-		return witness
+	cs := nR1CS.GetR1Cs()
+	for _, r1c := range cs {
+		singular := uniform.Constraint{
+			A: make(map[string]string),
+			B: make(map[string]string),
+			C: make(map[string]string),
+		}
+
+		for _, term := range r1c.L {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.A[col] = val
+			aCount++
+		}
+		for _, term := range r1c.R {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.B[col] = val
+			bCount++
+		}
+		for _, term := range r1c.O {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.C[col] = val
+			cCount++
+		}
+
+		constraints = append(constraints, singular)
 	}
 
-	witnessStep := wSolved.(*cs.R1CSSolution).W
+	return uniform.UniformR1CS{
+		Constraints: constraints,
+		ACount:      uint32(aCount),
+		BCount:      uint32(bCount),
+		CCount:      uint32(cCount),
 
-	witness = append(witness, witnessStep...)
-
-	return witness
+		NumSteps: uint32(dory_verifier.n),
+	}
 }
 
 // //////////////////////////////////
@@ -527,173 +475,4 @@ func MulByElement(x bn254.E12, element fr.Element) bn254.E12 {
 	result.C1.B2.A1.Mul(&x.C1.B2.A1, &elementFp)
 	return result
 
-}
-
-type DoryPieceWiseUniform struct {
-	C  GT
-	D1 GT
-	D2 GT
-	E1 groups.G1Projective
-	E2 groups.G2Projective
-
-	Alpha    []frontend.Variable
-	Beta     []frontend.Variable
-	Chi      []frontend.Variable
-	C_Plus   []GT
-	C_Minus  []GT
-	D1_L     []GT
-	D1_R     []GT
-	D2_L     []GT
-	D2_R     []GT
-	Delta1_L []GT
-	Delta1_R []GT
-	Delta2_L []GT
-	Delta2_R []GT
-
-	E1_Beta  []groups.G1Projective
-	E1_PLUS  []groups.G1Projective
-	E1_MINUS []groups.G1Projective
-
-	Alpha_Inv_E1_Minus []groups.G1Projective
-	Alpha_Inv_E2_Minus []groups.G2Projective
-
-	E2_Beta  []groups.G2Projective
-	E2_PLUS  []groups.G2Projective
-	E2_MINUS []groups.G2Projective
-
-	g1MultiMul  *uniform.G1MultiMul
-	g2MultiMul  *uniform.G2MultiMul
-	doryUniform *DoryVerifierUniform
-
-	// Chi            frontend.Variable
-	Gamma1         groups.G1Projective
-	d_times_Gamma1 groups.G1Projective
-
-	Gamma2           groups.G2Projective
-	dInvTimes_Gamma2 groups.G2Projective
-
-	V1 groups.G1Projective
-	V2 groups.G2Projective
-
-	D frontend.Variable
-	S []frontend.Variable
-	R []frontend.Variable
-
-	finalstep *DoryVerifierFinalStep
-}
-
-func (circuit *DoryPieceWiseUniform) Compile() []constraint.ConstraintSystem {
-	var r1cs []constraint.ConstraintSystem
-	return r1cs
-}
-
-func (circuit *DoryPieceWiseUniform) CreateStepCircuits() []constraint.ConstraintSystem {
-	doryStepR1CS := circuit.doryUniform.CreateStepCircuit()
-	g1R1CS := circuit.g1MultiMul.CreateStepCircuit()
-	g2R1CS := circuit.g2MultiMul.CreateStepCircuit()
-	final_stepR1CS := circuit.finalstep.Compile()
-
-	stepCircuits := []constraint.ConstraintSystem{g1R1CS, g2R1CS, doryStepR1CS, final_stepR1CS}
-	return stepCircuits
-}
-
-func (circuit *DoryPieceWiseUniform) GenerateWitness(constraints []constraint.ConstraintSystem) fr.Vector {
-
-	n := len(circuit.Alpha)
-	var witness fr.Vector
-
-	circuit.doryUniform = &DoryVerifierUniform{
-		C:  circuit.C,
-		D1: circuit.D1,
-		D2: circuit.D2,
-		E1: circuit.E1,
-		E2: circuit.E2,
-	}
-
-	circuit.doryUniform.Alpha = circuit.Alpha
-	circuit.doryUniform.Beta = circuit.Beta
-	circuit.doryUniform.Chi = circuit.Chi
-	circuit.doryUniform.C_Plus = circuit.C_Plus
-	circuit.doryUniform.C_Minus = circuit.C_Minus
-	circuit.doryUniform.D1_L = circuit.D1_L
-	circuit.doryUniform.D1_R = circuit.D1_R
-	circuit.doryUniform.D2_L = circuit.D2_L
-	circuit.doryUniform.D2_R = circuit.D2_R
-	circuit.doryUniform.Delta1_L = circuit.Delta1_L
-	circuit.doryUniform.Delta1_R = circuit.Delta1_R
-	circuit.doryUniform.Delta2_L = circuit.Delta2_L
-	circuit.doryUniform.Delta2_R = circuit.Delta2_R
-
-	circuit.doryUniform.E1_Beta = circuit.E1_Beta
-	circuit.doryUniform.E1_PLUS = circuit.E1_PLUS
-	circuit.doryUniform.E1_MINUS = circuit.E1_MINUS
-	circuit.doryUniform.E2_Beta = circuit.E2_Beta
-	circuit.doryUniform.E2_PLUS = circuit.E2_PLUS
-	circuit.doryUniform.E2_MINUS = circuit.E2_MINUS
-
-	circuit.doryUniform.doryverifierstep = &DoryVerifierStep{}
-
-	// generate witness for DoryVerifierStep
-	doryWitness := circuit.doryUniform.GenerateWitness(constraints[0])
-	witness = append(witness, doryWitness...)
-
-	// MultiMul for G1
-	circuit.g1MultiMul = &uniform.G1MultiMul{
-		Alpha:              circuit.Alpha,
-		Beta:               circuit.Beta,
-		D:                  circuit.D,
-		E1_Beta:            circuit.E1_Beta,
-		E1_Plus:            circuit.E1_PLUS,
-		Alpha_Inv_E1_Minus: circuit.Alpha_Inv_E1_Minus,
-		Gamma1:             circuit.Gamma1,
-		Step:               &uniform.G1MulStep{},
-	}
-
-	g1MultiMulWitness := circuit.g1MultiMul.GenerateWitness(constraints[1])
-
-	witness = append(witness, g1MultiMulWitness...)
-
-	// MultiMul for G2
-	circuit.g2MultiMul = &uniform.G2MultiMul{
-		Alpha:              circuit.Alpha,
-		Beta:               circuit.Beta,
-		D:                  circuit.D,
-		E2_Beta:            circuit.E2_Beta,
-		E2_Plus:            circuit.E2_PLUS,
-		Alpha_Inv_E2_Minus: circuit.Alpha_Inv_E2_Minus,
-		DInvGamma2:         circuit.dInvTimes_Gamma2,
-		Gamma2Out:          circuit.Gamma2,
-
-		Step: &uniform.G2MulStep{},
-	}
-
-	g2MultiMulWitness := circuit.g2MultiMul.GenerateWitness(constraints[2])
-	witness = append(witness, g2MultiMulWitness...)
-
-	// final step
-	circuit.finalstep = &DoryVerifierFinalStep{
-		C:  circuit.doryUniform.doryverifierstep.C,
-		D1: circuit.doryUniform.doryverifierstep.D1,
-		D2: circuit.doryUniform.doryverifierstep.D2,
-		E1: circuit.doryUniform.doryverifierstep.E1,
-		E2: circuit.doryUniform.doryverifierstep.E2,
-
-		Chi:              circuit.Chi[n-1],
-		Gamma1:           circuit.Gamma1,
-		d_times_Gamma1:   circuit.d_times_Gamma1,
-		Gamma2:           circuit.Gamma2,
-		dInvTimes_Gamma2: circuit.dInvTimes_Gamma2,
-		V1:               circuit.V1,
-		V2:               circuit.V2,
-
-		D:     circuit.D,
-		S:     circuit.S,
-		R:     circuit.R,
-		Alpha: circuit.Alpha,
-	}
-
-	finalStepWitness := circuit.finalstep.GenerateWitness(constraints[3])
-	witness = append(witness, finalStepWitness...)
-
-	return witness
 }

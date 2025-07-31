@@ -1,7 +1,9 @@
 package uniform
 
 import (
+	"fmt"
 	"math/big"
+	"strconv"
 
 	"github.com/arithmic/gnark/constraint"
 	"github.com/arithmic/gnark/frontend"
@@ -156,4 +158,62 @@ func (g1MultiMul *G1MultiMul) GenerateWitness(cs constraint.ConstraintSystem) gr
 	g1MultiMul.dGamma1Out = acc
 
 	return witness
+}
+
+func (g1MultiMul *G1MultiMul) GetConstraints() UniformR1CS {
+	var constraints []Constraint
+	var aCount, bCount, cCount int
+
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, g1MultiMul.Step)
+	if err != nil {
+		fmt.Println("err in compilation is ", err)
+	}
+
+	nR1CS, ok := r1cs.(constraint.R1CS)
+	if !ok {
+		return UniformR1CS{
+			Constraints: constraints,
+			ACount:      0,
+			BCount:      0,
+			CCount:      0,
+			NumSteps:    0}
+	}
+
+	cs := nR1CS.GetR1Cs()
+	for _, r1c := range cs {
+		singular := Constraint{
+			A: make(map[string]string),
+			B: make(map[string]string),
+			C: make(map[string]string),
+		}
+
+		for _, term := range r1c.L {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.A[col] = val
+			aCount++
+		}
+		for _, term := range r1c.R {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.B[col] = val
+			bCount++
+		}
+		for _, term := range r1c.O {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.C[col] = val
+			cCount++
+		}
+
+		constraints = append(constraints, singular)
+	}
+
+	return UniformR1CS{
+		Constraints: constraints,
+		ACount:      uint32(aCount),
+		BCount:      uint32(bCount),
+		CCount:      uint32(cCount),
+		NumSteps:    uint32((128) * (3*len(g1MultiMul.Alpha) + 1)),
+	}
 }

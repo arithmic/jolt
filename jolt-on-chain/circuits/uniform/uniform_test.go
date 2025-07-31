@@ -514,6 +514,85 @@ func TestG1MultiMul(t *testing.T) {
 	}
 }
 
+func TestG1MultiMulMatrix(t *testing.T) {
+	// Random base points
+	E1_Beta := groups.RandomG1Affine()
+	E1_Plus := groups.RandomG1Affine()
+	expected_E1_Minus := groups.RandomG1Affine()
+	Gamma1 := groups.RandomG1Affine()
+
+	// Random alpha and beta
+	var alpha, beta, d big.Int
+	alphaBytes := make([]byte, 16)
+	betaBytes := make([]byte, 16)
+	dbytes := make([]byte, 16)
+	rand.Read(alphaBytes)
+	rand.Read(betaBytes)
+	rand.Read(dbytes)
+
+	alpha.SetBytes(alphaBytes)
+	beta.SetBytes(betaBytes)
+	d.SetBytes(dbytes)
+
+	// Compute expected results using native scalar mul
+	var expected_Beta_E1_Beta bn254.G1Affine
+	var expected_Alpha_E1_Plus bn254.G1Affine
+	var alphaInvE1_Minus bn254.G1Affine
+	var expected_d_Gamma1 bn254.G1Affine
+
+	expected_Beta_E1_Beta.ScalarMultiplication(&E1_Beta, &beta)
+	expected_Alpha_E1_Plus.ScalarMultiplication(&E1_Plus, &alpha)
+	expected_d_Gamma1.ScalarMultiplication(&Gamma1, &d)
+	// alpha^-1 mod r
+	alphaInv := new(big.Int).ModInverse(&alpha, bn254_fr.Modulus())
+	alphaInvE1_Minus.ScalarMultiplication(&expected_E1_Minus, alphaInv)
+
+	// Setup the circuit
+	circuit := &G1MultiMul{
+		Alpha:              []frontend.Variable{alpha},
+		Beta:               []frontend.Variable{beta},
+		D:                  d,
+		E1_Beta:            []groups.G1Projective{groups.FromG1Affine(&E1_Beta)},
+		E1_Plus:            []groups.G1Projective{groups.FromG1Affine(&E1_Plus)},
+		Alpha_Inv_E1_Minus: []groups.G1Projective{groups.FromG1Affine(&alphaInvE1_Minus)},
+		Gamma1:             groups.FromG1Affine(&Gamma1),
+		// dGamma1Out:         groups.FromG1Affine(&expected_d_Gamma1),
+		Step: &G1MulStep{},
+	}
+
+	PrintR1CSStatsG1MultiMul(circuit)
+}
+
+func PrintR1CSStatsG1MultiMul(g *G1MultiMul) {
+	r1csInfo := g.GetConstraints()
+
+	// generate full witness
+	stepCS := g.CreateStepCircuit()
+	witness := g.GenerateWitness(stepCS)
+	numVars := len(witness)
+
+	constraintsPerStep := len(r1csInfo.Constraints)
+
+	fmt.Println("constraintsPerStep :", constraintsPerStep)
+	numSteps := int(r1csInfo.NumSteps)
+	totalConstraints := numSteps * constraintsPerStep
+
+	rows := totalConstraints
+	cols := numVars
+	totalEntries := rows * cols
+
+	totalA := int(r1csInfo.ACount) * numSteps
+	totalB := int(r1csInfo.BCount) * numSteps
+	totalC := int(r1csInfo.CCount) * numSteps
+
+	fmt.Printf("Matrix size: %d rows x %d columns\n", rows, cols)
+	fmt.Printf("Constraints: %d\n", totalConstraints)
+
+	fmt.Printf("A non-zero: %d, zero: %d \n", totalA, totalEntries-totalA)
+	fmt.Printf("B non-zero: %d, zero: %d \n", totalB, totalEntries-totalB)
+	fmt.Printf("C non-zero: %d, zero: %d \n", totalC, totalEntries-totalC)
+}
+
 func TestG2MultiMul(t *testing.T) {
 	// Random base points
 	_, E2_Beta := groups.RandomG1G2Affines()
@@ -618,4 +697,88 @@ func TestG2MultiMul(t *testing.T) {
 	if ExpectedGamma2fromWitness != groups.FromBNG2Affine(&ExpectedGamma2) {
 		panic("ExpectedGamma2fromWitness is not equal to ExpectedGamma2")
 	}
+}
+
+
+func PrintR1CSStatsG2MultiMul(g *G2MultiMul) {
+	r1csInfo := g.GetConstraints()
+
+	// generate full witness
+	stepCS := g.CreateStepCircuit()
+	witness := g.GenerateWitness(stepCS)
+	numVars := len(witness)
+
+	constraintsPerStep := len(r1csInfo.Constraints)
+
+	fmt.Println("constraintsPerStep :", constraintsPerStep)
+	numSteps := int(r1csInfo.NumSteps)
+	totalConstraints := numSteps * constraintsPerStep
+
+	rows := totalConstraints
+	cols := numVars
+	totalEntries := rows * cols
+
+	totalA := int(r1csInfo.ACount) * numSteps
+	totalB := int(r1csInfo.BCount) * numSteps
+	totalC := int(r1csInfo.CCount) * numSteps
+
+	fmt.Printf("Matrix size: %d rows x %d columns\n", rows, cols)
+	fmt.Printf("Constraints: %d\n", totalConstraints)
+
+	fmt.Printf("A non-zero: %d, zero: %d \n", totalA, totalEntries-totalA)
+	fmt.Printf("B non-zero: %d, zero: %d \n", totalB, totalEntries-totalB)
+	fmt.Printf("C non-zero: %d, zero: %d \n", totalC, totalEntries-totalC)
+}
+
+
+func TestG2MultiMulMatrix(t *testing.T) {
+	// Random base points
+	_, E2_Beta := groups.RandomG1G2Affines()
+	_, E2_Plus := groups.RandomG1G2Affines()
+	_, expected_E2_Minus := groups.RandomG1G2Affines()
+	_, ExpectedGamma2 := groups.RandomG1G2Affines()
+
+	// Random alpha and beta (128-bit)
+	var alpha, beta, d big.Int
+	alphaBytes := make([]byte, 16)
+	betaBytes := make([]byte, 16)
+	dbytes := make([]byte, 16)
+
+	rand.Read(alphaBytes)
+	rand.Read(betaBytes)
+	rand.Read(dbytes)
+
+	alpha.SetBytes(alphaBytes)
+	beta.SetBytes(betaBytes)
+	d.SetBytes(dbytes)
+
+	// Compute expected results using native scalar mul
+	var expected_Beta_E2_Beta bn254.G2Affine
+	var expected_Alpha_E2_Plus bn254.G2Affine
+	var alphaInvE2_Minus bn254.G2Affine
+	var dInvGamma2 bn254.G2Affine
+
+	expected_Beta_E2_Beta.ScalarMultiplication(&E2_Beta, &beta)
+	expected_Alpha_E2_Plus.ScalarMultiplication(&E2_Plus, &alpha)
+
+	// alpha^-1 mod r
+	alphaInv := new(big.Int).ModInverse(&alpha, bn254_fr.Modulus())
+	dInv := new(big.Int).ModInverse(&d, bn254_fr.Modulus())
+
+	alphaInvE2_Minus.ScalarMultiplication(&expected_E2_Minus, alphaInv)
+	dInvGamma2.ScalarMultiplication(&ExpectedGamma2, dInv)
+
+	// Setup the circuit
+	circuit := &G2MultiMul{
+		Alpha:              []frontend.Variable{alpha},
+		Beta:               []frontend.Variable{beta},
+		E2_Beta:            []groups.G2Projective{groups.FromBNG2Affine(&E2_Beta)},
+		E2_Plus:            []groups.G2Projective{groups.FromBNG2Affine(&E2_Plus)},
+		Alpha_Inv_E2_Minus: []groups.G2Projective{groups.FromBNG2Affine(&alphaInvE2_Minus)},
+		D:                  d,
+		Gamma2Out:          groups.FromBNG2Affine(&ExpectedGamma2),
+		DInvGamma2:         groups.FromBNG2Affine(&dInvGamma2),
+		Step:               &G2MulStep{},
+	}
+	PrintR1CSStatsG2MultiMul(circuit)
 }

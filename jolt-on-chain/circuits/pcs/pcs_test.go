@@ -17,6 +17,7 @@ import (
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/groups"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/uniform"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/utils"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -809,5 +810,561 @@ func TestCircuitdory(t *testing.T) {
 
 	dory_R1Cs := dory_Circuit.CreateStepCircuit()
 	dory_Circuit.GenerateWitness(dory_R1Cs)
+
+}
+
+func PrintR1CSStatsUniformDory(dory *DoryVerifierUniform) {
+	r1csInfo := dory.GetConstraints()
+
+	// generate full witness
+	stepCS := dory.CreateStepCircuit()
+	witness := dory.GenerateWitness(stepCS)
+	numVars := len(witness)
+
+	constraintsPerStep := len(r1csInfo.Constraints)
+
+	fmt.Println("constraintsPerStep :", constraintsPerStep)
+	numSteps := int(r1csInfo.NumSteps)
+	totalConstraints := numSteps * constraintsPerStep
+
+	rows := totalConstraints
+	cols := numVars
+	totalEntries := rows * cols
+
+	totalA := int(r1csInfo.ACount) * numSteps
+	totalB := int(r1csInfo.BCount) * numSteps
+	totalC := int(r1csInfo.CCount) * numSteps
+
+	fmt.Printf("Matrix size: %d rows x %d columns\n", rows, cols)
+	fmt.Printf("Constraints: %d\n", totalConstraints)
+
+	fmt.Printf("A non-zero: %d, zero: %d \n", totalA, totalEntries-totalA)
+	fmt.Printf("B non-zero: %d, zero: %d \n", totalB, totalEntries-totalB)
+	fmt.Printf("C non-zero: %d, zero: %d \n", totalC, totalEntries-totalC)
+}
+
+func TestCircuitdoryMatrix(t *testing.T) {
+
+	in1, in2 := groups.RandomG1G2Affines()
+	// in11, in22 := groups.RandomG1G2Affines()
+	var a, b, c bn254.E12
+	_, _ = a.SetRandom()
+	_, _ = b.SetRandom()
+	_, _ = c.SetRandom()
+
+	n := 5
+	alpha := make([]fr.Element, n)
+	beta := make([]fr.Element, n)
+	chi := make([]fr.Element, n)
+
+	for i := 0; i < n; i++ {
+		_, _ = alpha[i].SetRandom()
+		_, _ = beta[i].SetRandom()
+		_, _ = chi[i].SetRandom()
+	}
+
+	C_Plus_arr := make([]bn254.E12, n)
+	C_Plus := make([]GT, n)
+
+	C_Minus := make([]GT, n)
+	C_Minus_arr := make([]bn254.E12, n)
+
+	D1_L_arr := make([]bn254.E12, n)
+	D1_L := make([]GT, n)
+
+	D1_R_arr := make([]bn254.E12, n)
+	D1_R := make([]GT, n)
+
+	D2_L_arr := make([]bn254.E12, n)
+	D2_L := make([]GT, n)
+
+	D2_R_arr := make([]bn254.E12, n)
+	D2_R := make([]GT, n)
+
+	Delta1_L_arr := make([]bn254.E12, n)
+	Delta1_L := make([]GT, n)
+
+	Delta1_R_arr := make([]bn254.E12, n)
+	Delta1_R := make([]GT, n)
+
+	Delta2_L_arr := make([]bn254.E12, n)
+	Delta2_L := make([]GT, n)
+
+	Delta2_R_arr := make([]bn254.E12, n)
+	Delta2_R := make([]GT, n)
+
+	E1_Beta := make([]groups.G1Projective, n)
+	E1_PLUS := make([]groups.G1Projective, n)
+	E1_MINUS := make([]groups.G1Projective, n)
+	E2_Beta := make([]groups.G2Projective, n)
+	E2_PLUS := make([]groups.G2Projective, n)
+	E2_MINUS := make([]groups.G2Projective, n)
+
+	for i := 0; i < n; i++ {
+		_, _ = C_Plus_arr[i].SetRandom()
+		C_Plus[i] = field_tower.FromE12(&C_Plus_arr[i])
+		_, _ = C_Minus_arr[i].SetRandom()
+		C_Minus[i] = field_tower.FromE12(&C_Minus_arr[i])
+		_, _ = D1_L_arr[i].SetRandom()
+		D1_L[i] = field_tower.FromE12(&D1_L_arr[i])
+
+		_, _ = D1_R_arr[i].SetRandom()
+		D1_R[i] = field_tower.FromE12(&D1_R_arr[i])
+
+		_, _ = D2_L_arr[i].SetRandom()
+		D2_L[i] = field_tower.FromE12(&D2_L_arr[i])
+		_, _ = D2_R_arr[i].SetRandom()
+		D2_R[i] = field_tower.FromE12(&D2_R_arr[i])
+
+		_, _ = Delta1_L_arr[i].SetRandom()
+		Delta1_L[i] = field_tower.FromE12(&Delta1_L_arr[i])
+		_, _ = Delta1_R_arr[i].SetRandom()
+		Delta1_R[i] = field_tower.FromE12(&Delta1_R_arr[i])
+		_, _ = Delta2_L_arr[i].SetRandom()
+		Delta2_L[i] = field_tower.FromE12(&Delta2_L_arr[i])
+		_, _ = Delta2_R_arr[i].SetRandom()
+		Delta2_R[i] = field_tower.FromE12(&Delta2_R_arr[i])
+
+		in1, in2 = groups.RandomG1G2Affines()
+		E1_Beta[i] = groups.FromG1Affine(&in1)
+		E2_Beta[i] = groups.FromBNG2Affine(&in2)
+
+		in1, in2 = groups.RandomG1G2Affines()
+		E1_PLUS[i] = groups.FromG1Affine(&in1)
+		E2_PLUS[i] = groups.FromBNG2Affine(&in2)
+
+		in1, in2 = groups.RandomG1G2Affines()
+		E1_MINUS[i] = groups.FromG1Affine(&in1)
+		E2_MINUS[i] = groups.FromBNG2Affine(&in2)
+
+	}
+
+	dory_Circuit := DoryVerifierUniform{
+		n:                n,
+		C:                field_tower.FromE12(&a),
+		D1:               field_tower.FromE12(&b),
+		D2:               field_tower.FromE12(&c),
+		E1:               groups.FromG1Affine(&in1),
+		E2:               groups.FromBNG2Affine(&in2),
+		Alpha:            utils.MakeFrontendVariable(alpha),
+		Beta:             utils.MakeFrontendVariable(beta),
+		Chi:              utils.MakeFrontendVariable(chi),
+		C_Plus:           C_Plus,
+		C_Minus:          C_Minus,
+		D1_L:             D1_L,
+		D1_R:             D1_R,
+		D2_L:             D2_L,
+		D2_R:             D2_R,
+		Delta1_L:         Delta1_L,
+		Delta1_R:         Delta1_R,
+		Delta2_L:         Delta2_L,
+		Delta2_R:         Delta2_R,
+		E1_Beta:          E1_Beta,
+		E1_PLUS:          E1_PLUS,
+		E1_MINUS:         E1_MINUS,
+		E2_Beta:          E2_Beta,
+		E2_PLUS:          E2_PLUS,
+		E2_MINUS:         E2_MINUS,
+		doryverifierstep: &DoryVerifierStep{},
+	}
+
+	PrintR1CSStatsUniformDory(&dory_Circuit)
+}
+
+func TestDoryPieceWiseUniform(t *testing.T) {
+	// Create test data
+	n := 1 // number of steps
+
+	// Generate random field elements
+	var a, b, c bn254.E12
+	_, _ = a.SetRandom()
+	_, _ = b.SetRandom()
+	_, _ = c.SetRandom()
+
+	// Generate random scalars with 128-bit alpha, beta, chi
+	alpha := make([]fr.Element, n)
+	beta := make([]fr.Element, n)
+	chi := make([]fr.Element, n)
+	s := make([]fr.Element, n)
+	r := make([]fr.Element, n)
+	var d fr.Element
+
+	for i := 0; i < n; i++ {
+		// Generate 128-bit values for alpha, beta, chi, s, r
+		alphaBytes := make([]byte, 16) // 16 bytes = 128 bits
+		betaBytes := make([]byte, 16)
+		chiBytes := make([]byte, 16)
+		sBytes := make([]byte, 16)
+		rBytes := make([]byte, 16)
+
+		rand.Read(alphaBytes)
+		rand.Read(betaBytes)
+		rand.Read(chiBytes)
+		rand.Read(sBytes)
+		rand.Read(rBytes)
+
+		var alphaBig, betaBig, chiBig, sBig, rBig big.Int
+		alphaBig.SetBytes(alphaBytes)
+		betaBig.SetBytes(betaBytes)
+		chiBig.SetBytes(chiBytes)
+		sBig.SetBytes(sBytes)
+		rBig.SetBytes(rBytes)
+
+		alpha[i].SetBigInt(&alphaBig)
+		beta[i].SetBigInt(&betaBig)
+		chi[i].SetBigInt(&chiBig)
+		s[i].SetBigInt(&sBig)
+		r[i].SetBigInt(&rBig)
+	}
+
+	// Generate 128-bit value for d
+	dBytes := make([]byte, 16)
+	rand.Read(dBytes)
+	var dBig big.Int
+	dBig.SetBytes(dBytes)
+	d.SetBigInt(&dBig)
+
+	// Generate random GT elements
+	C_Plus := make([]GT, n)
+	C_Minus := make([]GT, n)
+	D1_L := make([]GT, n)
+	D1_R := make([]GT, n)
+	D2_L := make([]GT, n)
+	D2_R := make([]GT, n)
+	Delta1_L := make([]GT, n)
+	Delta1_R := make([]GT, n)
+	Delta2_L := make([]GT, n)
+	Delta2_R := make([]GT, n)
+
+	for i := 0; i < n; i++ {
+		var temp bn254.E12
+		_, _ = temp.SetRandom()
+		C_Plus[i] = field_tower.FromE12(&temp)
+		_, _ = temp.SetRandom()
+		C_Minus[i] = field_tower.FromE12(&temp)
+		_, _ = temp.SetRandom()
+		D1_L[i] = field_tower.FromE12(&temp)
+		_, _ = temp.SetRandom()
+		D1_R[i] = field_tower.FromE12(&temp)
+		_, _ = temp.SetRandom()
+		D2_L[i] = field_tower.FromE12(&temp)
+		_, _ = temp.SetRandom()
+		D2_R[i] = field_tower.FromE12(&temp)
+		_, _ = temp.SetRandom()
+		Delta1_L[i] = field_tower.FromE12(&temp)
+		_, _ = temp.SetRandom()
+		Delta1_R[i] = field_tower.FromE12(&temp)
+		_, _ = temp.SetRandom()
+		Delta2_L[i] = field_tower.FromE12(&temp)
+		_, _ = temp.SetRandom()
+		Delta2_R[i] = field_tower.FromE12(&temp)
+	}
+
+	// Generate random group elements
+	E1_Beta := make([]groups.G1Projective, n)
+	E1_PLUS := make([]groups.G1Projective, n)
+	E1_MINUS := make([]groups.G1Projective, n)
+	Alpha_Inv_E1_Minus := make([]groups.G1Projective, n)
+	E2_Beta := make([]groups.G2Projective, n)
+	E2_PLUS := make([]groups.G2Projective, n)
+	E2_MINUS := make([]groups.G2Projective, n)
+	Alpha_Inv_E2_Minus := make([]groups.G2Projective, n)
+
+	for i := 0; i < n; i++ {
+		g1, g2 := groups.RandomG1G2Affines()
+		E1_Beta[i] = groups.FromG1Affine(&g1)
+		E2_Beta[i] = groups.FromBNG2Affine(&g2)
+
+		g1, g2 = groups.RandomG1G2Affines()
+		E1_PLUS[i] = groups.FromG1Affine(&g1)
+		E2_PLUS[i] = groups.FromBNG2Affine(&g2)
+
+		g1, g2 = groups.RandomG1G2Affines()
+		E1_MINUS[i] = groups.FromG1Affine(&g1)
+		E2_MINUS[i] = groups.FromBNG2Affine(&g2)
+
+		g1, g2 = groups.RandomG1G2Affines()
+		Alpha_Inv_E1_Minus[i] = groups.FromG1Affine(&g1)
+		Alpha_Inv_E2_Minus[i] = groups.FromBNG2Affine(&g2)
+	}
+
+	// Generate random points for final step
+	g1_gamma, g2_gamma := groups.RandomG1G2Affines()
+	g1_d_gamma, g2_d_inv_gamma := groups.RandomG1G2Affines()
+	g1_v, g2_v := groups.RandomG1G2Affines()
+	g1_e, g2_e := g1_v, g2_v
+
+	// Create the DoryPieceWiseUniform circuit
+	circuit := &DoryPieceWiseUniform{
+		n:  n,
+		C:  field_tower.FromE12(&a),
+		D1: field_tower.FromE12(&b),
+		D2: field_tower.FromE12(&c),
+		E1: groups.FromG1Affine(&g1_e),
+		E2: groups.FromBNG2Affine(&g2_e),
+
+		Alpha:    utils.MakeFrontendVariable(alpha),
+		Beta:     utils.MakeFrontendVariable(beta),
+		Chi:      utils.MakeFrontendVariable(chi),
+		C_Plus:   C_Plus,
+		C_Minus:  C_Minus,
+		D1_L:     D1_L,
+		D1_R:     D1_R,
+		D2_L:     D2_L,
+		D2_R:     D2_R,
+		Delta1_L: Delta1_L,
+		Delta1_R: Delta1_R,
+		Delta2_L: Delta2_L,
+		Delta2_R: Delta2_R,
+
+		E1_Beta:            E1_Beta,
+		E1_PLUS:            E1_PLUS,
+		E1_MINUS:           E1_MINUS,
+		Alpha_Inv_E1_Minus: Alpha_Inv_E1_Minus,
+		Alpha_Inv_E2_Minus: Alpha_Inv_E2_Minus,
+		E2_Beta:            E2_Beta,
+		E2_PLUS:            E2_PLUS,
+		E2_MINUS:           E2_MINUS,
+
+		g1MultiMul: &uniform.G1MultiMul{
+			Alpha:              utils.MakeFrontendVariable(alpha),
+			Beta:               utils.MakeFrontendVariable(beta),
+			D:                  d,
+			E1_Beta:            E1_Beta,
+			E1_Plus:            E1_PLUS,
+			Alpha_Inv_E1_Minus: Alpha_Inv_E1_Minus,
+			Gamma1:             groups.FromG1Affine(&g1_gamma),
+			Step:               &uniform.G1MulStep{},
+		},
+		g2MultiMul: &uniform.G2MultiMul{
+			Alpha:              utils.MakeFrontendVariable(alpha),
+			Beta:               utils.MakeFrontendVariable(beta),
+			D:                  d,
+			E2_Beta:            E2_Beta,
+			E2_Plus:            E2_PLUS,
+			Alpha_Inv_E2_Minus: Alpha_Inv_E2_Minus,
+			Gamma2Out:          groups.FromBNG2Affine(&g2_gamma),
+			DInvGamma2:         groups.FromBNG2Affine(&g2_d_inv_gamma),
+			Step:               &uniform.G2MulStep{},
+		},
+		doryUniform: &DoryVerifierUniform{
+			n:                n,
+			C:                field_tower.FromE12(&a),
+			D1:               field_tower.FromE12(&b),
+			D2:               field_tower.FromE12(&c),
+			E1:               groups.FromG1Affine(&g1_e),
+			E2:               groups.FromBNG2Affine(&g2_e),
+			Alpha:            utils.MakeFrontendVariable(alpha),
+			Beta:             utils.MakeFrontendVariable(beta),
+			Chi:              utils.MakeFrontendVariable(chi),
+			C_Plus:           C_Plus,
+			C_Minus:          C_Minus,
+			D1_L:             D1_L,
+			D1_R:             D1_R,
+			D2_L:             D2_L,
+			D2_R:             D2_R,
+			Delta1_L:         Delta1_L,
+			Delta1_R:         Delta1_R,
+			Delta2_L:         Delta2_L,
+			Delta2_R:         Delta2_R,
+			E1_Beta:          E1_Beta,
+			E1_PLUS:          E1_PLUS,
+			E1_MINUS:         E1_MINUS,
+			E2_Beta:          E2_Beta,
+			E2_PLUS:          E2_PLUS,
+			E2_MINUS:         E2_MINUS,
+			doryverifierstep: &DoryVerifierStep{},
+		},
+
+		Gamma1:           groups.FromG1Affine(&g1_gamma),
+		d_times_Gamma1:   groups.FromG1Affine(&g1_d_gamma),
+		Gamma2:           groups.FromBNG2Affine(&g2_gamma),
+		dInvTimes_Gamma2: groups.FromBNG2Affine(&g2_d_inv_gamma),
+		V1:               groups.FromG1Affine(&g1_v),
+		V2:               groups.FromBNG2Affine(&g2_v),
+
+		D: d,
+		S: utils.MakeFrontendVariable(s),
+		R: utils.MakeFrontendVariable(r),
+
+		// finalstep: &DoryVerifierFinalStep{
+		// 	C:                field_tower.FromE12(&a),
+		// 	D1:               field_tower.FromE12(&b),
+		// 	D2:               field_tower.FromE12(&c),
+		// 	E1:               groups.FromG1Affine(&g1_e),
+		// 	E2:               groups.FromBNG2Affine(&g2_e),
+		// 	Chi:              chi[n-1], // Use last chi value
+		// 	Gamma1:           groups.FromG1Affine(&g1_gamma),
+		// 	D_times_Gamma1:   groups.FromG1Affine(&g1_d_gamma),
+		// 	Gamma2:           groups.FromBNG2Affine(&g2_gamma),
+		// 	DInvTimes_Gamma2: groups.FromBNG2Affine(&g2_d_inv_gamma),
+		// 	V1:               groups.FromG1Affine(&g1_v),
+		// 	V2:               groups.FromBNG2Affine(&g2_v),
+		// 	D:                d,
+		// 	S:                utils.MakeFrontendVariable(s),
+		// 	R:                utils.MakeFrontendVariable(r),
+		// 	Alpha:            utils.MakeFrontendVariable(alpha),
+		// },
+
+		finalstep: &DoryVerifierFinalStepUniform{
+			C:                field_tower.FromE12(&a),
+			D1:               field_tower.FromE12(&b),
+			D2:               field_tower.FromE12(&c),
+			E1:               groups.FromG1Affine(&g1_e),
+			E2:               groups.FromBNG2Affine(&g2_e),
+			Chi:              chi,
+			Gamma1:           groups.FromG1Affine(&g1_v),
+			D_times_Gamma1:   groups.FromG1Affine(&g1_v),
+			Gamma2:           groups.FromBNG2Affine(&g2_v),
+			DInvTimes_Gamma2: groups.FromBNG2Affine(&g2_v),
+			V1:               groups.FromG1Affine(&g1_v),
+			V2:               groups.FromBNG2Affine(&g2_v),
+			D:                d,
+			S:                utils.MakeFrontendVariable(s),
+			R:                utils.MakeFrontendVariable(r),
+			Alpha:            utils.MakeFrontendVariable(alpha),
+			Step: &DoryVerifierFinalStep{
+				S:     utils.MakeFrontendVariable(s),
+				R:     utils.MakeFrontendVariable(r),
+				Alpha: utils.MakeFrontendVariable(alpha),
+			},
+		},
+	}
+
+	// fmt.Println("Starting DoryPieceWiseUniform circuit compilation...")
+
+	// start := time.Now()
+	// stepCircuits := circuit.CreateStepCircuits()
+	// duration := time.Since(start)
+
+	// fmt.Printf("DoryPieceWiseUniform circuit compilation time: %s\n", duration)
+	// fmt.Printf("Number of step circuits created: %d\n", len(stepCircuits))
+
+	// witness := circuit.GenerateWitness(stepCircuits)
+
+	// fmt.Println("len of witness:", len(witness))
+	PrintR1CSStatsPiecewiseDory(circuit)
+
+}
+
+func PrintR1CSStatsPiecewiseDory(dory *DoryPieceWiseUniform) {
+	r1csInfo := dory.GetConstraints()
+
+	// generate full witness
+	stepCS := dory.CreateStepCircuits()
+	witness := dory.GenerateWitness(stepCS)
+	numVars := len(witness)
+
+	// Accumulate totals
+	totalConstraints := 0
+	totalA := 0
+	totalB := 0
+	totalC := 0
+	totalSteps := 0
+
+	for idx, sub := range r1csInfo.UniformR1CSes {
+		constraintsPerStep := len(sub.Constraints)
+		numSteps := int(sub.NumSteps)
+
+		subTotal := constraintsPerStep * numSteps
+		fmt.Printf("Subcircuit %d: %d steps, %d constraints/step, total %d constraints\n",
+			idx, numSteps, constraintsPerStep, subTotal)
+
+		totalConstraints += subTotal
+		totalSteps += numSteps
+		totalA += int(sub.ACount) * numSteps
+		totalB += int(sub.BCount) * numSteps
+		totalC += int(sub.CCount) * numSteps
+	}
+
+	rows := totalConstraints
+	cols := numVars
+	totalEntries := rows * cols
+
+	fmt.Println("----- Aggregated Piecewise Stats -----")
+	fmt.Printf("Matrix size: %d rows x %d columns\n", rows, cols)
+	fmt.Printf("Constraints: %d (from %d total steps)\n", totalConstraints, totalSteps)
+
+	fmt.Printf("A non-zero: %d, zero: %d \n", totalA, totalEntries-totalA)
+	fmt.Printf("B non-zero: %d, zero: %d \n", totalB, totalEntries-totalB)
+	fmt.Printf("C non-zero: %d, zero: %d \n", totalC, totalEntries-totalC)
+}
+
+// Test for DoryVeifierUniform
+func TestDoryVerifierFinalStepUniform(t *testing.T) {
+	var a, b, c bn254.E12
+	_, _ = a.SetRandom()
+	_, _ = b.SetRandom()
+	_, _ = c.SetRandom()
+	g1_v, g2_v := groups.RandomG1G2Affines()
+	g1_e, g2_e := g1_v, g2_v
+	var d fr.Element
+	var chi fr.Element
+	_, _ = chi.SetRandom()
+
+	// Generate 128-bit value for d
+	dBytes := make([]byte, 16)
+	rand.Read(dBytes)
+	var dBig big.Int
+	dBig.SetBytes(dBytes)
+	d.SetBigInt(&dBig)
+
+	chiBytes := make([]byte, 16)
+	rand.Read(chiBytes)
+	var chiBig big.Int
+	chiBig.SetBytes(chiBytes)
+	chi.SetBigInt(&dBig)
+
+	n := 10
+
+	alpha := make([]fr.Element, n)
+
+	s := make([]fr.Element, n)
+	r := make([]fr.Element, n)
+	for i := 0; i < n; i++ {
+		alphaBytes := make([]byte, 16) // 16 bytes = 128 bits
+		sBytes := make([]byte, 16)
+		rBytes := make([]byte, 16)
+
+		rand.Read(alphaBytes)
+		rand.Read(sBytes)
+		rand.Read(rBytes)
+
+		var alphaBig, sBig, rBig big.Int
+		alphaBig.SetBytes(alphaBytes)
+		sBig.SetBytes(sBytes)
+		rBig.SetBytes(rBytes)
+
+		alpha[i].SetBigInt(&alphaBig)
+
+		s[i].SetBigInt(&sBig)
+		r[i].SetBigInt(&rBig)
+	}
+	circuit := &DoryVerifierFinalStepUniform{
+		C:                field_tower.FromE12(&a),
+		D1:               field_tower.FromE12(&b),
+		D2:               field_tower.FromE12(&c),
+		E1:               groups.FromG1Affine(&g1_e),
+		E2:               groups.FromBNG2Affine(&g2_e),
+		Chi:              chi,
+		Gamma1:           groups.FromG1Affine(&g1_v),
+		D_times_Gamma1:   groups.FromG1Affine(&g1_v),
+		Gamma2:           groups.FromBNG2Affine(&g2_v),
+		DInvTimes_Gamma2: groups.FromBNG2Affine(&g2_v),
+		V1:               groups.FromG1Affine(&g1_v),
+		V2:               groups.FromBNG2Affine(&g2_v),
+		D:                d,
+		S:                utils.MakeFrontendVariable(s),
+		R:                utils.MakeFrontendVariable(r),
+		Alpha:            utils.MakeFrontendVariable(alpha),
+		Step: &DoryVerifierFinalStep{
+			S:     utils.MakeFrontendVariable(s),
+			R:     utils.MakeFrontendVariable(r),
+			Alpha: utils.MakeFrontendVariable(alpha),
+		},
+	}
+
+	r1cs := circuit.CreateStepCircuit()
+	_ = circuit.GenerateWitness(r1cs)
 
 }
