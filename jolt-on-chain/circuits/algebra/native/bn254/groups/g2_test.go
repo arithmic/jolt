@@ -29,25 +29,6 @@ func (circuit *G2AddCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-func randomG1G2Affines() (bn254.G1Affine, bn254.G2Affine) {
-	_, _, G1AffGen, G2AffGen := bn254.Generators()
-	mod := bn254.ID.ScalarField()
-	s1, err := rand.Int(rand.Reader, mod)
-	if err != nil {
-		panic(err)
-	}
-	s2, err := rand.Int(rand.Reader, mod)
-	if err != nil {
-		panic(err)
-	}
-
-	var p bn254.G1Affine
-	p.ScalarMultiplication(&G1AffGen, s1)
-	var q bn254.G2Affine
-	q.ScalarMultiplication(&G2AffGen, s2)
-	return p, q
-}
-
 func TestCircuitG2Add(t *testing.T) {
 	var circuit G2AddCircuit
 	start := time.Now()
@@ -60,8 +41,8 @@ func TestCircuitG2Add(t *testing.T) {
 
 	fmt.Println("number of constraints of G2Add", r1cs.GetNbConstraints())
 
-	_, in1 := randomG1G2Affines()
-	_, in2 := randomG1G2Affines()
+	_, in1 := RandomG1G2Affines()
+	_, in2 := RandomG1G2Affines()
 
 	var res bn254.G2Affine
 	res.Add(&in1, &in2)
@@ -114,7 +95,7 @@ func TestCircuitG2Mul(t *testing.T) {
 
 	fmt.Println("number of constraints of G2Mul", r1cs.GetNbConstraints())
 
-	_, in1 := randomG1G2Affines()
+	_, in1 := RandomG1G2Affines()
 
 	var c bn254.G2Affine
 
@@ -170,7 +151,7 @@ func TestCircuitG2Double(t *testing.T) {
 
 	fmt.Println("number of constraints of G2Double", r1cs.GetNbConstraints())
 
-	_, in1 := randomG1G2Affines()
+	_, in1 := RandomG1G2Affines()
 	var res bn254.G2Affine
 	res.Double(&in1)
 
@@ -221,7 +202,7 @@ func TestCircuitG2toProjective(t *testing.T) {
 
 	fmt.Println("number of constraints of G2toProjectiveCircuit", r1cs.GetNbConstraints())
 
-	_, in1 := randomG1G2Affines()
+	_, in1 := RandomG1G2Affines()
 	// in1 = *in1.ScalarMultiplication(&in1, bn254_fr.Modulus())
 
 	assignment := G2toProjectiveCircuit{

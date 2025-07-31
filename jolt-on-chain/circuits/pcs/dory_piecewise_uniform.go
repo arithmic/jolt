@@ -46,7 +46,7 @@ type DoryPieceWiseUniform struct {
 
 	g1MultiMul  *uniform.G1MultiMul
 	g2MultiMul  *uniform.G2MultiMul
-	doryUniform *DoryVerifierUniform
+	doryUniform *DoryUniform
 
 	// Chi            frontend.Variable
 	Gamma1         groups.G1Projective
@@ -84,7 +84,7 @@ func (circuit *DoryPieceWiseUniform) GenerateWitness(constraints []constraint.Co
 
 	var witness fr.Vector
 
-	circuit.doryUniform = &DoryVerifierUniform{
+	circuit.doryUniform = &DoryUniform{
 		C:  circuit.C,
 		D1: circuit.D1,
 		D2: circuit.D2,
@@ -113,7 +113,7 @@ func (circuit *DoryPieceWiseUniform) GenerateWitness(constraints []constraint.Co
 	circuit.doryUniform.E2_PLUS = circuit.E2_PLUS
 	circuit.doryUniform.E2_MINUS = circuit.E2_MINUS
 
-	circuit.doryUniform.doryverifierstep = &DoryVerifierStep{}
+	circuit.doryUniform.doryverifierstep = &DoryStep{}
 
 	// generate witness for DoryVerifierStep
 	doryWitness := circuit.doryUniform.GenerateWitness(constraints[0])
@@ -153,11 +153,11 @@ func (circuit *DoryPieceWiseUniform) GenerateWitness(constraints []constraint.Co
 	witness = append(witness, g2MultiMulWitness...)
 
 	circuit.finalstep = &DoryVerifierFinalStepUniform{
-		C:  circuit.doryUniform.doryverifierstep.C,
-		D1: circuit.doryUniform.doryverifierstep.D1,
-		D2: circuit.doryUniform.doryverifierstep.D2,
-		E1: circuit.doryUniform.doryverifierstep.E1,
-		E2: circuit.doryUniform.doryverifierstep.E2,
+		C:                circuit.doryUniform.doryverifierstep.C,
+		D1:               circuit.doryUniform.doryverifierstep.D1,
+		D2:               circuit.doryUniform.doryverifierstep.D2,
+		E1:               circuit.doryUniform.doryverifierstep.E1,
+		E2:               circuit.doryUniform.doryverifierstep.E2,
 		Chi:              circuit.Chi[circuit.n-1],
 		Gamma1:           circuit.Gamma1,
 		D_times_Gamma1:   circuit.d_times_Gamma1,

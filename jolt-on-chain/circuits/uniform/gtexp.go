@@ -15,6 +15,62 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
+func makeFrontendVariable(input []fr.Element) []frontend.Variable {
+	res := make([]frontend.Variable, len(input))
+	for i, elem := range input {
+		res[i] = frontend.Variable(elem)
+	}
+	return res
+}
+
+// frontendVariableToFrElement converts a single frontend.Variable to fr.Element
+func frontendVariableToFrElement(v frontend.Variable) (fr.Element, error) {
+	var result fr.Element
+
+	switch val := v.(type) {
+	case fr.Element:
+		result = val
+	case *big.Int:
+		result.SetBigInt(val)
+	case big.Int:
+		result.SetBigInt(&val)
+	case int:
+		result.SetInt64(int64(val))
+	case int64:
+		result.SetInt64(val)
+	case uint64:
+		result.SetUint64(val)
+	case string:
+		bigInt := new(big.Int)
+		if _, ok := bigInt.SetString(val, 10); !ok {
+			return result, fmt.Errorf("failed to parse string %s as big integer", val)
+		}
+		result.SetBigInt(bigInt)
+	default:
+		str := fmt.Sprintf("%v", val)
+		bigInt := new(big.Int)
+		if _, ok := bigInt.SetString(str, 10); !ok {
+			return result, fmt.Errorf("unsupported frontend.Variable type: %T", val)
+		}
+		result.SetBigInt(bigInt)
+	}
+
+	return result, nil
+}
+
+// Generic function to convert arrays of any size
+func convertFrontendArrayToFrArray(vars []frontend.Variable) ([]fr.Element, error) {
+	result := make([]fr.Element, len(vars))
+	for i, v := range vars {
+		elem, err := frontendVariableToFrElement(v)
+		if err != nil {
+			return nil, fmt.Errorf("error converting variable at index %d: %w", i, err)
+		}
+		result[i] = elem
+	}
+	return result, nil
+}
+
 type GTExpStep struct {
 	AccEval     frontend.Variable
 	AccQuot     [11]frontend.Variable
@@ -201,7 +257,6 @@ func (gtExp *GTExp) GenerateWitness(constraints constraint.ConstraintSystem) fr.
 		gtExp.gtExpStep.Bit = bit
 
 		gtExp.gtExpStep.Hint()
-
 		witnessStep := gtExp.gtExpStep.GenerateWitness(constraints)
 
 		for _, elem := range witnessStep {

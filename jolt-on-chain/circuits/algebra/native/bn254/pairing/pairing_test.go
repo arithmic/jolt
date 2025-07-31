@@ -1,0 +1,483 @@
+package pairing
+
+import (
+	"crypto/rand"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/arithmic/gnark/frontend"
+	"github.com/arithmic/gnark/frontend/cs/r1cs"
+	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
+	groups "github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/groups"
+
+	bn254_fr "github.com/consensys/gnark-crypto/ecc/bn254/fr"
+	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
+
+	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark-crypto/ecc/bn254"
+)
+
+type FrobeniusCircuit struct {
+	A field_tower.Fp12
+	C field_tower.Fp12 `gnark:",public"`
+}
+
+func (circuit *FrobeniusCircuit) Define(api frontend.API) error {
+	e2 := field_tower.New(api)
+	e12 := field_tower.NewExt12(api)
+	expected := Frobenius(e2, &circuit.A)
+	e12.AssertIsEqual(expected, &circuit.C)
+	return nil
+}
+
+func TestCircuitFrobenius(t *testing.T) {
+
+	var circuit FrobeniusCircuit
+
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of FrobeniusCircuit", r1cs.GetNbConstraints())
+	var a, c bn254.E12
+	_, _ = a.SetRandom()
+
+	c.Frobenius(&a)
+
+	assignment := &FrobeniusCircuit{
+		A: field_tower.FromE12(&a),
+		C: field_tower.FromE12(&c),
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
+}
+
+type FrobeniusSquareCircuit struct {
+	A field_tower.Fp12
+	C field_tower.Fp12 `gnark:",public"`
+}
+
+func (circuit *FrobeniusSquareCircuit) Define(api frontend.API) error {
+	e2 := field_tower.New(api)
+	e12 := field_tower.NewExt12(api)
+	expected := FrobeniusSquare(e2, &circuit.A)
+	e12.AssertIsEqual(expected, &circuit.C)
+	return nil
+}
+
+func TestCircuitFrobeniusSquare(t *testing.T) {
+
+	var circuit FrobeniusSquareCircuit
+
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of FrobeniusSquareCircuit", r1cs.GetNbConstraints())
+	var a, c bn254.E12
+	_, _ = a.SetRandom()
+
+	c.FrobeniusSquare(&a)
+
+	assignment := &FrobeniusSquareCircuit{
+		A: field_tower.FromE12(&a),
+		C: field_tower.FromE12(&c),
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
+}
+
+type FrobeniusCubeCircuit struct {
+	A field_tower.Fp12
+	C field_tower.Fp12 `gnark:",public"`
+}
+
+func (circuit *FrobeniusCubeCircuit) Define(api frontend.API) error {
+	e2 := field_tower.New(api)
+	expected := FrobeniusCube(e2, &circuit.A)
+	e12 := field_tower.NewExt12(api)
+	e12.AssertIsEqual(expected, &circuit.C)
+	return nil
+}
+
+func TestCircuitFrobeniusCube(t *testing.T) {
+
+	var circuit FrobeniusCubeCircuit
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of FrobeniusCubeCircuit", r1cs.GetNbConstraints())
+	var a, c bn254.E12
+	_, _ = a.SetRandom()
+
+	c.FrobeniusCube(&a)
+
+	assignment := &FrobeniusCubeCircuit{
+		A: field_tower.FromE12(&a),
+		C: field_tower.FromE12(&c),
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+}
+
+type MulBy01Circuit struct {
+	A field_tower.Fp6
+	B field_tower.Fp2
+	C field_tower.Fp2
+	D field_tower.Fp6 `gnark:",public"`
+}
+
+func (circuit *MulBy01Circuit) Define(api frontend.API) error {
+	e2 := field_tower.New(api)
+	e6 := field_tower.NewExt6(api)
+	expected := MulBy01(e2, &circuit.A, &circuit.B, &circuit.C)
+	e6.AssertIsEqual(expected, &circuit.D)
+	return nil
+}
+
+func TestCircuitMulBy01(t *testing.T) {
+
+	var circuit MulBy01Circuit
+
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of MulBy01Circuit", r1cs.GetNbConstraints())
+	var a, d bn254.E6
+	_, _ = a.SetRandom()
+
+	var b, c bn254.E2
+	_, _ = b.SetRandom()
+	_, _ = c.SetRandom()
+
+	d = a
+	d.MulBy01(&b, &c)
+
+	assignment := &MulBy01Circuit{
+		A: field_tower.FromE6(&a),
+		B: field_tower.FromE2(&b),
+		C: field_tower.FromE2(&c),
+		D: field_tower.FromE6(&d),
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
+}
+
+type MulBy034Circuit struct {
+	A field_tower.Fp12
+	B field_tower.Fp2
+	C field_tower.Fp2
+	D field_tower.Fp2
+	E field_tower.Fp12 `gnark:",public"`
+}
+
+func (circuit *MulBy034Circuit) Define(api frontend.API) error {
+	e2 := field_tower.New(api)
+	e6 := field_tower.NewExt6(api)
+	e12 := field_tower.NewExt12(api)
+	expected := MulBy034(e2, e6, &circuit.A, &circuit.B, &circuit.C, &circuit.D)
+	e12.AssertIsEqual(expected, &circuit.E)
+	return nil
+}
+
+func TestCircuitMulBy034(t *testing.T) {
+
+	var circuit MulBy034Circuit
+
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of MulBy034Circuit", r1cs.GetNbConstraints())
+	var a, e bn254.E12
+	_, _ = a.SetRandom()
+
+	var b, c, d bn254.E2
+	_, _ = b.SetRandom()
+	_, _ = c.SetRandom()
+	_, _ = d.SetRandom()
+
+	e = a
+	e.MulBy034(&b, &c, &d)
+
+	assignment := &MulBy034Circuit{
+		A: field_tower.FromE12(&a),
+		B: field_tower.FromE2(&b),
+		C: field_tower.FromE2(&c),
+		D: field_tower.FromE2(&d),
+		E: field_tower.FromE12(&e),
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
+}
+
+type FinalExponentiationCircuit struct {
+	A field_tower.Fp12
+	C field_tower.Fp12 `gnark:",public"`
+}
+
+func (circuit *FinalExponentiationCircuit) Define(api frontend.API) error {
+	e2 := field_tower.New(api)
+	e12 := field_tower.NewExt12(api)
+	expected := FinalExp(e2, e12, &circuit.A)
+	e12.AssertIsEqual(expected, &circuit.C)
+	return nil
+}
+
+func TestCircuitFinalExp(t *testing.T) {
+
+	var circuit FinalExponentiationCircuit
+
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of FinalExponentiationCircuit", r1cs.GetNbConstraints())
+	var a, c bn254.GT
+	_, _ = a.SetRandom()
+
+	c = bn254.FinalExponentiation(&a)
+
+	assignment := &FinalExponentiationCircuit{
+		A: field_tower.FromE12(&a),
+		C: field_tower.FromE12(&c),
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+
+}
+
+type PairingCircuit struct {
+	A groups.G2Affine
+	B groups.G1Projective
+	C field_tower.Fp12 `gnark:",public"`
+}
+
+func (circuit *PairingCircuit) Define(api frontend.API) error {
+	pairing_api := New(api)
+	expected := pairing_api.Pairing(&circuit.A, &circuit.B)
+	e12 := field_tower.NewExt12(api)
+	e12.AssertIsEqual(expected, &circuit.C)
+	return nil
+}
+
+func TestCircuitPairing(t *testing.T) {
+
+	var circuit PairingCircuit
+
+	start := time.Now()
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf("Error compiling circuit: %s", err)
+	}
+	duration := time.Since(start)
+	fmt.Printf("Circuit compiled in: %s\n", duration)
+
+	fmt.Println("number of constraints of PairingCircuit", r1cs.GetNbConstraints())
+
+	_, _, g1GenAff, g2GenAff := bn254.Generators()
+
+	var ag1 bn254.G1Affine
+	var bg2 bn254.G2Affine
+
+	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
+	ag1.ScalarMultiplication(&g1GenAff, scalar)
+	bg2.ScalarMultiplication(&g2GenAff, scalar)
+
+	P := []bn254.G1Affine{ag1}
+	Q := []bn254.G2Affine{bg2}
+
+	res, _ := bn254.Pair(P, Q)
+
+	assignment := &PairingCircuit{
+		A: groups.G2AffineFromBNG2Affine(&Q[0]),
+		B: groups.FromG1Affine(&P[0]),
+		C: field_tower.FromE12(&res),
+	}
+
+	// Generate witness
+	start_witness := time.Now()
+	witness, err := frontend.NewWitness(assignment, ecc.GRUMPKIN.ScalarField())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err_1 := r1cs.Solve(witness)
+	if err_1 != nil {
+		fmt.Println("Error solving the r1cs", err_1)
+		return
+	}
+	duration_witness := time.Since(start_witness)
+	fmt.Printf("Witness generated in: %s\n", duration_witness)
+}
+
+func TestPairingUniformCircuit(t *testing.T) {
+	var one bn254_fr.Element
+	one.SetOne()
+
+	// Set up inputs
+	var P bn254.G1Affine
+	var Q bn254.G2Affine
+
+	_, _, g1Gen, g2Gen := bn254.Generators()
+	scalar, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
+	P.ScalarMultiplication(&g1Gen, scalar)
+	Q.ScalarMultiplication(&g2Gen, scalar)
+
+	// Compute expected result from native bn254
+	Ps := []bn254.G1Affine{P}
+	Qs := []bn254.G2Affine{Q}
+	nativeML, _ := bn254.MillerLoop(Ps, Qs)
+	nativeFE := bn254.FinalExponentiation(&nativeML)
+
+	// Miller loop step circuits
+	var FIn bn254.E12
+	FIn.SetOne()
+
+	start := time.Now()
+	var witness grumpkin_fr.Vector
+
+	// Combine into final pairing circuit
+	pairingCircuit := &PairingUniformCircuit{
+		P:              groups.AffineFromG1Affine(&P),
+		Q:              groups.G2AffineFromBNG2Affine(&Q),
+		Res:            field_tower.FromE12(&nativeML),
+		p:              P,
+		q:              Q,
+		res:            nativeML,
+		Miller_uniform: &MillerUniformCircuit{},
+		Miller_final:   &MillerEllFinalStepCircuit{},
+	}
+
+	pair_r1cs := pairingCircuit.CreateStepCircuits()
+	witness = pairingCircuit.GenerateWitness(pair_r1cs)
+
+	duration := time.Since(start)
+	fmt.Printf("Create Step Circuits + Generate Witness time: %s\n", duration)
+
+	// Extract final E12 from witness
+	var resFromCircuit bn254.E12
+
+	resFromCircuit.C0.B0.A0.SetString(witness[22739+0].String())
+	resFromCircuit.C0.B0.A1.SetString(witness[22739+1].String())
+	resFromCircuit.C0.B1.A0.SetString(witness[22739+2].String())
+	resFromCircuit.C0.B1.A1.SetString(witness[22739+3].String())
+	resFromCircuit.C0.B2.A0.SetString(witness[22739+4].String())
+	resFromCircuit.C0.B2.A1.SetString(witness[22739+5].String())
+	resFromCircuit.C1.B0.A0.SetString(witness[22739+6].String())
+	resFromCircuit.C1.B0.A1.SetString(witness[22739+7].String())
+	resFromCircuit.C1.B1.A0.SetString(witness[22739+8].String())
+	resFromCircuit.C1.B1.A1.SetString(witness[22739+9].String())
+	resFromCircuit.C1.B2.A0.SetString(witness[22739+10].String())
+	resFromCircuit.C1.B2.A1.SetString(witness[22739+11].String())
+
+	circuitFinalExp := bn254.FinalExponentiation(&resFromCircuit)
+
+	if !circuitFinalExp.Equal(&nativeFE) {
+		t.Fatal("Mismatch between circuit final exponentiation and expected result")
+	} else {
+		fmt.Println("Pairing result matches native final exponentiation")
+	}
+}

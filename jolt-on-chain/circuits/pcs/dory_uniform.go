@@ -24,7 +24,7 @@ import (
 
 type GT = field_tower.Fp12
 
-type DoryVerifierStep struct {
+type DoryStep struct {
 	C        GT
 	D1       GT
 	D2       GT
@@ -83,7 +83,7 @@ type DoryVerifierStep struct {
 	E2_Prime groups.G2Projective
 }
 
-func (circuit *DoryVerifierStep) Define(api frontend.API) error {
+func (circuit *DoryStep) Define(api frontend.API) error {
 
 	gt_api := field_tower.NewExt12(api)
 
@@ -109,7 +109,7 @@ func (circuit *DoryVerifierStep) Define(api frontend.API) error {
 
 	// Computing E1_Prime
 	// E1_Prime = E1 + beta * E1_Beta + alpha * E1_PLUS + alpha⁻¹ * E1_MINUS
-	g1_api := groups.G1API{api}
+	g1_api := groups.NewG1API(api)
 	E1_Prime_temp_1 := g1_api.Add(&circuit.E1, &circuit.Beta_e1_beta)                  // E1 + beta * E1_Beta
 	E1_Prime_temp_2 := g1_api.Add(&circuit.Alpha_e1_plus, &circuit.Alpha_inv_e1_minus) // alpha * E1_PLUS + alpha⁻¹ * E1_MINUS
 	E1_Prime := g1_api.Add(E1_Prime_temp_1, E1_Prime_temp_2)                           // full E1'
@@ -125,7 +125,7 @@ func (circuit *DoryVerifierStep) Define(api frontend.API) error {
 	return nil
 }
 
-func (circuit *DoryVerifierStep) Hint() {
+func (circuit *DoryStep) Hint() {
 
 	// Computing C_prime
 	var C_prime bn254.E12
@@ -286,7 +286,7 @@ func (circuit *DoryVerifierStep) Hint() {
 	circuit.E2_Prime = groups.FromBNG2Affine(&E2_Prime_affine)
 }
 
-func (circuit *DoryVerifierStep) GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector {
+func (circuit *DoryStep) GenerateWitness(constraints constraint.ConstraintSystem) fr.Vector {
 	w, err := frontend.NewWitness(circuit, ecc.GRUMPKIN.ScalarField())
 
 	if err != nil {
@@ -301,7 +301,7 @@ func (circuit *DoryVerifierStep) GenerateWitness(constraints constraint.Constrai
 	return wSolved
 }
 
-type DoryVerifierUniform struct {
+type DoryUniform struct {
 	n  int
 	C  GT
 	D1 GT
@@ -330,20 +330,20 @@ type DoryVerifierUniform struct {
 	E2_PLUS  []groups.G2Projective
 	E2_MINUS []groups.G2Projective
 
-	doryverifierstep *DoryVerifierStep
+	doryverifierstep *DoryStep
 }
 
-func (dory_verifier *DoryVerifierUniform) CreateStepCircuit() constraint.ConstraintSystem {
+func (dory_verifier *DoryUniform) CreateStepCircuit() constraint.ConstraintSystem {
 
 	doryVerifierConstraints, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, dory_verifier.doryverifierstep)
 
 	return doryVerifierConstraints
 
 }
-func (dory_verifier *DoryVerifierUniform) GenerateWitness(cs constraint.ConstraintSystem) fr.Vector {
+func (dory_verifier *DoryUniform) GenerateWitness(cs constraint.ConstraintSystem) fr.Vector {
 	var witness fr.Vector
 
-	dory_verifier.doryverifierstep = &DoryVerifierStep{
+	dory_verifier.doryverifierstep = &DoryStep{
 		C:  dory_verifier.C,
 		D1: dory_verifier.D1,
 		D2: dory_verifier.D2,
@@ -386,7 +386,7 @@ func (dory_verifier *DoryVerifierUniform) GenerateWitness(cs constraint.Constrai
 	return witness
 }
 
-func (dory_verifier *DoryVerifierUniform) GetConstraints() uniform.UniformR1CS {
+func (dory_verifier *DoryUniform) GetConstraints() uniform.UniformR1CS {
 	var constraints []uniform.Constraint
 	var aCount, bCount, cCount int
 

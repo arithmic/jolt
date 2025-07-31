@@ -36,7 +36,7 @@ type G1MulStep struct {
 // BitOut = 2*AccBit + Bit
 func (circuit *G1MulStep) Define(api frontend.API) error {
 	api.AssertIsBoolean(circuit.Bit)
-	g := &groups.G1API{Api: api}
+	g := groups.NewG1API(api)
 	// Double the accumulator
 	double := g.Double(&circuit.Acc)
 	// Conditional add base

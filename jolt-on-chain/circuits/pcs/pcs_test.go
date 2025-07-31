@@ -34,7 +34,7 @@ type G1ScalarUniformCircuit struct {
 }
 
 func (circuit *G1ScalarUniformCircuit) Define(api frontend.API) error {
-	groupAPI := &groups.G1API{Api: api}
+	groupAPI := groups.NewG1API(api)
 	groupAPI.Add(&circuit.Acc, groupAPI.ScalarMul(&circuit.In, &circuit.Exp))
 	return nil
 }
@@ -556,7 +556,7 @@ func computeOut2(out bn254.E12, exp bn254.E12) *bn254.E12 {
 func TestUniformG1Scalar(t *testing.T) {
 	var a [250]bn254.G1Affine
 	for i := 0; i < 250; i++ {
-		a[i] = groups.RandomG1Affine()
+		a[i], _ = groups.RandomG1G2Affines()
 	}
 
 	var exp [250]fr.Element
@@ -684,10 +684,10 @@ func ExtractConstraints(r1cs constraint.ConstraintSystem) ([]Constraint, int, in
 	return outputConstraints, aCount, bCount, cCount
 }
 
-func TestCircuitdory(t *testing.T) {
+func TestCircuitDoryUniform(t *testing.T) {
 
 	in1, in2 := groups.RandomG1G2Affines()
-	// in11, in22 := groups.RandomG1G2Affines()
+
 	var a, b, c bn254.E12
 	_, _ = a.SetRandom()
 	_, _ = b.SetRandom()
@@ -780,7 +780,7 @@ func TestCircuitdory(t *testing.T) {
 
 	}
 
-	dory_Circuit := DoryVerifierUniform{
+	dory_Circuit := DoryUniform{
 		C:                field_tower.FromE12(&a),
 		D1:               field_tower.FromE12(&b),
 		D2:               field_tower.FromE12(&c),
@@ -805,7 +805,7 @@ func TestCircuitdory(t *testing.T) {
 		E2_Beta:          E2_Beta,
 		E2_PLUS:          E2_PLUS,
 		E2_MINUS:         E2_MINUS,
-		doryverifierstep: &DoryVerifierStep{},
+		doryverifierstep: &DoryStep{},
 	}
 
 	dory_R1Cs := dory_Circuit.CreateStepCircuit()
@@ -813,7 +813,7 @@ func TestCircuitdory(t *testing.T) {
 
 }
 
-func PrintR1CSStatsUniformDory(dory *DoryVerifierUniform) {
+func PrintR1CSStatsUniformDory(dory *DoryUniform) {
 	r1csInfo := dory.GetConstraints()
 
 	// generate full witness
@@ -939,7 +939,7 @@ func TestCircuitdoryMatrix(t *testing.T) {
 
 	}
 
-	dory_Circuit := DoryVerifierUniform{
+	dory_Circuit := DoryUniform{
 		n:                n,
 		C:                field_tower.FromE12(&a),
 		D1:               field_tower.FromE12(&b),
@@ -965,14 +965,13 @@ func TestCircuitdoryMatrix(t *testing.T) {
 		E2_Beta:          E2_Beta,
 		E2_PLUS:          E2_PLUS,
 		E2_MINUS:         E2_MINUS,
-		doryverifierstep: &DoryVerifierStep{},
+		doryverifierstep: &DoryStep{},
 	}
 
 	PrintR1CSStatsUniformDory(&dory_Circuit)
 }
 
 func TestDoryPieceWiseUniform(t *testing.T) {
-	// Create test data
 	n := 17 // number of steps
 
 	// Generate random field elements
@@ -1147,7 +1146,7 @@ func TestDoryPieceWiseUniform(t *testing.T) {
 			DInvGamma2:         groups.FromBNG2Affine(&g2_d_inv_gamma),
 			Step:               &uniform.G2MulStep{},
 		},
-		doryUniform: &DoryVerifierUniform{
+		doryUniform: &DoryUniform{
 			n:                n,
 			C:                field_tower.FromE12(&a),
 			D1:               field_tower.FromE12(&b),
@@ -1173,7 +1172,7 @@ func TestDoryPieceWiseUniform(t *testing.T) {
 			E2_Beta:          E2_Beta,
 			E2_PLUS:          E2_PLUS,
 			E2_MINUS:         E2_MINUS,
-			doryverifierstep: &DoryVerifierStep{},
+			doryverifierstep: &DoryStep{},
 		},
 
 		Gamma1:           groups.FromG1Affine(&g1_gamma),

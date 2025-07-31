@@ -5,7 +5,7 @@ import (
 	"math/big"
 
 	"github.com/arithmic/gnark/frontend"
-	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
+
 	fp2 "github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254"
@@ -175,20 +175,12 @@ func (g2 *G2API) Double(P *G2Projective) *G2Projective {
 // Mul performs scalar multiplication on a G2 point with a scalar in the constraint system.
 func (g2 *G2API) Mul(P *G2Projective, exp *frontend.Variable) *G2Projective {
 	const n = 254
-
 	bits := g2.api.ToBinary(*exp, n)
 
-	// Identity point (0, 1, 0)
-	zero := frontend.Variable(0)
-	one := frontend.Variable(1)
-
-	zeroFp2 := fp2.Fp2{A0: zero, A1: zero}
-	oneFp2 := fp2.Fp2{A0: one, A1: zero}
-
 	res := G2Projective{
-		X: zeroFp2,
-		Y: oneFp2,
-		Z: zeroFp2,
+		X: *g2.e2.Zero(),
+		Y: *g2.e2.One(),
+		Z: *g2.e2.Zero(),
 	}
 
 	for i := 0; i < n; i++ {
@@ -196,72 +188,27 @@ func (g2 *G2API) Mul(P *G2Projective, exp *frontend.Variable) *G2Projective {
 		add := g2.Add(dbl, P)
 
 		res = *g2.Select(bits[n-1-i], add, dbl)
+		res = *g2.Select(bits[n-1-i], add, dbl)
 	}
 
 	return &res
 }
 
 func (g2 *G2API) ToProjective(A *G2Affine) *G2Projective {
-	const n = 256
-	var out G2Projective
-
-	// Decompose each Fp2 component into bits
-	xA0Bits := g2.api.ToBinary(A.X.A0, n)
-	xA1Bits := g2.api.ToBinary(A.X.A1, n)
-	yA0Bits := g2.api.ToBinary(A.Y.A0, n)
-	yA1Bits := g2.api.ToBinary(A.Y.A1, n)
-
-	comp := func(bits []frontend.Variable) []frontend.Variable {
-		out := make([]frontend.Variable, len(bits))
-		for i := 0; i < len(bits); i++ {
-			out[i] = g2.api.Sub(1, bits[i])
-		}
-		return out
-	}
-
-	xA0Bits = comp(xA0Bits)
-	xA1Bits = comp(xA1Bits)
-	yA0Bits = comp(yA0Bits)
-	yA1Bits = comp(yA1Bits)
-
-	// Compute product of complements
-	prod := func(bits []frontend.Variable) frontend.Variable {
-		acc := bits[0]
-		for i := 1; i < len(bits); i++ {
-			acc = g2.api.Mul(acc, bits[i])
-		}
-		return acc
-	}
-
-	xA0Zero := prod(xA0Bits)
-	xA1Zero := prod(xA1Bits)
-	yA0Zero := prod(yA0Bits)
-	yA1Zero := prod(yA1Bits)
-
-	identityIndicator := g2.api.Mul(xA0Zero, g2.api.Mul(xA1Zero, g2.api.Mul(yA0Zero, yA1Zero)))
+	i1 := g2.e2.IsZero(&A.X)
+	i2 := g2.e2.IsZero(&A.Y)
+	i := g2.api.Mul(i1, i2)
 
 	projective_identity := G2Projective{
-		X: fp2.Fp2{
-			A0: frontend.Variable(0),
-			A1: frontend.Variable(0),
-		},
-		Y: fp2.Fp2{
-			A0: frontend.Variable(1),
-			A1: frontend.Variable(0),
-		},
-		Z: fp2.Fp2{
-			A0: frontend.Variable(0),
-			A1: frontend.Variable(0),
-		},
+		X: *g2.e2.Zero(),
+		Y: *g2.e2.One(),
+		Z: *g2.e2.Zero(),
 	}
-
-	out = *g2.Select(identityIndicator, &projective_identity, &G2Projective{
+	out := *g2.Select(i, &projective_identity, &G2Projective{
 		X: A.X,
 		Y: A.Y,
-		Z: fp2.Fp2{
-			A0: frontend.Variable(1),
-			A1: frontend.Variable(0),
-		}})
+		Z: *g2.e2.One(),
+	})
 	return &out
 }
 
@@ -314,6 +261,27 @@ func (g2 G2API) Select(bit frontend.Variable, A, B *G2Projective) *G2Projective 
 	}
 }
 
+// To_Bn254G2Affine converts a G2Projective point to a bn254.G2Affine point.
+func To_Bn254G2Affine(p G2Projective) bn254.G2Affine {
+	var affine bn254.G2Affine
+	affine.X = fp2.ToE2(p.X)
+	affine.Y = fp2.ToE2(p.Y)
+
+	z_element := fp2.ToE2(p.Z)
+
+	if z_element.IsZero() {
+		affine.X.SetZero()
+		affine.Y.SetZero()
+		return affine
+	} else {
+		var z_element_inverse bn254.E2
+		z_element_inverse.Inverse(&z_element)
+		affine.X.Mul(&affine.X, &z_element_inverse)
+		affine.Y.Mul(&affine.Y, &z_element_inverse)
+		return affine
+	}
+}
+
 func RandomG1G2Affines() (bn254.G1Affine, bn254.G2Affine) {
 	_, _, G1AffGen, G2AffGen := bn254.Generators()
 	mod := bn254.ID.ScalarField()
@@ -331,25 +299,4 @@ func RandomG1G2Affines() (bn254.G1Affine, bn254.G2Affine) {
 	var q bn254.G2Affine
 	q.ScalarMultiplication(&G2AffGen, s2)
 	return p, q
-}
-
-// To_Bn254G2Affine converts a G2Projective point to a bn254.G2Affine point.
-func To_Bn254G2Affine(p G2Projective) bn254.G2Affine {
-	var affine bn254.G2Affine
-	affine.X = field_tower.ToE2(p.X)
-	affine.Y = field_tower.ToE2(p.Y)
-
-	z_element := field_tower.ToE2(p.Z)
-
-	if z_element.IsZero() {
-		affine.X.SetZero()
-		affine.Y.SetZero()
-		return affine
-	} else {
-		var z_element_inverse bn254.E2
-		z_element_inverse.Inverse(&z_element)
-		affine.X.Mul(&affine.X, &z_element_inverse)
-		affine.Y.Mul(&affine.Y, &z_element_inverse)
-		return affine
-	}
 }

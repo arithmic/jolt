@@ -1,8 +1,8 @@
 package field_tower
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/big"
 	"testing"
 	"time"
 
@@ -10,7 +10,7 @@ import (
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
-	bn254_fp "github.com/consensys/gnark-crypto/ecc/bn254/fp"
+	bn254_fr "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
@@ -22,7 +22,6 @@ type Fp12AddCircuit struct {
 func (circuit *Fp12AddCircuit) Define(api frontend.API) error {
 	e := NewExt12(api)
 	expected := *e.Add(&circuit.A, &circuit.B)
-	api.Println("expected:", expected)
 	e.AssertIsEqual(&expected, &circuit.C)
 	return nil
 }
@@ -62,7 +61,6 @@ func TestCircuitFp12Add(t *testing.T) {
 		fmt.Println("Error solving the r1cs", err_1)
 		return
 	}
-	_, _ = r1cs.Solve(witness)
 	duration_witness := time.Since(start_witness)
 	fmt.Printf("Witness generated in: %s\n", duration_witness)
 
@@ -296,15 +294,15 @@ func TestCircuitFp12Exp(t *testing.T) {
 	fmt.Println("number of constraints of Fp12Exp", r1cs.GetNbConstraints())
 	var a, c bn254.E12
 	_, _ = a.SetRandom()
-	var b bn254_fp.Element
-	_, _ = b.SetRandom()
-	var bBigInt big.Int
-	b.BigInt(&bBigInt)
 
-	c.Exp(a, &bBigInt)
+	b, _ := rand.Int(rand.Reader, bn254_fr.Modulus())
+	c.Exp(a, b)
+
+	var b1 grumpkin_fr.Element
+	b1.SetBigInt(b)
 	assignment := &Fp12Exp{
 		A: FromE12(&a),
-		B: grumpkin_fr.Element(b),
+		B: b1,
 		C: FromE12(&c),
 	}
 

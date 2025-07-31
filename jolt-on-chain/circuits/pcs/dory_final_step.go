@@ -46,7 +46,7 @@ func (circuit *DoryVerifierFinalStep) Define(api frontend.API) error {
 
 	// // Computing e(v_1 + d * gamma_1 , v_2 + d^{-1} * gamma_2)
 
-	g1_api := groups.G1API{api}
+	g1_api := groups.NewG1API(api)
 
 	// d_gamma1 := g1_api.ScalarMul(&circuit.Gamma1, &circuit.D)
 
