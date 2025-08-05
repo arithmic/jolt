@@ -9,6 +9,7 @@ import (
 	"github.com/arithmic/gnark/frontend"
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
 
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/groups"
 
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/uniform"
@@ -38,20 +39,19 @@ type DoryVerifierFinalStep struct {
 	S     []frontend.Variable
 	R     []frontend.Variable
 	Alpha []frontend.Variable
+
+	Pairing_final_res field_tower.Fp12
 }
 
 func (circuit *DoryVerifierFinalStep) Define(api frontend.API) error {
-
-	// gt_api := field_tower.NewExt12(api)
-
-	// // Computing e(v_1 + d * gamma_1 , v_2 + d^{-1} * gamma_2)
+	//  e(v_1 + d * gamma_1 , v_2 + d^{-1} * gamma_2) computation is done in Pairing circuit
 
 	g1_api := groups.NewG1API(api)
 
 	// d_gamma1 := g1_api.ScalarMul(&circuit.Gamma1, &circuit.D)
 
 	g2_api := groups.New(api)
-	// d_inverse := api.Inverse(circuit.D)
+	d_inverse := api.Inverse(circuit.D)
 	// d_inverse_gamma2 := g2_api.Mul(&circuit.Gamma2, &d_inverse)
 
 	_ = g1_api.Add(&circuit.V1, &circuit.D_times_Gamma1)
@@ -61,13 +61,16 @@ func (circuit *DoryVerifierFinalStep) Define(api frontend.API) error {
 	// pairing_api := pairing.New(api)
 	// e1 := pairing_api.Pairing(&v2_plus_d_inverse_gamma2, v1_plus_d_gamma1)
 
-	// // Computing  Chi + C + d * D2 + d^{-1} * D1
-
-	// chi_c := gt_api.Fp12MulFp(&circuit.C, circuit.Chi)
-	// d_d2 := gt_api.Fp12MulFp(&circuit.D2, circuit.D)
-	// d_inverse_d1 := gt_api.Fp12MulFp(&circuit.D1, d_inverse)
-	// chi_c_plus_d_d2 := gt_api.Add(chi_c, d_d2)
+	// Computing  Chi + C + d * D2 + d^{-1} * D1
+	gt_api := field_tower.NewExt12(api)
+	chi_c := gt_api.Fp12MulFp(&circuit.C, circuit.Chi)
+	d_d2 := gt_api.Fp12MulFp(&circuit.D2, circuit.D)
+	d_inverse_d1 := gt_api.Fp12MulFp(&circuit.D1, d_inverse)
+	chi_c_plus_d_d2 := gt_api.Add(chi_c, d_d2)
+	_ = gt_api.Add(chi_c_plus_d_d2, d_inverse_d1)
 	// chi_c_plus_d_d2_plus_d_inverse_d1 := gt_api.Add(chi_c_plus_d_d2, d_inverse_d1)
+	_ = gt_api.Add(chi_c_plus_d_d2, d_inverse_d1)
+	// gt_api.AssertIsEqual(chi_c_plus_d_d2_plus_d_inverse_d1, &circuit.Pairing_final_res)
 
 	// Computing e1 = prod_{i=0}^{n-1} (alpha_i * (1-s_i) + s_i )
 	// computed_alpha_s := make([]frontend.Variable, len(circuit.s)+1)
@@ -154,6 +157,8 @@ type DoryVerifierFinalStepUniform struct {
 	S     []frontend.Variable
 	R     []frontend.Variable
 	Alpha []frontend.Variable
+
+	Pairing_final_res field_tower.Fp12
 
 	Step *DoryVerifierFinalStep
 }
@@ -246,6 +251,7 @@ func (circuit *DoryVerifierFinalStepUniform) GenerateWitness(constraints constra
 	circuit.Step.S = circuit.S
 	circuit.Step.R = circuit.R
 	circuit.Step.Alpha = circuit.Alpha
+	circuit.Step.Pairing_final_res = circuit.Pairing_final_res
 
 	witness = circuit.Step.GenerateWitness(constraints)
 

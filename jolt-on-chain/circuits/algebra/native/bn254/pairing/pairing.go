@@ -3,6 +3,7 @@ package pairing
 import (
 	"fmt"
 	"math/big"
+	"strconv"
 
 	"github.com/arithmic/gnark/constraint"
 	"github.com/arithmic/gnark/frontend"
@@ -13,6 +14,7 @@ import (
 
 	field_tower "github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	groups "github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/groups"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/uniform"
 	grumpkin_fr "github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -797,15 +799,15 @@ type MillerUniformCircuit struct {
 	Miller_step_circuit *MillerStepCircuit
 
 	// Native
-	p    bn254.G1Affine
-	q    bn254.G2Affine
-	fOut bn254.E12
+	P_native    bn254.G1Affine
+	Q_native    bn254.G2Affine
+	FOut_native bn254.E12
 }
 
 func (miller_uniform_circuit *MillerUniformCircuit) CreateStepCircuit() constraint.ConstraintSystem {
 	miller_uniform_circuit.Miller_step_circuit = &MillerStepCircuit{
-		p: miller_uniform_circuit.p,
-		q: miller_uniform_circuit.q,
+		p: miller_uniform_circuit.P_native,
+		q: miller_uniform_circuit.Q_native,
 	}
 	constraints, _ := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, miller_uniform_circuit.Miller_step_circuit)
 	return constraints
@@ -823,7 +825,7 @@ func (miller_uniform_circuit *MillerUniformCircuit) GenerateWitness(constraints 
 	var FIn bn254.E12
 	FIn.SetOne()
 
-	rIn := ToProjective_fn(&miller_uniform_circuit.q)
+	rIn := ToProjective_fn(&miller_uniform_circuit.Q_native)
 
 	var witness grumpkin_fr.Vector
 	for i := 0; i < n; i++ {
@@ -834,8 +836,8 @@ func (miller_uniform_circuit *MillerUniformCircuit) GenerateWitness(constraints 
 		miller_uniform_circuit.Miller_step_circuit.FIn = field_tower.FromE12(&FIn)
 		miller_uniform_circuit.Miller_step_circuit.fIn = FIn
 
-		miller_uniform_circuit.Miller_step_circuit.P = groups.AffineFromG1Affine(&miller_uniform_circuit.p)
-		miller_uniform_circuit.Miller_step_circuit.Q = groups.G2AffineFromBNG2Affine(&miller_uniform_circuit.q)
+		miller_uniform_circuit.Miller_step_circuit.P = groups.AffineFromG1Affine(&miller_uniform_circuit.P_native)
+		miller_uniform_circuit.Miller_step_circuit.Q = groups.G2AffineFromBNG2Affine(&miller_uniform_circuit.Q_native)
 
 		miller_uniform_circuit.Miller_step_circuit.Bit = bit
 		miller_uniform_circuit.Miller_step_circuit.bit = bit
@@ -857,10 +859,110 @@ func (miller_uniform_circuit *MillerUniformCircuit) GenerateWitness(constraints 
 		witness = append(witness, stepWitness...)
 
 	}
-	miller_uniform_circuit.fOut = FIn
-	miller_uniform_circuit.FOut = field_tower.FromE12(&miller_uniform_circuit.fOut)
+	miller_uniform_circuit.FOut_native = FIn
+	miller_uniform_circuit.FOut = field_tower.FromE12(&miller_uniform_circuit.FOut_native)
 
 	return witness
+}
+func PrintR1CSStatsPiecewisePairing(pairing *PairingUniformCircuit) {
+	r1csInfo := pairing.GetConstraints()
+
+	// generate full witness
+	stepCS := pairing.CreateStepCircuits()
+	witness := pairing.GenerateWitness(stepCS)
+	numVars := len(witness)
+
+	// Accumulate totals
+	totalConstraints := 0
+	totalA := 0
+	totalB := 0
+	totalC := 0
+	totalSteps := 0
+
+	for idx, sub := range r1csInfo.UniformR1CSes {
+		constraintsPerStep := len(sub.Constraints)
+		numSteps := int(sub.NumSteps)
+
+		subTotal := constraintsPerStep * numSteps
+		fmt.Printf("Subcircuit %d: %d steps, %d constraints/step, total %d constraints\n",
+			idx, numSteps, constraintsPerStep, subTotal)
+
+		totalConstraints += subTotal
+		totalSteps += numSteps
+		totalA += int(sub.ACount) * numSteps
+		totalB += int(sub.BCount) * numSteps
+		totalC += int(sub.CCount) * numSteps
+	}
+
+	rows := totalConstraints
+	cols := numVars
+	totalEntries := rows * cols
+
+	fmt.Println("----- Aggregated Piecewise Stats -----")
+	fmt.Printf("Matrix size: %d rows x %d columns\n", rows, cols)
+	fmt.Printf("Constraints: %d (from %d total steps)\n", totalConstraints, totalSteps)
+
+	fmt.Printf("A non-zero: %d, zero: %d \n", totalA, totalEntries-totalA)
+	fmt.Printf("B non-zero: %d, zero: %d \n", totalB, totalEntries-totalB)
+	fmt.Printf("C non-zero: %d, zero: %d \n", totalC, totalEntries-totalC)
+}
+
+func (miller_uniform_circuit *MillerUniformCircuit) GetConstraints() uniform.UniformR1CS {
+	var constraints []uniform.Constraint
+	var aCount, bCount, cCount int
+
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, miller_uniform_circuit.Miller_step_circuit)
+	if err != nil {
+		fmt.Println("err in compilation is ", err)
+	}
+
+	nR1CS, ok := r1cs.(constraint.R1CS)
+	if !ok {
+		return uniform.UniformR1CS{
+			Constraints: constraints,
+			ACount:      0,
+			BCount:      0,
+			CCount:      0,
+			NumSteps:    0}
+	}
+
+	cs := nR1CS.GetR1Cs()
+	for _, r1c := range cs {
+		singular := uniform.Constraint{
+			A: make(map[string]string),
+			B: make(map[string]string),
+			C: make(map[string]string),
+		}
+
+		for _, term := range r1c.L {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.A[col] = val
+			aCount++
+		}
+		for _, term := range r1c.R {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.B[col] = val
+			bCount++
+		}
+		for _, term := range r1c.O {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.C[col] = val
+			cCount++
+		}
+
+		constraints = append(constraints, singular)
+	}
+
+	return uniform.UniformR1CS{
+		Constraints: constraints,
+		ACount:      uint32(aCount),
+		BCount:      uint32(bCount),
+		CCount:      uint32(cCount),
+		NumSteps:    uint32(64),
+	}
 }
 
 type MillerEllFinalStepCircuit struct {
@@ -903,21 +1005,18 @@ func (circuit *MillerEllFinalStepCircuit) Compile() constraint.ConstraintSystem 
 	return circuitR1CS
 }
 
-func (circuit *MillerEllFinalStepCircuit) GenerateWitness(circuits []*MillerEllFinalStepCircuit, r1cs *constraint.ConstraintSystem, _ uint32) grumpkin_fr.Vector {
+func (circuit *MillerEllFinalStepCircuit) GenerateWitness(r1cs *constraint.ConstraintSystem) grumpkin_fr.Vector {
 	var witness grumpkin_fr.Vector
 
-	// For the final step, we only need circuits[0]
-	c := circuits[0]
-
 	// Call Hint to compute native values
-	c.Hint()
+	circuit.Hint()
 
 	// Fill circuit fields based on native output
-	c.Rout = G2ProjectiveFromBNG2Projective(&c.rout)
-	c.FOut = field_tower.FromE12(&c.fOut)
+	circuit.Rout = G2ProjectiveFromBNG2Projective(&circuit.rout)
+	circuit.FOut = field_tower.FromE12(&circuit.fOut)
 
 	// Generate witness
-	w, err := frontend.NewWitness(c, ecc.GRUMPKIN.ScalarField())
+	w, err := frontend.NewWitness(circuit, ecc.GRUMPKIN.ScalarField())
 	if err != nil {
 		fmt.Println("error generating witness:", err)
 		return witness
@@ -937,28 +1036,144 @@ func (circuit *MillerEllFinalStepCircuit) GenerateWitness(circuits []*MillerEllF
 	return witness
 }
 
+type MillerEllFinalStepUniform struct {
+	Step *MillerEllFinalStepCircuit
+}
+
+func (uniform *MillerEllFinalStepUniform) CreateStepCircuit() constraint.ConstraintSystem {
+	cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, uniform.Step)
+	if err != nil {
+		panic(err)
+	}
+	return cs
+}
+
+func (uniform *MillerEllFinalStepUniform) GenerateWitness(cs constraint.ConstraintSystem) grumpkin_fr.Vector {
+
+	witness := uniform.Step.GenerateWitness(&cs)
+
+	return witness
+}
+
+func (circuit *MillerEllFinalStepUniform) GetConstraints() uniform.UniformR1CS {
+	var constraints []uniform.Constraint
+	var aCount, bCount, cCount int
+
+	r1cs, err := frontend.Compile(ecc.GRUMPKIN.ScalarField(), r1cs.NewBuilder, circuit.Step)
+	if err != nil {
+		fmt.Println("err in compilation is ", err)
+	}
+
+	nR1CS, ok := r1cs.(constraint.R1CS)
+	if !ok {
+		return uniform.UniformR1CS{
+			Constraints: constraints,
+			ACount:      0,
+			BCount:      0,
+			CCount:      0,
+			NumSteps:    0}
+	}
+
+	cs := nR1CS.GetR1Cs()
+	for _, r1c := range cs {
+		singular := uniform.Constraint{
+			A: make(map[string]string),
+			B: make(map[string]string),
+			C: make(map[string]string),
+		}
+
+		for _, term := range r1c.L {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.A[col] = val
+			aCount++
+		}
+		for _, term := range r1c.R {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.B[col] = val
+			bCount++
+		}
+		for _, term := range r1c.O {
+			val := nR1CS.CoeffToString(int(term.CID))
+			col := strconv.FormatUint(uint64(term.VID), 10)
+			singular.C[col] = val
+			cCount++
+		}
+
+		constraints = append(constraints, singular)
+	}
+
+	return uniform.UniformR1CS{
+		Constraints: constraints,
+		ACount:      uint32(aCount),
+		BCount:      uint32(bCount),
+		CCount:      uint32(cCount),
+		NumSteps:    uint32(1),
+	}
+}
+
+func (circuit *PairingUniformCircuit) GetConstraints() uniform.PiecewiseUniformR1CS {
+	return uniform.PiecewiseUniformR1CS{
+		UniformR1CSes: []uniform.UniformR1CS{
+			circuit.Miller_uniform.GetConstraints(),
+			circuit.Miller_final.GetConstraints(),
+		},
+	}
+}
+
+func PrintR1CSStatsMillerUniform(g *MillerUniformCircuit) {
+	r1csInfo := g.GetConstraints()
+
+	// generate full witness
+	stepCS := g.CreateStepCircuit()
+	witness := g.GenerateWitness(stepCS)
+	numVars := len(witness)
+
+	constraintsPerStep := len(r1csInfo.Constraints)
+
+	fmt.Println("constraintsPerStep :", constraintsPerStep)
+	numSteps := int(r1csInfo.NumSteps)
+	totalConstraints := numSteps * constraintsPerStep
+
+	rows := totalConstraints
+	cols := numVars
+	totalEntries := rows * cols
+
+	totalA := int(r1csInfo.ACount) * numSteps
+	totalB := int(r1csInfo.BCount) * numSteps
+	totalC := int(r1csInfo.CCount) * numSteps
+
+	fmt.Printf("Matrix size: %d rows x %d columns\n", rows, cols)
+	fmt.Printf("Constraints: %d\n", totalConstraints)
+
+	fmt.Printf("A non-zero: %d, zero: %d \n", totalA, totalEntries-totalA)
+	fmt.Printf("B non-zero: %d, zero: %d \n", totalB, totalEntries-totalB)
+	fmt.Printf("C non-zero: %d, zero: %d \n", totalC, totalEntries-totalC)
+}
+
 type PairingUniformCircuit struct {
 	P   groups.G1Affine  `gnark:",public"`
 	Q   groups.G2Affine  `gnark:",public"`
 	Res field_tower.Fp12 `gnark:",public"`
 
 	// Native
-	p   bn254.G1Affine
-	q   bn254.G2Affine
-	res bn254.E12
+	P_Native   bn254.G1Affine
+	Q_Native   bn254.G2Affine
+	Res_native bn254.E12
 
 	Miller_uniform *MillerUniformCircuit
-	Miller_final   *MillerEllFinalStepCircuit
+	Miller_final   *MillerEllFinalStepUniform
 }
 
 func (p *PairingUniformCircuit) CreateStepCircuits() []constraint.ConstraintSystem {
 	p.Miller_uniform.P = p.P
 	p.Miller_uniform.Q = p.Q
-	p.Miller_uniform.p = p.p
-	p.Miller_uniform.q = p.q
+	p.Miller_uniform.P_native = p.P_Native
+	p.Miller_uniform.Q_native = p.Q_Native
 
 	cs1 := p.Miller_uniform.CreateStepCircuit()
-	cs2 := p.Miller_final.Compile()
+	cs2 := p.Miller_final.CreateStepCircuit()
 	return []constraint.ConstraintSystem{cs1, cs2}
 }
 
@@ -970,36 +1185,29 @@ func (p *PairingUniformCircuit) GenerateWitness(constraints []constraint.Constra
 	witness = append(witness, witnessMiller...)
 
 	// ========== Final Ell Step ==========
-	p.Miller_final.fIn = p.Miller_uniform.fOut
-	p.Miller_final.rin = p.Miller_uniform.Miller_step_circuit.rout
-	p.Miller_final.q = p.q
-	p.Miller_final.p = p.p
+
+	p.Miller_final.Step.fIn = p.Miller_uniform.FOut_native
+	p.Miller_final.Step.rin = p.Miller_uniform.Miller_step_circuit.rout
+	p.Miller_final.Step.q = p.Q_Native
+	p.Miller_final.Step.p = p.P_Native
 
 	// Hint to compute output
-	p.Miller_final.Hint()
+	p.Miller_final.Step.Hint()
 
 	// Assign for constraints
-	p.Miller_final.FIn = field_tower.FromE12(&p.Miller_uniform.fOut)
-	p.Miller_final.Rin = p.Miller_uniform.Miller_step_circuit.Rout
-	p.Miller_final.P = p.Miller_uniform.P
-	p.Miller_final.Q = p.Miller_uniform.Q
-	p.Miller_final.FOut = field_tower.FromE12(&p.Miller_final.fOut)
-	p.Miller_final.Rout = G2ProjectiveFromBNG2Projective(&p.Miller_final.rout)
+	p.Miller_final.Step.FIn = field_tower.FromE12(&p.Miller_uniform.FOut_native)
+	p.Miller_final.Step.Rin = p.Miller_uniform.Miller_step_circuit.Rout
+	p.Miller_final.Step.P = p.Miller_uniform.P
+	p.Miller_final.Step.Q = p.Miller_uniform.Q
+	p.Miller_final.Step.FOut = field_tower.FromE12(&p.Miller_final.Step.fOut)
+	p.Miller_final.Step.Rout = G2ProjectiveFromBNG2Projective(&p.Miller_final.Step.rout)
 
-	// Solve final circuit and extract witness
-	w, err := frontend.NewWitness(p.Miller_final, ecc.GRUMPKIN.ScalarField())
-	if err != nil {
-		fmt.Println("final step witness error:", err)
-	}
-	wSolved, _ := constraints[1].Solve(w)
-	wStep := wSolved.(*cs.R1CSSolution).W
+	// Generate witness for final step
+	witnessFinal := p.Miller_final.GenerateWitness(constraints[1])
+	witness = append(witness, witnessFinal...)
 
-	for _, elem := range wStep {
-		witness = append(witness, grumpkin_fr.Element(elem))
-	}
-
-	p.res = p.Miller_final.fOut
-	p.Res = field_tower.FromE12(&p.res)
+	p.Res_native = p.Miller_final.Step.fOut
+	p.Res = field_tower.FromE12(&p.Res_native)
 
 	return witness
 }

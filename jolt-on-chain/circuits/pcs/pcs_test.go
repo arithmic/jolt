@@ -17,6 +17,7 @@ import (
 	"github.com/arithmic/gnark/frontend/cs/r1cs"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/groups"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/pairing"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/uniform"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/utils"
 
@@ -972,7 +973,7 @@ func TestCircuitdoryMatrix(t *testing.T) {
 }
 
 func TestDoryPieceWiseUniform(t *testing.T) {
-	n := 17 // number of steps
+	n := 10 // number of steps
 
 	// Generate random field elements
 	var a, b, c bn254.E12
@@ -1093,6 +1094,9 @@ func TestDoryPieceWiseUniform(t *testing.T) {
 	g1_v, g2_v := groups.RandomG1G2Affines()
 	g1_e, g2_e := g1_v, g2_v
 
+	var native_res bn254.E12
+	native_res.SetRandom()
+
 	// Create the DoryPieceWiseUniform circuit
 	circuit := &DoryPieceWiseUniform{
 		n:  n,
@@ -1209,30 +1213,48 @@ func TestDoryPieceWiseUniform(t *testing.T) {
 				Alpha: utils.MakeFrontendVariable(alpha),
 			},
 		},
+
+		Pairing_input1: groups.AffineFromG1Affine(&g1_v),
+		Pairing_input2: groups.G2AffineFromBNG2Affine(&g2_v),
+
+		Pairing_input1_native: g1_v,
+		Pairing_input2_native: g2_v,
+
+		Nativeres: native_res,
+		Res:       field_tower.FromE12(&native_res),
+
+		Pairing_final_res: field_tower.FromE12(&native_res), //this is not correct
+
+		pairingcircuit: &pairing.PairingUniformCircuit{
+			P:   groups.AffineFromG1Affine(&g1_v),
+			Q:   groups.G2AffineFromBNG2Affine(&g2_v),
+			Res: field_tower.FromE12(&native_res),
+
+			P_Native:       g1_v,
+			Q_Native:       g2_v,
+			Res_native:     native_res,
+			Miller_uniform: &pairing.MillerUniformCircuit{},
+			Miller_final: &pairing.MillerEllFinalStepUniform{
+				Step: &pairing.MillerEllFinalStepCircuit{},
+			},
+		},
 	}
 
-	// fmt.Println("Starting DoryPieceWiseUniform circuit compilation...")
+	fmt.Println("Starting DoryPieceWiseUniform circuit compilation...")
 
-	// start := time.Now()
-	// stepCircuits := circuit.CreateStepCircuits()
-	// duration := time.Since(start)
+	start := time.Now()
+	stepCircuits := circuit.CreateStepCircuits()
+	duration := time.Since(start)
 
-	// fmt.Printf("DoryPieceWiseUniform circuit compilation time: %s\n", duration)
-	// fmt.Printf("Number of step circuits created: %d\n", len(stepCircuits))
+	fmt.Printf("DoryPieceWiseUniform circuit compilation time: %s\n", duration)
+	fmt.Printf("Number of step circuits created: %d\n", len(stepCircuits))
 
-	// witness := circuit.GenerateWitness(stepCircuits)
+	r1csInfo := circuit.GetConstraints()
 
-	// fmt.Println("len of witness:", len(witness))
-	PrintR1CSStatsPiecewiseDory(circuit)
+	witness := circuit.GenerateWitness(stepCircuits)
 
-}
+	fmt.Println("len of witness:", len(witness))
 
-func PrintR1CSStatsPiecewiseDory(dory *DoryPieceWiseUniform) {
-	r1csInfo := dory.GetConstraints()
-
-	// generate full witness
-	stepCS := dory.CreateStepCircuits()
-	witness := dory.GenerateWitness(stepCS)
 	numVars := len(witness)
 
 	// Accumulate totals
@@ -1268,9 +1290,10 @@ func PrintR1CSStatsPiecewiseDory(dory *DoryPieceWiseUniform) {
 	fmt.Printf("A non-zero: %d, zero: %d \n", totalA, totalEntries-totalA)
 	fmt.Printf("B non-zero: %d, zero: %d \n", totalB, totalEntries-totalB)
 	fmt.Printf("C non-zero: %d, zero: %d \n", totalC, totalEntries-totalC)
+
 }
 
-// Test for DoryVeifierUniform
+// Test for DoryVerifierUniform
 func TestDoryVerifierFinalStepUniform(t *testing.T) {
 	var a, b, c bn254.E12
 	_, _ = a.SetRandom()

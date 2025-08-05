@@ -4,10 +4,13 @@ import (
 	"github.com/arithmic/gnark/constraint"
 	"github.com/arithmic/gnark/frontend"
 
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/field_tower"
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/groups"
+	"github.com/arithmic/jolt/jolt-on-chain/circuits/algebra/native/bn254/pairing"
 
 	"github.com/arithmic/jolt/jolt-on-chain/circuits/uniform"
 
+	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/grumpkin/fr"
 )
 
@@ -62,6 +65,20 @@ type DoryPieceWiseUniform struct {
 	S []frontend.Variable
 	R []frontend.Variable
 
+	Pairing_input1 groups.G1Affine // v1_plus_d_gamma1
+	Pairing_input2 groups.G2Affine // v2_plus_d_inverse_gamma2
+
+	Pairing_input1_native bn254.G1Affine // v1_plus_d_gamma1
+	Pairing_input2_native bn254.G2Affine // v2_plus_d_inverse_gamma2
+
+	Nativeres bn254.E12
+
+	Res field_tower.Fp12
+
+	Pairing_final_res field_tower.Fp12
+
+	pairingcircuit *pairing.PairingUniformCircuit
+
 	finalstep *DoryVerifierFinalStepUniform
 }
 
@@ -75,8 +92,9 @@ func (circuit *DoryPieceWiseUniform) CreateStepCircuits() []constraint.Constrain
 	g1R1CS := circuit.g1MultiMul.CreateStepCircuit()
 	g2R1CS := circuit.g2MultiMul.CreateStepCircuit()
 	final_stepR1CS := circuit.finalstep.CreateStepCircuit()
+	pairingcircuitR1CS := circuit.pairingcircuit.CreateStepCircuits()
 
-	stepCircuits := []constraint.ConstraintSystem{doryStepR1CS, g1R1CS, g2R1CS, final_stepR1CS}
+	stepCircuits := []constraint.ConstraintSystem{doryStepR1CS, g1R1CS, g2R1CS, final_stepR1CS, pairingcircuitR1CS[0], pairingcircuitR1CS[1]}
 	return stepCircuits
 }
 
@@ -153,23 +171,24 @@ func (circuit *DoryPieceWiseUniform) GenerateWitness(constraints []constraint.Co
 	witness = append(witness, g2MultiMulWitness...)
 
 	circuit.finalstep = &DoryVerifierFinalStepUniform{
-		C:                circuit.doryUniform.doryverifierstep.C,
-		D1:               circuit.doryUniform.doryverifierstep.D1,
-		D2:               circuit.doryUniform.doryverifierstep.D2,
-		E1:               circuit.doryUniform.doryverifierstep.E1,
-		E2:               circuit.doryUniform.doryverifierstep.E2,
-		Chi:              circuit.Chi[circuit.n-1],
-		Gamma1:           circuit.Gamma1,
-		D_times_Gamma1:   circuit.d_times_Gamma1,
-		Gamma2:           circuit.Gamma2,
-		DInvTimes_Gamma2: circuit.dInvTimes_Gamma2,
-		V1:               circuit.V1,
-		V2:               circuit.V2,
+		C:                 circuit.doryUniform.doryverifierstep.C,
+		D1:                circuit.doryUniform.doryverifierstep.D1,
+		D2:                circuit.doryUniform.doryverifierstep.D2,
+		E1:                circuit.doryUniform.doryverifierstep.E1,
+		E2:                circuit.doryUniform.doryverifierstep.E2,
+		Chi:               circuit.Chi[circuit.n-1],
+		Gamma1:            circuit.Gamma1,
+		D_times_Gamma1:    circuit.d_times_Gamma1,
+		Gamma2:            circuit.Gamma2,
+		DInvTimes_Gamma2:  circuit.dInvTimes_Gamma2,
+		V1:                circuit.V1,
+		V2:                circuit.V2,
+		D:                 circuit.D,
+		S:                 circuit.S,
+		R:                 circuit.R,
+		Alpha:             circuit.Alpha,
+		Pairing_final_res: circuit.Pairing_final_res,
 
-		D:     circuit.D,
-		S:     circuit.S,
-		R:     circuit.R,
-		Alpha: circuit.Alpha,
 		Step: &DoryVerifierFinalStep{
 			D: circuit.D,
 			S: circuit.S,
@@ -180,17 +199,29 @@ func (circuit *DoryPieceWiseUniform) GenerateWitness(constraints []constraint.Co
 	finalStepWitness := circuit.finalstep.GenerateWitness(constraints[3])
 	witness = append(witness, finalStepWitness...)
 
+	// Pairing Circuit
+	circuit.pairingcircuit.P_Native = circuit.Pairing_input1_native
+	circuit.pairingcircuit.Q_Native = circuit.Pairing_input2_native
+	circuit.pairingcircuit.P = circuit.Pairing_input1
+	circuit.pairingcircuit.Q = circuit.Pairing_input2
+	circuit.pairingcircuit.Res = field_tower.FromE12(&circuit.Nativeres)
+
+	pairingWitness := circuit.pairingcircuit.GenerateWitness([]constraint.ConstraintSystem{constraints[4], constraints[5]})
+	witness = append(witness, pairingWitness...)
+
 	return witness
 }
 
 func (circuit *DoryPieceWiseUniform) GetConstraints() uniform.PiecewiseUniformR1CS {
-
+	pairingUniformR1CS := circuit.pairingcircuit.GetConstraints()
 	return uniform.PiecewiseUniformR1CS{
 		UniformR1CSes: []uniform.UniformR1CS{
 			circuit.doryUniform.GetConstraints(),
 			circuit.g1MultiMul.GetConstraints(),
 			circuit.g2MultiMul.GetConstraints(),
 			circuit.finalstep.GetConstraints(),
+			pairingUniformR1CS.UniformR1CSes[0],
+			pairingUniformR1CS.UniformR1CSes[1],
 		},
 	}
 }

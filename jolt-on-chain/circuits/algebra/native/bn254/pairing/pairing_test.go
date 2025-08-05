@@ -444,34 +444,37 @@ func TestPairingUniformCircuit(t *testing.T) {
 		P:              groups.AffineFromG1Affine(&P),
 		Q:              groups.G2AffineFromBNG2Affine(&Q),
 		Res:            field_tower.FromE12(&nativeML),
-		p:              P,
-		q:              Q,
-		res:            nativeML,
+		P_Native:       P,
+		Q_Native:       Q,
+		Res_native:     nativeML,
 		Miller_uniform: &MillerUniformCircuit{},
-		Miller_final:   &MillerEllFinalStepCircuit{},
+		Miller_final: &MillerEllFinalStepUniform{
+			Step: &MillerEllFinalStepCircuit{},
+		},
 	}
 
 	pair_r1cs := pairingCircuit.CreateStepCircuits()
 	witness = pairingCircuit.GenerateWitness(pair_r1cs)
 
+	fmt.Println("Witness length:", len(witness))
 	duration := time.Since(start)
 	fmt.Printf("Create Step Circuits + Generate Witness time: %s\n", duration)
 
 	// Extract final E12 from witness
 	var resFromCircuit bn254.E12
 
-	resFromCircuit.C0.B0.A0.SetString(witness[22739+0].String())
-	resFromCircuit.C0.B0.A1.SetString(witness[22739+1].String())
-	resFromCircuit.C0.B1.A0.SetString(witness[22739+2].String())
-	resFromCircuit.C0.B1.A1.SetString(witness[22739+3].String())
-	resFromCircuit.C0.B2.A0.SetString(witness[22739+4].String())
-	resFromCircuit.C0.B2.A1.SetString(witness[22739+5].String())
-	resFromCircuit.C1.B0.A0.SetString(witness[22739+6].String())
-	resFromCircuit.C1.B0.A1.SetString(witness[22739+7].String())
-	resFromCircuit.C1.B1.A0.SetString(witness[22739+8].String())
-	resFromCircuit.C1.B1.A1.SetString(witness[22739+9].String())
-	resFromCircuit.C1.B2.A0.SetString(witness[22739+10].String())
-	resFromCircuit.C1.B2.A1.SetString(witness[22739+11].String())
+	resFromCircuit.C0.B0.A0.SetString(witness[25683+0].String())
+	resFromCircuit.C0.B0.A1.SetString(witness[25683+1].String())
+	resFromCircuit.C0.B1.A0.SetString(witness[25683+2].String())
+	resFromCircuit.C0.B1.A1.SetString(witness[25683+3].String())
+	resFromCircuit.C0.B2.A0.SetString(witness[25683+4].String())
+	resFromCircuit.C0.B2.A1.SetString(witness[25683+5].String())
+	resFromCircuit.C1.B0.A0.SetString(witness[25683+6].String())
+	resFromCircuit.C1.B0.A1.SetString(witness[25683+7].String())
+	resFromCircuit.C1.B1.A0.SetString(witness[25683+8].String())
+	resFromCircuit.C1.B1.A1.SetString(witness[25683+9].String())
+	resFromCircuit.C1.B2.A0.SetString(witness[25683+10].String())
+	resFromCircuit.C1.B2.A1.SetString(witness[25683+11].String())
 
 	circuitFinalExp := bn254.FinalExponentiation(&resFromCircuit)
 
@@ -480,4 +483,5 @@ func TestPairingUniformCircuit(t *testing.T) {
 	} else {
 		fmt.Println("Pairing result matches native final exponentiation")
 	}
+	PrintR1CSStatsPiecewisePairing(pairingCircuit)
 }
